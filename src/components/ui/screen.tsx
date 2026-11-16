@@ -13,13 +13,15 @@ type Props = PropsWithChildren<{
   title: string;
   /** 제목 오른쪽에 놓을 버튼 (예: "추가") */
   action?: ReactNode;
+  /** 넘기면 제목 왼쪽에 "‹" 뒤로 가기 버튼이 생긴다. 탭이 아닌 화면에서 쓴다. */
+  onBack?: () => void;
 }>;
 
 /**
  * 탭 화면의 공통 틀: 위쪽 제목 줄 + 스크롤되는 내용.
  * 제목 줄 오른쪽 끝의 "계정"을 누르면 계정 화면(로그아웃)으로 간다.
  */
-export function Screen({ title, action, children }: Props) {
+export function Screen({ title, action, onBack, children }: Props) {
   const theme = useTheme();
   const insets = useSafeAreaInsets();
 
@@ -35,6 +37,19 @@ export function Screen({ title, action, children }: Props) {
           },
         ]}>
         <View style={styles.header}>
+          {onBack ? (
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="뒤로"
+              hitSlop={8}
+              onPress={onBack}
+              style={({ pressed }) => [
+                styles.back,
+                { backgroundColor: theme.backgroundElement, opacity: pressed ? 0.7 : 1 },
+              ]}>
+              <ThemedText type="default">‹</ThemedText>
+            </Pressable>
+          ) : null}
           <ThemedText accessibilityRole="header" style={styles.title}>
             {title}
           </ThemedText>
@@ -146,6 +161,13 @@ const styles = StyleSheet.create({
     fontSize: 26,
     lineHeight: 34,
     fontWeight: 700,
+  },
+  back: {
+    width: 34,
+    height: 34,
+    borderRadius: Radius.full,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   account: {
     minHeight: 34,

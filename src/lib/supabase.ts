@@ -1,7 +1,7 @@
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import { createClient } from '@supabase/supabase-js';
 import { AppState, Platform } from 'react-native';
 
+import { authStorage } from './auth-storage';
 import type { Database } from './database.types';
 
 const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL;
@@ -15,11 +15,12 @@ if (!supabaseUrl || !supabaseKey) {
 
 /**
  * 앱 전체에서 쓰는 Supabase 연결.
- * 로그인 정보는 기기에 저장되어(AsyncStorage) 앱을 다시 열어도 유지된다.
+ * 로그인 정보는 기기에 저장되어 앱을 다시 열어도 유지된다.
+ * 휴대폰에서는 암호화해서 저장한다(auth-storage.ts).
  */
 export const supabase = createClient<Database>(supabaseUrl, supabaseKey, {
   auth: {
-    storage: AsyncStorage,
+    storage: authStorage,
     autoRefreshToken: true,
     persistSession: true,
     // 웹에서는 구글·카카오 로그인 후 돌아온 주소에 담긴 토큰을 자동으로 읽는다.

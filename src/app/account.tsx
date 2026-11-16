@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 
+import { NotificationSettingsCard } from '@/components/notification-settings-card';
 import { ThemedText } from '@/components/themed-text';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/screen';
@@ -36,6 +37,8 @@ export default function AccountScreen() {
           </ThemedText>
           <ThemedText type="default">{session?.user.email ?? '알 수 없음'}</ThemedText>
         </Card>
+
+        <NotificationSettingsCard />
 
         {error ? (
           <ThemedText type="small" themeColor="danger">
