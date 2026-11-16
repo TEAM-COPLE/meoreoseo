@@ -84,6 +84,15 @@ https://<프로젝트 ID>.supabase.co/auth/v1/callback
 
 Client Secret 은 Supabase 대시보드에만 넣는다. 이 저장소나 `.env` 파일에는 넣지 않는다.
 
+## 웹 배포 (Vercel)
+
+웹사이트는 Vercel 에 배포한다. GitHub 의 `main` 브랜치에 올리면 자동으로 다시 배포된다.
+
+- 주소: https://meoreoseo.vercel.app
+- 빌드 설정은 `vercel.json` 에 있다(`expo export -p web` 으로 만든 `dist` 폴더를 올린다).
+- Supabase 주소와 공개용 키는 Vercel 프로젝트의 환경 변수에 넣어 두었다.
+- 배포된 주소에서 로그인하려면 Supabase 의 Redirect URLs 에 그 주소가 등록되어 있어야 한다.
+
 ## 폴더 구조
 
 ```
