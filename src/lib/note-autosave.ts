@@ -1,0 +1,124 @@
+import { queryClient } from './query';
+import { supabase } from './supabase';
+
+/** 메모장에서 고칠 수 있는 값들. */
+export type NoteDraft = { title: string; body: string; pinned: boolean };
+
+/**
+ * idle: 저장할 내용 없음 / dirty: 고쳤지만 아직 저장 전 / saving: 저장 중
+ * saved: 저장됨 / error: 저장 실패
+ */
+export type SaveStatus = 'idle' | 'dirty' | 'saving' | 'saved' | 'error';
+
+/** 입력을 멈춘 뒤 이 시간이 지나면 저장한다. */
+const DELAY_MS = 800;
+
+/**
+ * 메모 자동 저장기.
+ *
+ * 글자를 칠 때마다 서버에 저장하면 요청이 너무 많아지므로,
+ * 입력이 잠깐 멈췄을 때 가장 마지막 내용만 저장한다.
+ * 새 메모는 처음 내용이 생겼을 때 한 번 만들고, 그 뒤로는 같은 메모를 고친다.
+ *
+ * @param initialId 이미 있는 메모면 그 id, 새 메모면 null
+ * @param onStatus 저장 상태가 바뀔 때마다 불린다 (화면에 "저장됨" 등을 보여주는 용도)
+ */
+export function createNoteAutosaver(
+  initialId: string | null,
+  onStatus: (status: SaveStatus) => void,
+) {
+  let noteId = initialId;
+  let pending: NoteDraft | null = null;
+  let timer: ReturnType<typeof setTimeout> | null = null;
+  let running: Promise<void> | null = null;
+  let stopped = false;
+
+  async function save(draft: NoteDraft): Promise<boolean> {
+    if (noteId) {
+      const { error } = await supabase
+        .from('notes')
+        .update({ ...draft, updated_at: new Date().toISOString() })
+        .eq('id', noteId);
+      return !error;
+    }
+
+    const { data, error } = await supabase.from('notes').insert(draft).select('id').single();
+    if (error || !data) return false;
+    noteId = data.id;
+    return true;
+  }
+
+  async function run() {
+    while (pending && !stopped) {
+      const draft = pending;
+      pending = null;
+
+      // 아직 저장한 적 없는 빈 메모는 만들지 않는다.
+      if (!noteId && !draft.title.trim() && !draft.body.trim()) {
+        onStatus('idle');
+        continue;
+      }
+
+      onStatus('saving');
+      const ok = await save(draft);
+      if (!ok) {
+        // 실패한 내용을 버리지 않고 남겨 두었다가 다음 저장 때 다시 보낸다.
+        pending = pending ?? draft;
+        onStatus('error');
+        return;
+      }
+      onStatus(pending ? 'dirty' : 'saved');
+      queryClient.invalidateQueries({ queryKey: ['notes'] });
+    }
+  }
+
+  /** 기다리지 않고 지금 저장한다. 화면을 떠날 때와 "다시 시도"에서 쓴다. */
+  function flush(): Promise<void> {
+    if (timer) {
+      clearTimeout(timer);
+      timer = null;
+    }
+    running ??= run().finally(() => {
+      running = null;
+    });
+    return running;
+  }
+
+  return {
+    /** 고친 내용을 알려준다. 입력이 멈추면 저장된다. */
+    schedule(draft: NoteDraft) {
+      if (stopped) return;
+      pending = draft;
+      onStatus('dirty');
+      if (timer) clearTimeout(timer);
+      timer = setTimeout(flush, DELAY_MS);
+    },
+
+    flush,
+
+    /**
+     * 메모를 지우고 자동 저장을 멈춘다.
+     * @returns 실패했으면 오류 문장, 성공하면 null
+     */
+    async remove(): Promise<string | null> {
+      stopped = true;
+      pending = null;
+      if (timer) {
+        clearTimeout(timer);
+        timer = null;
+      }
+      // 진행 중인 저장이 끝나기를 기다린다(새 메모가 막 만들어지는 중일 수 있다).
+      await running;
+
+      if (!noteId) return null;
+
+      const { error } = await supabase.from('notes').delete().eq('id', noteId);
+      if (error) {
+        stopped = false;
+        return error.message;
+      }
+      queryClient.invalidateQueries({ queryKey: ['notes'] });
+      return null;
+    },
+  };
+}

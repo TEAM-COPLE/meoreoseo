@@ -1,115 +1,122 @@
 import {
-  Tabs,
   TabList,
-  TabTrigger,
   TabSlot,
-  TabTriggerSlotProps,
-  TabListProps,
+  TabTrigger,
+  Tabs,
+  type TabListProps,
+  type TabTriggerSlotProps,
 } from 'expo-router/ui';
-import { SymbolView } from 'expo-symbols';
-import { Pressable, useColorScheme, View, StyleSheet } from 'react-native';
+import { Pressable, StyleSheet, View, type PressableProps } from 'react-native';
 
-import { Colors, MaxContentWidth, Spacing } from '@/constants/theme';
+import { MaxContentWidth, Radius, Spacing } from '@/constants/theme';
+import { useTheme } from '@/hooks/use-theme';
 
-import { ExternalLink } from './external-link';
 import { ThemedText } from './themed-text';
-import { ThemedView } from './themed-view';
 
+/** 웹용 위쪽 메뉴. 휴대폰 탭 막대와 같은 다섯 화면으로 이동한다. */
 export default function AppTabs() {
   return (
-    <Tabs>
-      <TabSlot style={{ height: '100%' }} />
+    <Tabs style={styles.root}>
       <TabList asChild>
-        <CustomTabList>
-          <TabTrigger name="home" href="/" asChild>
-            <TabButton>Home</TabButton>
+        <TabBar>
+          <TabTrigger name="todos" href="/" asChild>
+            <TabButton>할 일</TabButton>
           </TabTrigger>
-          <TabTrigger name="explore" href="/explore" asChild>
-            <TabButton>Explore</TabButton>
+          <TabTrigger name="calendar" href="/calendar" asChild>
+            <TabButton>일정</TabButton>
           </TabTrigger>
-        </CustomTabList>
+          <TabTrigger name="habits" href="/habits" asChild>
+            <TabButton>습관</TabButton>
+          </TabTrigger>
+          <TabTrigger name="notes" href="/notes" asChild>
+            <TabButton>메모</TabButton>
+          </TabTrigger>
+          <TabTrigger name="money" href="/money" asChild>
+            <TabButton>가계부</TabButton>
+          </TabTrigger>
+        </TabBar>
       </TabList>
+      <TabSlot style={styles.slot} />
     </Tabs>
   );
 }
 
-export function TabButton({ children, isFocused, ...props }: TabTriggerSlotProps) {
+function TabButton({ children, isFocused, ...props }: TabTriggerSlotProps) {
+  const theme = useTheme();
+
   return (
-    <Pressable {...props} style={({ pressed }) => pressed && styles.pressed}>
-      <ThemedView
-        type={isFocused ? 'backgroundSelected' : 'backgroundElement'}
-        style={styles.tabButtonView}>
-        <ThemedText type="small" themeColor={isFocused ? 'text' : 'textSecondary'}>
-          {children}
-        </ThemedText>
-      </ThemedView>
+    <Pressable
+      // TabTrigger 가 넘겨주는 속성(누르면 이동 등)을 그대로 버튼에 전달한다.
+      {...(props as PressableProps)}
+      style={({ pressed }) => [
+        styles.tabButton,
+        { backgroundColor: isFocused ? theme.backgroundSelected : 'transparent' },
+        pressed && styles.pressed,
+      ]}>
+      <ThemedText
+        type={isFocused ? 'smallBold' : 'small'}
+        themeColor={isFocused ? 'text' : 'textSecondary'}>
+        {children}
+      </ThemedText>
     </Pressable>
   );
 }
 
-export function CustomTabList(props: TabListProps) {
-  const scheme = useColorScheme();
-  const colors = Colors[scheme === 'dark' ? 'dark' : 'light'];
+function TabBar(props: TabListProps) {
+  const theme = useTheme();
 
   return (
-    <View {...props} style={styles.tabListContainer}>
-      <ThemedView type="backgroundElement" style={styles.innerContainer}>
-        <ThemedText type="smallBold" style={styles.brandText}>
-          Expo Starter
+    <View
+      {...props}
+      style={[styles.bar, { backgroundColor: theme.background, borderBottomColor: theme.border }]}>
+      <View style={styles.barInner}>
+        <ThemedText type="default" style={styles.brand}>
+          멀어서
         </ThemedText>
-
-        {props.children}
-
-        <ExternalLink href="https://docs.expo.dev" asChild>
-          <Pressable style={styles.externalPressable}>
-            <ThemedText type="link">Docs</ThemedText>
-            <SymbolView
-              tintColor={colors.text}
-              name={{ ios: 'arrow.up.right.square', web: 'link' }}
-              size={12}
-            />
-          </Pressable>
-        </ExternalLink>
-      </ThemedView>
+        <View style={styles.tabs}>{props.children}</View>
+      </View>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  tabListContainer: {
-    position: 'absolute',
-    width: '100%',
-    padding: Spacing.three,
-    justifyContent: 'center',
-    alignItems: 'center',
-    flexDirection: 'row',
+  root: {
+    flex: 1,
   },
-  innerContainer: {
+  slot: {
+    flex: 1,
+  },
+  bar: {
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    paddingHorizontal: Spacing.three,
     paddingVertical: Spacing.two,
-    paddingHorizontal: Spacing.five,
-    borderRadius: Spacing.five,
-    flexDirection: 'row',
     alignItems: 'center',
-    flexGrow: 1,
-    gap: Spacing.two,
-    maxWidth: MaxContentWidth,
   },
-  brandText: {
+  barInner: {
+    width: '100%',
+    maxWidth: MaxContentWidth,
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    alignItems: 'center',
+    columnGap: Spacing.three,
+    rowGap: Spacing.one,
+  },
+  brand: {
+    fontWeight: 700,
     marginRight: 'auto',
+  },
+  tabs: {
+    flexDirection: 'row',
+    gap: Spacing.one,
+  },
+  tabButton: {
+    minHeight: 36,
+    paddingHorizontal: Spacing.three - 4,
+    borderRadius: Radius.full,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   pressed: {
     opacity: 0.7,
-  },
-  tabButtonView: {
-    paddingVertical: Spacing.one,
-    paddingHorizontal: Spacing.three,
-    borderRadius: Spacing.three,
-  },
-  externalPressable: {
-    flexDirection: 'row',
-    justifyContent: 'center',
-    alignItems: 'center',
-    gap: Spacing.one,
-    marginLeft: Spacing.three,
   },
 });
