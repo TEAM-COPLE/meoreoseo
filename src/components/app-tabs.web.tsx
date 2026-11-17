@@ -1,3 +1,5 @@
+import { Image } from 'expo-image';
+import { Link } from 'expo-router';
 import {
   TabList,
   TabSlot,
@@ -70,11 +72,27 @@ function TabBar(props: TabListProps) {
       {...props}
       style={[styles.bar, { backgroundColor: theme.background, borderBottomColor: theme.border }]}>
       <View style={styles.barInner}>
-        <ThemedText type="default" style={styles.brand}>
-          멀어서
-        </ThemedText>
+        <HomeLogo />
         <View style={styles.tabs}>{props.children}</View>
       </View>
+    </View>
+  );
+}
+
+/** 멀어서 로고. 누르면 첫 화면(오늘)으로 간다. */
+function HomeLogo() {
+  // Link 가 버튼의 모양(style)을 덮어쓰지 않도록, 자리 잡기는 바깥 View 가 맡는다.
+  return (
+    <View style={styles.brand}>
+      <Link href="/" asChild>
+        <Pressable accessibilityRole="link" accessibilityLabel="멀어서 홈으로" style={styles.logoButton}>
+          <Image
+            source={require('@/assets/images/logo-mark.png')}
+            style={styles.logo}
+            contentFit="contain"
+          />
+        </Pressable>
+      </Link>
     </View>
   );
 }
@@ -101,9 +119,17 @@ const styles = StyleSheet.create({
     columnGap: Spacing.three,
     rowGap: Spacing.one,
   },
+  // 로고 버튼은 왼쪽 끝, 메뉴는 오른쪽 끝에 둔다.
   brand: {
-    fontWeight: 700,
     marginRight: 'auto',
+  },
+  logoButton: {
+    borderRadius: Radius.small,
+    overflow: 'hidden',
+  },
+  logo: {
+    width: 36,
+    height: 36,
   },
   tabs: {
     flexDirection: 'row',
