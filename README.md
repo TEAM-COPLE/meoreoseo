@@ -143,7 +143,9 @@ npx eas-cli@latest build -p android --profile preview
 비 올 확률이 50% 이상이면 우산을 챙기라고 알려준다.
 
 - 지역은 "지역 변경"에서 이름을 직접 입력해 찾고(예: 해운대, 판교, 도쿄), 결과 중 하나를 누른다.
-- 고른 지역은 기기 안에 저장한다(기본: 서울). 위치 권한은 묻지 않는다.
+- 고른 지역(기본: 서울)은 로그인했으면 계정의 `user_settings` 표에 저장해 휴대폰·웹 어디서나 같고,
+  로그인하지 않았으면 기기 안에 저장한다. 로그인하면 기기에서 골라 둔 지역을 계정으로 옮긴다.
+- 위치 권한은 묻지 않는다.
 - 날씨: [Open-Meteo](https://open-meteo.com), 지역 검색: OpenStreetMap [Nominatim](https://nominatim.org). 둘 다 무료이고 API 키가 없다.
 - Nominatim 이용 규칙상 글자를 칠 때마다가 아니라 "검색"을 눌렀을 때만 찾는다.
 - 코드는 `src/lib/weather.ts`, `src/hooks/use-weather.ts`, `src/components/weather-city-picker.tsx` 에 있다.
