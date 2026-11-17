@@ -8,7 +8,7 @@
 저장소는 GitHub 의 TEAM-COPLE 조직에 있다: https://github.com/TEAM-COPLE/meoreoseo
 
 1. 저장소를 내려받고 아래 "실행하기"대로 준비한다. `.env.local` 에 넣을 값은 팀원에게 받는다
-   (Supabase 주소와 공개용 키. `eas.json` 에 있는 것과 같은 값이다).
+   (Supabase 주소와 공개용 키. APK 빌드용으로 Expo 서버의 환경 변수에 등록된 것과 같은 값이다).
 2. `main` 에 바로 올리지 않는다. 작업마다 가지(branch)를 만들고 Pull Request 로 합친다.
    `main` 에 합쳐지면 웹사이트가 자동으로 다시 배포된다.
 3. 올리기 전에 `npx tsc --noEmit` 과 `npx expo lint` 를 돌린다.
@@ -137,6 +137,20 @@ npx eas-cli@latest build -p android --profile preview
 - 다른 기기(웹 포함)에서 추가한 할 일·일정은 휴대폰 앱을 한 번 열어야 알림에 반영된다.
 - 웹에서는 알림을 지원하지 않는다.
 
+### 오류 알림
+
+앱에서 오류가 나면(데이터 불러오기·저장 실패, 앱이 멈추는 오류) 그 휴대폰에 바로 알림을 띄운다.
+
+- 계정 화면의 "오류 알림" 스위치로 켜고 끈다(기본: 켜짐). "알림 받기"와는 따로 동작한다.
+- 자동 재시도 때문에 알림이 쏟아지지 않도록, 같은 오류는 5분에 한 번만 알린다.
+- 로그인한 상태면 오류 내용을 DB 의 `error_logs` 표에도 남긴다. 사용자는 쓰기만 할 수 있고 읽을 수 없으며,
+  개발자가 Supabase 대시보드(Table Editor 또는 SQL)에서 읽어 원인을 찾는다.
+  ```sql
+  select created_at, source, message, platform, app_version from error_logs order by created_at desc limit 20;
+  ```
+- 코드는 `src/lib/error-report.ts` 에 있다. 데이터 요청 오류는 `src/lib/query.ts` 가 여기로 보낸다.
+- 웹은 알림 없이 DB 기록만 한다.
+
 ## 날씨
 
 오늘 화면 맨 위에 고른 지역의 지금 날씨, 체감 기온, 최고·최저 기온, 비 올 확률을 보여준다.
@@ -146,7 +160,26 @@ npx eas-cli@latest build -p android --profile preview
 - 고른 지역(기본: 서울)은 로그인했으면 계정의 `user_settings` 표에 저장해 휴대폰·웹 어디서나 같고,
   로그인하지 않았으면 기기 안에 저장한다. 로그인하면 기기에서 골라 둔 지역을 계정으로 옮긴다.
 - 위치 권한은 묻지 않는다.
-- 날씨: [Open-Meteo](https://open-meteo.com), 지역 검색: OpenStreetMap [Nominatim](https://nominatim.org). 둘 다 무료이고 API 키가 없다.
+- 날씨 출처
+  - 국내 지역: 기상청 단기예보(공공데이터포털). 기상청이 실패하면 Open-Meteo 로 한 번 더 시도한다.
+  - 해외 지역: [Open-Meteo](https://open-meteo.com) (API 키 없음).
+- 지역 검색: OpenStreetMap [Nominatim](https://nominatim.org) (API 키 없음).
+- 기상청 API 키는 앱에 넣지 않는다. Supabase 서버 함수 `kma-weather`(`supabase/functions/kma-weather/index.ts`)가
+  키를 갖고 기상청에 대신 물어본다. 우리 앱의 공개용 키로 온 요청만 받는다.
+
+### 기상청 API 키 넣기
+
+1. [공공데이터포털](https://www.data.go.kr)에서 "기상청_단기예보 ((구)_동네예보) 조회서비스"를 활용 신청한다.
+2. 마이페이지 → 개발계정 → 그 서비스에서 **일반 인증키 (Decoding)** 을 복사한다. (Encoding 키를 넣어도 동작한다.)
+3. Supabase 대시보드 → Edge Functions → Secrets 에 이름 `KMA_SERVICE_KEY`, 값에 복사한 키를 넣고 저장한다.
+   키는 저장소나 채팅에 올리지 않는다.
+4. 키를 넣기 전에는 국내 지역도 Open-Meteo 로 보여준다.
+
+서버 함수를 고친 뒤 다시 올리기:
+
+```bash
+npx supabase functions deploy kma-weather --no-verify-jwt
+```
 - Nominatim 이용 규칙상 글자를 칠 때마다가 아니라 "검색"을 눌렀을 때만 찾는다.
 - 코드는 `src/lib/weather.ts`, `src/hooks/use-weather.ts`, `src/components/weather-city-picker.tsx` 에 있다.
 
@@ -172,6 +205,7 @@ src/
   lib/                  Supabase 연결, 로그인 상태, 구글·카카오 로그인, 알림, 날짜·금액 도우미
   constants/theme.ts    색, 간격 (밝은 화면 / 어두운 화면)
 supabase/migrations/    데이터베이스 구조와 접근 규칙 (SQL)
+supabase/functions/     Supabase 서버 함수 (kma-weather: 기상청 날씨)
 ```
 
 ## 데이터 보안
