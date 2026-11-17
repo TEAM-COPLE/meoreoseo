@@ -18,7 +18,8 @@ function sourceOf(key: QueryKey | undefined): string {
 /** 서버에서 받아온 데이터를 기억해 두는 저장소(캐시). */
 export const queryClient = new QueryClient({
   defaultOptions: {
-    queries: { staleTime: 30_000, retry: 1 },
+    // 개인 데이터 위주이므로 탭 이동 시 2분간 캐시를 재사용해 불필요한 재요청을 줄인다.
+    queries: { staleTime: 2 * 60 * 1000, gcTime: 10 * 60 * 1000, retry: 1 },
   },
   // 불러오기·저장에 실패하면 (재시도까지 실패한 뒤) 오류 알림을 띄우고 기록한다.
   queryCache: new QueryCache({

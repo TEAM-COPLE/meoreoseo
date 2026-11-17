@@ -10,12 +10,23 @@ export type WidgetOpenRequest =
   | { mode: 'add'; token: number }
   | { mode: 'edit'; editId: string; token: number }
   | null;
+export type WidgetDomain =
+  | 'todos'
+  | 'events'
+  | 'habits'
+  | 'habit-logs'
+  | 'notes'
+  | 'transactions';
+export type WidgetSyncOptions = {
+  forceDomains?: WidgetDomain[] | 'all';
+  delayMs?: number;
+};
 
 /** 웹에는 위젯이 없으므로 아무것도 하지 않는다. */
-export async function syncAllWidgets(_force = false): Promise<void> {}
+export async function syncAllWidgets(_force: boolean | WidgetSyncOptions = false): Promise<void> {}
 
 /** 웹에는 위젯이 없으므로 아무것도 하지 않는다. */
-export function scheduleWidgetSync(_force = false): void {}
+export function scheduleWidgetSync(_force: boolean | WidgetSyncOptions = false): void {}
 
 /** 웹에는 위젯이 없으므로 아무것도 하지 않는다. */
 export function clearWidgetOpenRequest(_screen: WidgetOpenScreen): void {}

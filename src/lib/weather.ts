@@ -31,25 +31,6 @@ export const DEFAULT_CITY: City = {
   longitude: 126.978,
 };
 
-/**
- * 기기에 저장해 둔 지역 값(JSON)을 다시 City 로 바꾼다.
- * 저장된 값이 없거나 알아볼 수 없으면 기본 지역(서울)을 쓴다.
- */
-export function parseSavedCity(saved: string | null): City {
-  if (!saved) return DEFAULT_CITY;
-  try {
-    const city = JSON.parse(saved) as Partial<City>;
-    const valid =
-      typeof city.id === 'string' &&
-      typeof city.name === 'string' &&
-      Number.isFinite(city.latitude) &&
-      Number.isFinite(city.longitude);
-    return valid ? (city as City) : DEFAULT_CITY;
-  } catch {
-    return DEFAULT_CITY;
-  }
-}
-
 /** 정해진 시간 안에 답이 없으면 실패로 보는 fetch */
 async function fetchWithTimeout(url: string, init: RequestInit = {}, ms = 10_000) {
   const controller = new AbortController();
@@ -106,6 +87,10 @@ async function requestPlaces(query: string, onlySettlements: boolean): Promise<P
   return response.json();
 }
 
+const PLACE_CACHE_MS = 5 * 60 * 1000;
+const placeSearchCache = new Map<string, { expires: number; results: City[] }>();
+const inFlightWeather = new Map<string, Promise<Weather>>();
+
 /**
  * 사용자가 입력한 지역 이름(예: "해운대", "판교", "도쿄")으로 지역을 찾는다. 최대 5개.
  * 검색 서비스 규칙상 글자를 칠 때마다가 아니라 "검색"을 눌렀을 때만 부른다.
@@ -113,10 +98,20 @@ async function requestPlaces(query: string, onlySettlements: boolean): Promise<P
 export async function searchPlaces(query: string): Promise<City[]> {
   const text = query.trim();
   if (!text) return [];
+  const cacheKey = text.toLowerCase();
+  const cached = placeSearchCache.get(cacheKey);
+  if (cached && cached.expires > Date.now()) {
+    return cached.results;
+  }
+
   let places = await requestPlaces(text, true);
   // 동네 단위로 못 찾으면(외국 도시 등) 조건 없이 한 번 더 찾는다.
   if (places.length === 0) places = await requestPlaces(text, false);
-  return places.map(toCity).filter((city) => Number.isFinite(city.latitude));
+  const results = places.map(toCity).filter((city) => Number.isFinite(city.latitude));
+
+  if (placeSearchCache.size >= 30) placeSearchCache.clear();
+  placeSearchCache.set(cacheKey, { expires: Date.now() + PLACE_CACHE_MS, results });
+  return results;
 }
 
 export type Weather = {
@@ -199,17 +194,30 @@ async function fetchKmaWeather(city: City): Promise<Weather> {
  * 국내는 기상청, 해외는 Open-Meteo. 기상청이 실패하면 Open-Meteo 로 한 번 더 시도한다.
  */
 export async function fetchWeather(city: City): Promise<Weather> {
-  if (!isInKorea(city)) return fetchOpenMeteoWeather(city);
-  try {
-    return await fetchKmaWeather(city);
-  } catch (kmaError) {
-    console.warn('[날씨] 기상청 실패, Open-Meteo 로 다시 시도', kmaError);
+  const key = `${city.id}:${city.latitude.toFixed(4)}:${city.longitude.toFixed(4)}`;
+  const existing = inFlightWeather.get(key);
+  if (existing) return existing;
+
+  const task = (async () => {
+    if (!isInKorea(city)) return fetchOpenMeteoWeather(city);
     try {
-      return await fetchOpenMeteoWeather(city);
-    } catch {
-      // 둘 다 실패하면 기상청 쪽 오류를 알린다. 국내 지역의 주 날씨 출처이기 때문이다.
-      throw kmaError;
+      return await fetchKmaWeather(city);
+    } catch (kmaError) {
+      console.warn('[날씨] 기상청 실패, Open-Meteo 로 다시 시도', kmaError);
+      try {
+        return await fetchOpenMeteoWeather(city);
+      } catch {
+        // 둘 다 실패하면 기상청 쪽 오류를 알린다. 국내 지역의 주 날씨 출처이기 때문이다.
+        throw kmaError;
+      }
     }
+  })();
+
+  inFlightWeather.set(key, task);
+  try {
+    return await task;
+  } finally {
+    inFlightWeather.delete(key);
   }
 }
 
