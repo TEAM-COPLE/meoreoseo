@@ -10,7 +10,7 @@ import {
   toggleLocalTodo,
 } from '@/lib/local-store';
 import { check, useInvalidatingMutation } from '@/lib/query';
-import { isRepeat, nextOccurrence } from '@/lib/repeat';
+import { isRepeat, isWaitingRepeat, nextTodoDate } from '@/lib/repeat';
 import { supabase } from '@/lib/supabase';
 
 export type Todo = Tables<'todos'>;
@@ -78,6 +78,8 @@ export function useSaveTodo() {
  * - 완료를 취소하면 그때 자동으로 만든 할 일(아직 안 끝낸 것)을 지운다.
  */
 export async function toggleTodo(todo: Todo): Promise<void> {
+  // 아직 차례가 오지 않은 반복 할 일은 체크하지 않는다(화면·위젯 모두).
+  if (isWaitingRepeat(todo, todayISO())) return;
   if (!hasActiveSession()) {
     await toggleLocalTodo(todo);
     return;
@@ -106,7 +108,7 @@ export async function toggleTodo(todo: Todo): Promise<void> {
       title: todo.title,
       notes: todo.notes,
       priority: todo.priority,
-      due_date: nextOccurrence(anchor, todo.repeat, todo.due_date, todayISO()),
+      due_date: nextTodoDate(anchor, todo.repeat, todo.due_date, todayISO()),
       repeat: todo.repeat,
       repeat_start: anchor,
       previous_id: todo.id,

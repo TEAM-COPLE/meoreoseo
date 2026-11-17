@@ -2,7 +2,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 
 import type { Tables } from './database.types';
 import { todayISO } from './dates';
-import { isRepeat, nextOccurrence } from './repeat';
+import { isRepeat, nextTodoDate } from './repeat';
 import { supabase } from './supabase';
 
 type TodoRow = Tables<'todos'>;
@@ -192,7 +192,7 @@ export async function toggleLocalTodo(todo: TodoRow): Promise<void> {
             user_id: LOCAL_USER_ID,
             title: todo.title,
             notes: todo.notes,
-            due_date: nextOccurrence(anchor, repeat, todo.due_date, todayISO()),
+            due_date: nextTodoDate(anchor, repeat, todo.due_date, todayISO()),
             priority: todo.priority,
             done: false,
             done_at: null,
