@@ -128,6 +128,7 @@ npx eas-cli@latest build -p android --profile preview
 
 | 종류 | 알리는 때 |
 | --- | --- |
+| 아침 브리핑 | 매일 오전 7시: 날씨(최저·최고 기온, 비 올 확률, 우산 안내), 그날까지 할 일 개수, 그날 첫 일정 |
 | 할 일 | 마감일 오전 9시 |
 | 일정 | 시작 10분 전 (하루 종일 일정은 오전 9시) |
 | 습관 | 매일 오후 9시 (그날 다 체크했으면 알리지 않음) |
@@ -135,7 +136,29 @@ npx eas-cli@latest build -p android --profile preview
 - 무엇을 언제 알릴지는 `src/lib/reminders.ts` 가 계산하고, 실제 예약은 `src/lib/notifications.ts` 가 한다.
 - `src/components/notification-sync.tsx` 가 데이터가 바뀔 때마다 예약을 다시 맞춘다.
 - 다른 기기(웹 포함)에서 추가한 할 일·일정은 휴대폰 앱을 한 번 열어야 알림에 반영된다.
+- 아침 브리핑은 3일 치를 미리 예약한다. 날씨는 앱을 열었을 때 받아 둔 3일 예보를 쓰므로,
+  며칠 동안 앱을 열지 않으면 날씨 줄 없이 할 일·일정만 나온다.
 - 웹에서는 알림을 지원하지 않는다.
+
+## 반복 할 일·일정
+
+할 일과 일정을 만들 때 "반복"에서 매일·평일·매주·매월·매년을 고를 수 있다.
+
+- 반복 할 일: 완료하면 다음 날짜의 할 일이 자동으로 하나 생긴다. 완료를 취소하면 자동으로 생긴 다음 할 일(아직 안 한 것)은 지워진다.
+  매월 31일처럼 없는 날짜는 그달의 마지막 날로 맞춘다(`repeat_start` 를 기준으로 계산해 날짜가 밀리지 않는다).
+- 반복 일정: DB 에는 한 번만 저장하고, 달력에 보여줄 때 날짜마다 펼쳐서 보여준다. "반복 종료일"을 비우면 계속 반복한다.
+  일정을 고치거나 지우면 반복 전체에 적용된다. "○월 ○일부터 반복 그만하기"를 누르면 그 전 날짜는 남기고 반복을 끝낸다.
+- 반복 날짜 계산은 `src/lib/repeat.ts` 에 있다. DB 구조는 `supabase/migrations/20261117030000_repeat.sql`.
+
+## 웹앱으로 설치하기 (PWA)
+
+웹사이트를 휴대폰·컴퓨터에 앱처럼 설치할 수 있다(주소창 없이 열리고, 홈 화면에 아이콘이 생긴다).
+
+- 안드로이드 크롬: 메뉴(⋮) → "홈 화면에 추가" 또는 "앱 설치"
+- 아이폰 사파리: 공유 버튼 → "홈 화면에 추가"
+- 컴퓨터 크롬·엣지: 주소창 오른쪽의 설치 아이콘
+- 설정은 `public/manifest.json`(이름·색·아이콘)과 `public/index.html`(웹 페이지 머리말)에 있다.
+  아이콘은 `public/icons/` 에 있으며 `assets/images/icon.png` 로 만들었다.
 
 ### 오류 알림
 
@@ -180,6 +203,8 @@ npx eas-cli@latest build -p android --profile preview
 ```bash
 npx supabase functions deploy kma-weather --no-verify-jwt
 ```
+
+- 서버 함수는 오늘·내일·모레 3일 예보(`days`)도 함께 돌려준다. 아침 브리핑 알림에 쓴다.
 - Nominatim 이용 규칙상 글자를 칠 때마다가 아니라 "검색"을 눌렀을 때만 찾는다.
 - 코드는 `src/lib/weather.ts`, `src/hooks/use-weather.ts`, `src/components/weather-city-picker.tsx` 에 있다.
 
@@ -204,6 +229,7 @@ src/
   hooks/                기능별 데이터 요청 (use-todos.ts 등)
   lib/                  Supabase 연결, 로그인 상태, 구글·카카오 로그인, 알림, 날짜·금액 도우미
   constants/theme.ts    색, 간격 (밝은 화면 / 어두운 화면)
+public/                 웹에 그대로 올라가는 파일 (웹앱 설치 정보 manifest.json, 아이콘, index.html)
 supabase/migrations/    데이터베이스 구조와 접근 규칙 (SQL)
 supabase/functions/     Supabase 서버 함수 (kma-weather: 기상청 날씨)
 ```
