@@ -1,11 +1,13 @@
 import { useQuery } from '@tanstack/react-query';
 
-import { useAuth } from '@/lib/auth';
+import { requireUserId, useAuth } from '@/lib/auth';
 import type { Tables } from '@/lib/database.types';
-import { check } from '@/lib/query';
+import { check, useInvalidatingMutation } from '@/lib/query';
 import { supabase } from '@/lib/supabase';
 
 export type Note = Tables<'notes'>;
+
+const KEY = ['notes'];
 
 /** 내 메모 전체. 고정한 메모가 먼저, 그다음은 최근에 고친 순서다. */
 export function useNotes() {
@@ -13,7 +15,7 @@ export function useNotes() {
   const userId = session?.user.id ?? null;
 
   return useQuery({
-    queryKey: ['notes', userId],
+    queryKey: [...KEY, userId],
     enabled: userId !== null,
     queryFn: async () => {
       const { data, error } = await supabase
@@ -47,5 +49,15 @@ export function useNote(id: string | null) {
       check(error);
       return data;
     },
+  });
+}
+
+/** 고른 메모 여러 개를 한꺼번에 지운다. */
+export function useDeleteNotes() {
+  return useInvalidatingMutation(KEY, async (ids: string[]) => {
+    if (ids.length === 0) return;
+    requireUserId();
+    const { error } = await supabase.from('notes').delete().in('id', ids);
+    check(error);
   });
 }

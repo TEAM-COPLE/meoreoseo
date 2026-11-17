@@ -1,5 +1,11 @@
 import { Alert, Platform } from "react-native";
 
+import {
+  hasConfirmHost,
+  showConfirm,
+  type ConfirmOptions,
+} from "@/components/ui/confirm-modal";
+
 /** 12300 → '12,300원' */
 export function formatWon(amount: number): string {
   const safe = Number.isFinite(amount) ? amount : 0;
@@ -9,12 +15,23 @@ export function formatWon(amount: number): string {
 
 /**
  * "정말 삭제할까요?" 같은 확인 창을 띄우고 사용자의 선택을 돌려준다.
- * 웹과 휴대폰에서 확인 창을 띄우는 방법이 달라 여기에서 맞춘다.
+ * 앱 테마에 맞춘 커스텀 확인 모달을 사용하며, 호스트가 없을 때만 기본 창으로 폴백한다.
  */
 export function confirm(
-  message: string,
+  messageOrOptions: string | ConfirmOptions,
   confirmLabel = "삭제",
 ): Promise<boolean> {
+  if (hasConfirmHost()) {
+    return showConfirm(messageOrOptions, confirmLabel);
+  }
+  const message =
+    typeof messageOrOptions === "string"
+      ? messageOrOptions
+      : messageOrOptions.message;
+  const label =
+    typeof messageOrOptions === "string"
+      ? confirmLabel
+      : (messageOrOptions.confirmLabel ?? confirmLabel);
   if (Platform.OS === "web") {
     return Promise.resolve(window.confirm(message));
   }
@@ -22,7 +39,7 @@ export function confirm(
     Alert.alert("확인", message, [
       { text: "취소", style: "cancel", onPress: () => resolve(false) },
       {
-        text: confirmLabel,
+        text: label,
         style: "destructive",
         onPress: () => resolve(true),
       },

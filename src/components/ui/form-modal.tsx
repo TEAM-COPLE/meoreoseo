@@ -7,6 +7,7 @@ import { Radius, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 
 import { Button } from './button';
+import { ConfirmOverlaySlot, dismissActiveConfirm } from './confirm-modal';
 
 type Props = PropsWithChildren<{
   title: string;
@@ -35,48 +36,60 @@ export function FormModal({
   const insets = useSafeAreaInsets();
 
   return (
-    <Modal visible transparent animationType="fade" onRequestClose={onClose}>
-      <KeyboardAvoidingView
-        // 키보드가 올라오면 그만큼 아래를 비워 입력 칸이 가려지지 않게 한다.
-        behavior="padding"
-        style={[
-          styles.backdrop,
-          { paddingTop: insets.top + Spacing.three, paddingBottom: insets.bottom + Spacing.three },
-        ]}>
-        <View
-          accessibilityViewIsModal
-          style={[styles.card, { backgroundColor: theme.background, borderColor: theme.border }]}>
-          <ThemedText type="default" style={styles.title}>
-            {title}
-          </ThemedText>
+    <Modal
+      visible
+      transparent
+      animationType="fade"
+      onRequestClose={() => {
+        if (!dismissActiveConfirm()) onClose();
+      }}>
+      <View style={styles.modalRoot}>
+        <KeyboardAvoidingView
+          // 키보드가 올라오면 그만큼 아래를 비워 입력 칸이 가려지지 않게 한다.
+          behavior="padding"
+          style={[
+            styles.backdrop,
+            { paddingTop: insets.top + Spacing.three, paddingBottom: insets.bottom + Spacing.three },
+          ]}>
+          <View
+            accessibilityViewIsModal
+            style={[styles.card, { backgroundColor: theme.background, borderColor: theme.border }]}>
+            <ThemedText type="default" style={styles.title}>
+              {title}
+            </ThemedText>
 
-          <ScrollView
-            keyboardShouldPersistTaps="handled"
-            contentContainerStyle={styles.body}
-            style={styles.scroll}>
-            {children}
-            {error ? (
-              <ThemedText type="small" themeColor="danger">
-                {error}
-              </ThemedText>
-            ) : null}
-          </ScrollView>
+            <ScrollView
+              keyboardShouldPersistTaps="handled"
+              contentContainerStyle={styles.body}
+              style={styles.scroll}>
+              {children}
+              {error ? (
+                <ThemedText type="small" themeColor="danger">
+                  {error}
+                </ThemedText>
+              ) : null}
+            </ScrollView>
 
-          <View style={styles.footer}>
-            {onDelete ? (
-              <Button label="삭제" variant="danger" onPress={onDelete} disabled={submitting} />
-            ) : null}
-            <View style={styles.spacer} />
-            <Button label="취소" variant="secondary" onPress={onClose} disabled={submitting} />
-            <Button label={submitLabel} onPress={onSubmit} loading={submitting} />
+            <View style={styles.footer}>
+              {onDelete ? (
+                <Button label="삭제" variant="danger" onPress={onDelete} disabled={submitting} />
+              ) : null}
+              <View style={styles.spacer} />
+              <Button label="취소" variant="secondary" onPress={onClose} disabled={submitting} />
+              <Button label={submitLabel} onPress={onSubmit} loading={submitting} />
+            </View>
           </View>
-        </View>
-      </KeyboardAvoidingView>
+        </KeyboardAvoidingView>
+        <ConfirmOverlaySlot />
+      </View>
     </Modal>
   );
 }
 
 const styles = StyleSheet.create({
+  modalRoot: {
+    flex: 1,
+  },
   backdrop: {
     flex: 1,
     paddingHorizontal: Spacing.three,

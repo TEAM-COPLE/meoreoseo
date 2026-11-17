@@ -9,16 +9,19 @@ import { FormModal } from '@/components/ui/form-modal';
 import { MonthCalendar } from '@/components/ui/month-calendar';
 import { Card, ListStatus, Screen } from '@/components/ui/screen';
 import { Segmented } from '@/components/ui/segmented';
+import { SelectionBar, SelectionIndicator } from '@/components/ui/selection-bar';
 import { TextField } from '@/components/ui/text-field';
 import { Spacing } from '@/constants/theme';
 import {
   timeLabel,
   useDeleteEvent,
+  useDeleteEvents,
   useEndEventRepeat,
   useEvents,
   useSaveEvent,
   type CalendarEvent,
 } from '@/hooks/use-events';
+import { useMultiSelect } from '@/hooks/use-multi-select';
 import {
   formatDate,
   formatTime,
@@ -38,8 +41,11 @@ export default function CalendarScreen() {
   const [selected, setSelected] = useState(todayISO);
   const [month, setMonth] = useState(() => yearMonthOf(selected));
   const [editing, setEditing] = useState<CalendarEvent | 'new' | null>(null);
+  const [bulkError, setBulkError] = useState<string | null>(null);
 
   const events = useEvents(month);
+  const removeMany = useDeleteEvents();
+  const multi = useMultiSelect();
 
   const targetEditId = widgetReq?.mode === 'edit' ? widgetReq.editId : editId;
   const activeEditing: CalendarEvent | 'new' | null =
@@ -72,6 +78,15 @@ export default function CalendarScreen() {
     return { marks: dateMarks, eventsByDate: byDate };
   }, [events.data]);
   const dayEvents = eventsByDate.get(selected) ?? [];
+  const dayEventIds = dayEvents.map((event) => event.id);
+  const selectedDayIds = dayEventIds.filter((id) => multi.isSelected(id));
+  const isSelecting = selectedDayIds.length > 0;
+
+  function selectDate(nextDate: string) {
+    setSelected(nextDate);
+    multi.clear();
+    setBulkError(null);
+  }
 
   // 달을 넘기면 그 달 안의 날짜를 선택한다(이번 달이면 오늘, 아니면 1일).
   function changeMonth(next: YearMonth) {
@@ -79,18 +94,62 @@ export default function CalendarScreen() {
     const { start, end } = monthRange(next);
     setMonth(next);
     setSelected(today >= start && today <= end ? today : start);
+    multi.clear();
+    setBulkError(null);
+  }
+
+  async function deleteSelected() {
+    if (selectedDayIds.length === 0) return;
+    const count = selectedDayIds.length;
+    const hasRepeating = dayEvents.some(
+      (event) => multi.isSelected(event.id) && isRepeat(event.repeat),
+    );
+    const ok = await confirm({
+      title: `일정 ${count}개를 삭제할까요?`,
+      message: hasRepeating
+        ? '반복 일정이 포함되어 있어 해당 반복 일정 전체(지난 날짜 포함)가 함께 삭제됩니다.'
+        : '선택한 일정은 삭제 후 다시 복구할 수 없습니다.',
+      confirmLabel: `${count}개 삭제`,
+    });
+    if (!ok) return;
+    setBulkError(null);
+    try {
+      await removeMany.mutateAsync(selectedDayIds);
+      multi.clear();
+    } catch (e) {
+      setBulkError(errorMessage(e));
+    }
   }
 
   return (
     <Screen
       title="일정"
-      action={<Button label="추가" size="small" onPress={() => setEditing('new')} />}>
+      action={
+        isSelecting ? undefined : (
+          <Button label="추가" size="small" onPress={() => setEditing('new')} />
+        )
+      }
+      overlay={
+        isSelecting ? (
+          <SelectionBar
+            count={selectedDayIds.length}
+            totalCount={dayEventIds.length}
+            deleting={removeMany.isPending}
+            onSelectAll={() => multi.selectAll(dayEventIds)}
+            onClear={() => {
+              multi.clear();
+              setBulkError(null);
+            }}
+            onDelete={deleteSelected}
+          />
+        ) : undefined
+      }>
       <Card>
         <MonthCalendar
           month={month}
           onChangeMonth={changeMonth}
           selected={selected}
-          onSelect={setSelected}
+          onSelect={selectDate}
           marks={marks}
         />
       </Card>
@@ -98,6 +157,12 @@ export default function CalendarScreen() {
       <ThemedText type="default" style={styles.dayTitle}>
         {formatDate(selected)}
       </ThemedText>
+
+      {bulkError ? (
+        <ThemedText type="small" themeColor="danger">
+          {bulkError}
+        </ThemedText>
+      ) : null}
 
       <ListStatus
         loading={events.isPending}
@@ -107,28 +172,39 @@ export default function CalendarScreen() {
         onRetry={events.refetch}
       />
 
-      {dayEvents.map((event) => (
-        <Card key={event.key} onPress={() => setEditing(event)}>
-          <View style={styles.eventRow}>
-            <ThemedText type="small" themeColor="tint" style={styles.time}>
-              {timeLabel(event)}
-            </ThemedText>
-            <View style={styles.eventBody}>
-              <ThemedText type="default">{event.title}</ThemedText>
-              {isRepeat(event.repeat) ? (
-                <ThemedText type="small" themeColor="textSecondary">
-                  {`🔁 ${repeatLabel(event.repeat, event.series_date)}`}
-                </ThemedText>
-              ) : null}
-              {event.memo ? (
-                <ThemedText type="small" themeColor="textSecondary" numberOfLines={2}>
-                  {event.memo}
-                </ThemedText>
-              ) : null}
+      {dayEvents.map((event) => {
+        const isItemSelected = multi.isSelected(event.id);
+        return (
+          <Card
+            key={event.key}
+            selected={isItemSelected}
+            onPress={() => (isSelecting ? multi.toggle(event.id) : setEditing(event))}
+            onLongPress={() => {
+              setBulkError(null);
+              multi.start(event.id);
+            }}>
+            <View style={styles.eventRow}>
+              {isSelecting ? <SelectionIndicator selected={isItemSelected} /> : null}
+              <ThemedText type="small" themeColor="tint" style={styles.time}>
+                {timeLabel(event)}
+              </ThemedText>
+              <View style={styles.eventBody}>
+                <ThemedText type="default">{event.title}</ThemedText>
+                {isRepeat(event.repeat) ? (
+                  <ThemedText type="small" themeColor="textSecondary">
+                    {`🔁 ${repeatLabel(event.repeat, event.series_date)}`}
+                  </ThemedText>
+                ) : null}
+                {event.memo ? (
+                  <ThemedText type="small" themeColor="textSecondary" numberOfLines={2}>
+                    {event.memo}
+                  </ThemedText>
+                ) : null}
+              </View>
             </View>
-          </View>
-        </Card>
-      ))}
+          </Card>
+        );
+      })}
 
       {activeEditing ? (
         <EventForm
@@ -203,10 +279,21 @@ function EventForm({
   }
 
   async function deleteEvent() {
-    const message = wasRepeating
-      ? '반복 일정 전체를 삭제할까요? (지난 날짜의 일정도 모두 사라집니다)'
-      : '이 일정을 삭제할까요?';
-    if (!event || !(await confirm(message))) return;
+    if (!event) return;
+    const ok = await confirm(
+      wasRepeating
+        ? {
+            title: '반복 일정을 삭제할까요?',
+            message: '반복 일정 전체가 삭제되며, 지난 날짜의 일정도 모두 사라집니다.',
+            confirmLabel: '전체 삭제',
+          }
+        : {
+            title: '일정을 삭제할까요?',
+            message: `'${event.title}' 일정을 삭제하면 다시 복구할 수 없습니다.`,
+            confirmLabel: '삭제',
+          },
+    );
+    if (!ok) return;
     try {
       await remove.mutateAsync(event.id);
       onClose();
@@ -218,8 +305,13 @@ function EventForm({
   /** 누른 날짜부터 반복을 끝낸다. 그 전 날짜의 일정은 남는다. */
   async function stopFromHere() {
     if (!event) return;
-    const message = `${formatDate(event.event_date)}부터 이 반복 일정을 그만할까요? 이전 날짜는 그대로 남습니다.`;
-    if (!(await confirm(message, '그만하기'))) return;
+    const ok = await confirm({
+      title: '반복 일정을 그만할까요?',
+      message: `${formatDate(event.event_date)}부터 반복이 중단됩니다. 이전 날짜의 일정은 그대로 남습니다.`,
+      confirmLabel: '그만하기',
+      destructive: false,
+    });
+    if (!ok) return;
     try {
       await endRepeat.mutateAsync({ event, from: event.event_date });
       onClose();
@@ -304,6 +396,7 @@ const styles = StyleSheet.create({
   },
   eventRow: {
     flexDirection: 'row',
+    alignItems: 'center',
     gap: Spacing.three,
   },
   time: {

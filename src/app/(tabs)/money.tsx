@@ -9,12 +9,15 @@ import { FormModal } from '@/components/ui/form-modal';
 import { MonthSwitcher } from '@/components/ui/month-switcher';
 import { Card, ListStatus, Screen } from '@/components/ui/screen';
 import { Segmented } from '@/components/ui/segmented';
+import { SelectionBar, SelectionIndicator } from '@/components/ui/selection-bar';
 import { TextField } from '@/components/ui/text-field';
 import { Radius, Spacing } from '@/constants/theme';
+import { useMultiSelect } from '@/hooks/use-multi-select';
 import { useTheme } from '@/hooks/use-theme';
 import {
   CATEGORIES,
   useDeleteTransaction,
+  useDeleteTransactions,
   useSaveTransaction,
   useTransactions,
   type Transaction,
@@ -61,9 +64,39 @@ export default function MoneyScreen() {
   const theme = useTheme();
   const [month, setMonth] = useState(() => yearMonthOf(todayISO()));
   const [editing, setEditing] = useState<Transaction | 'new' | null>(null);
+  const [bulkError, setBulkError] = useState<string | null>(null);
 
   const transactions = useTransactions(month);
+  const removeMany = useDeleteTransactions();
+  const multi = useMultiSelect();
   const items = transactions.data ?? [];
+  const itemIds = items.map((item) => item.id);
+  const selectedVisibleIds = itemIds.filter((id) => multi.isSelected(id));
+  const isSelecting = selectedVisibleIds.length > 0;
+
+  function changeMonth(next: typeof month) {
+    setMonth(next);
+    multi.clear();
+    setBulkError(null);
+  }
+
+  async function deleteSelected() {
+    if (selectedVisibleIds.length === 0) return;
+    const count = selectedVisibleIds.length;
+    const ok = await confirm({
+      title: `가계부 내역 ${count}개를 삭제할까요?`,
+      message: '선택한 수입·지출 내역은 삭제 후 다시 복구할 수 없습니다.',
+      confirmLabel: `${count}개 삭제`,
+    });
+    if (!ok) return;
+    setBulkError(null);
+    try {
+      await removeMany.mutateAsync(selectedVisibleIds);
+      multi.clear();
+    } catch (e) {
+      setBulkError(errorMessage(e));
+    }
+  }
 
   const targetEditId = widgetReq?.mode === 'edit' ? widgetReq.editId : editId;
   const activeEditing: Transaction | 'new' | null =
@@ -106,15 +139,40 @@ export default function MoneyScreen() {
   return (
     <Screen
       title="가계부"
-      action={<Button label="추가" size="small" onPress={() => setEditing('new')} />}>
+      action={
+        isSelecting ? undefined : (
+          <Button label="추가" size="small" onPress={() => setEditing('new')} />
+        )
+      }
+      overlay={
+        isSelecting ? (
+          <SelectionBar
+            count={selectedVisibleIds.length}
+            totalCount={itemIds.length}
+            deleting={removeMany.isPending}
+            onSelectAll={() => multi.selectAll(itemIds)}
+            onClear={() => {
+              multi.clear();
+              setBulkError(null);
+            }}
+            onDelete={deleteSelected}
+          />
+        ) : undefined
+      }>
       <Card>
-        <MonthSwitcher month={month} onChange={setMonth} />
+        <MonthSwitcher month={month} onChange={changeMonth} />
         <View style={styles.summary}>
           <Stat label="수입" value={formatWon(income)} color={theme.success} />
           <Stat label="지출" value={formatWon(expense)} color={theme.danger} />
           <Stat label="남은 돈" value={formatWon(income - expense)} color={theme.text} />
         </View>
       </Card>
+
+      {bulkError ? (
+        <ThemedText type="small" themeColor="danger">
+          {bulkError}
+        </ThemedText>
+      ) : null}
 
       {categories.length > 0 ? (
         <Card>
@@ -157,29 +215,46 @@ export default function MoneyScreen() {
             {formatDate(group.date)}
           </ThemedText>
           <Card>
-            {group.items.map((item) => (
-              <Pressable
-                key={item.id}
-                accessibilityRole="button"
-                accessibilityLabel={`${item.category} ${formatWon(item.amount)} 수정`}
-                onPress={() => setEditing(item)}
-                style={({ pressed }) => [styles.itemRow, pressed && styles.pressed]}>
-                <View style={styles.itemBody}>
-                  <ThemedText type="default">{item.category}</ThemedText>
-                  {item.memo ? (
-                    <ThemedText type="small" themeColor="textSecondary" numberOfLines={1}>
-                      {item.memo}
-                    </ThemedText>
-                  ) : null}
-                </View>
-                <ThemedText
-                  type="default"
-                  style={{ color: item.kind === 'income' ? theme.success : theme.text }}>
-                  {item.kind === 'income' ? '+' : '-'}
-                  {formatWon(item.amount)}
-                </ThemedText>
-              </Pressable>
-            ))}
+            {group.items.map((item) => {
+              const selected = multi.isSelected(item.id);
+              return (
+                <Pressable
+                  key={item.id}
+                  accessibilityRole="button"
+                  accessibilityLabel={`${item.category} ${formatWon(item.amount)} ${isSelecting ? '선택' : '수정'}`}
+                  accessibilityState={selected ? { selected: true } : undefined}
+                  delayLongPress={320}
+                  onPress={() => (isSelecting ? multi.toggle(item.id) : setEditing(item))}
+                  onLongPress={() => {
+                    setBulkError(null);
+                    multi.start(item.id);
+                  }}
+                  style={({ pressed }) => [
+                    styles.itemRow,
+                    selected && {
+                      backgroundColor: theme.tintSoft,
+                      borderColor: theme.tint,
+                    },
+                    pressed && styles.pressed,
+                  ]}>
+                  {isSelecting ? <SelectionIndicator selected={selected} /> : null}
+                  <View style={styles.itemBody}>
+                    <ThemedText type="default">{item.category}</ThemedText>
+                    {item.memo ? (
+                      <ThemedText type="small" themeColor="textSecondary" numberOfLines={1}>
+                        {item.memo}
+                      </ThemedText>
+                    ) : null}
+                  </View>
+                  <ThemedText
+                    type="default"
+                    style={{ color: item.kind === 'income' ? theme.success : theme.text }}>
+                    {item.kind === 'income' ? '+' : '-'}
+                    {formatWon(item.amount)}
+                  </ThemedText>
+                </Pressable>
+              );
+            })}
           </Card>
         </View>
       ))}
@@ -261,7 +336,16 @@ function TransactionForm({
   }
 
   async function deleteTransaction() {
-    if (!transaction || !(await confirm('이 내역을 삭제할까요?'))) return;
+    if (
+      !transaction ||
+      !(await confirm({
+        title: '가계부 내역을 삭제할까요?',
+        message: `${transaction.category} ${formatWon(transaction.amount)} 내역이 영구적으로 삭제됩니다.`,
+        confirmLabel: '삭제',
+      }))
+    ) {
+      return;
+    }
     try {
       await remove.mutateAsync(transaction.id);
       onClose();
@@ -344,6 +428,12 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: Spacing.three,
     minHeight: 44,
+    borderRadius: Radius.medium,
+    borderWidth: 1.5,
+    borderColor: 'transparent',
+    paddingHorizontal: Spacing.two,
+    paddingVertical: Spacing.one,
+    marginHorizontal: -Spacing.two,
   },
   itemBody: {
     flex: 1,

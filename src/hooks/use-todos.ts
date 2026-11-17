@@ -346,3 +346,12 @@ export function useDeleteTodo() {
     check(error);
   });
 }
+
+export function useDeleteTodos() {
+  return useInvalidatingMutation(KEY, async (ids: string[]) => {
+    if (ids.length === 0) return;
+    requireUserId();
+    const { error } = await supabase.from('todos').delete().in('id', ids);
+    check(error);
+  });
+}

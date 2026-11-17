@@ -6,6 +6,7 @@ import { useEffect } from 'react';
 
 import { ThemeModeProvider, useColorScheme } from '@/hooks/use-theme';
 import { NotificationSync } from '@/components/notification-sync';
+import { ConfirmRootHost } from '@/components/ui/confirm-modal';
 import { AuthProvider, useAuth } from '@/lib/auth';
 import { installGlobalErrorHandler } from '@/lib/error-report';
 import { notificationsSupported } from '@/lib/notifications';
@@ -72,6 +73,7 @@ function ThemedRootNavigator() {
         {/* 구글·카카오 로그인을 마치고 돌아오는 화면 */}
         <Stack.Screen name="auth-callback" />
       </Stack>
+      <ConfirmRootHost />
     </ThemeProvider>
   );
 }
