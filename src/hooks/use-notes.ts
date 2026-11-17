@@ -1,6 +1,8 @@
 import { useQuery } from '@tanstack/react-query';
 
+import { useAuth } from '@/lib/auth';
 import type { Tables } from '@/lib/database.types';
+import { getLocalNote, listLocalNotes } from '@/lib/local-store';
 import { check } from '@/lib/query';
 import { supabase } from '@/lib/supabase';
 
@@ -8,9 +10,15 @@ export type Note = Tables<'notes'>;
 
 /** 내 메모 전체. 고정한 메모가 먼저, 그다음은 최근에 고친 순서다. */
 export function useNotes() {
+  const { session } = useAuth();
+  const scope = session?.user.id ?? 'local';
+
   return useQuery({
-    queryKey: ['notes'],
+    queryKey: ['notes', scope],
     queryFn: async () => {
+      if (!session) {
+        return listLocalNotes();
+      }
       const { data, error } = await supabase
         .from('notes')
         .select('*')
@@ -24,17 +32,23 @@ export function useNotes() {
 
 /**
  * 메모 하나. 메모장을 열 때 쓴다.
- * 다른 기기에서 고친 내용을 덮어쓰지 않도록, 열 때마다 서버에서 새로 받아온다(gcTime: 0).
+ * 다른 기기에서 고친 내용을 덮어쓰지 않도록, 열 때마다 새로 받아온다(gcTime: 0).
  * 메모가 없으면 null 을 돌려준다.
  */
 export function useNote(id: string | null) {
+  const { session } = useAuth();
+  const scope = session?.user.id ?? 'local';
+
   return useQuery({
-    queryKey: ['note', id],
+    queryKey: ['note', scope, id],
     enabled: id !== null,
     gcTime: 0,
     staleTime: Infinity,
     queryFn: async () => {
       if (id === null) return null;
+      if (!session) {
+        return getLocalNote(id);
+      }
       const { data, error } = await supabase.from('notes').select('*').eq('id', id).maybeSingle();
       check(error);
       return data;

@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 
 import { ThemedText } from '@/components/themed-text';
@@ -41,7 +41,10 @@ export default function TodosScreen() {
   const [editing, setEditing] = useState<Todo | 'new' | null>(null);
 
   const today = todayISO();
-  const visible = (todos.data ?? []).filter((todo) => todo.done === (filter === 'done'));
+  const visible = useMemo(() => {
+    const wantDone = filter === 'done';
+    return (todos.data ?? []).filter((todo) => todo.done === wantDone);
+  }, [todos.data, filter]);
 
   return (
     <Screen

@@ -1,3 +1,4 @@
+import { Redirect, router } from 'expo-router';
 import { useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -6,6 +7,7 @@ import { ThemedText } from '@/components/themed-text';
 import { Button } from '@/components/ui/button';
 import { Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
+import { useAuth } from '@/lib/auth';
 import { errorMessage } from '@/lib/format';
 import { signInWith, type SocialProvider } from '@/lib/social-auth';
 
@@ -16,20 +18,30 @@ const KAKAO_COLORS = { background: '#FEE500', text: '#191919' };
 export default function SignInScreen() {
   const theme = useTheme();
   const insets = useSafeAreaInsets();
+  const { session } = useAuth();
   // 지금 로그인을 진행 중인 서비스. 아무것도 안 하고 있으면 null.
   const [busy, setBusy] = useState<SocialProvider | null>(null);
   const [error, setError] = useState<string | null>(null);
+
+  if (session) return <Redirect href="/" />;
 
   async function signIn(provider: SocialProvider) {
     setBusy(provider);
     setError(null);
     try {
-      // 성공하면 화면 이동은 src/app/_layout.tsx 가 알아서 처리한다.
       setError(await signInWith(provider));
     } catch (e) {
       setError(errorMessage(e));
     } finally {
       setBusy(null);
+    }
+  }
+
+  function continueWithoutAccount() {
+    if (router.canGoBack()) {
+      router.back();
+    } else {
+      router.replace('/');
     }
   }
 
@@ -39,7 +51,7 @@ export default function SignInScreen() {
         styles.root,
         {
           backgroundColor: theme.background,
-          paddingTop: insets.top + Spacing.five,
+          paddingTop: insets.top + Spacing.three,
           paddingBottom: insets.bottom + Spacing.five,
         },
       ]}>
@@ -49,7 +61,7 @@ export default function SignInScreen() {
             멀어서
           </ThemedText>
           <ThemedText type="default" themeColor="textSecondary">
-            할 일, 일정, 습관, 메모, 가계부를 한곳에서.
+            계정에 로그인하면 데이터를 데이터베이스에 저장하고 여러 기기에서 이어서 쓸 수 있습니다.
           </ThemedText>
         </View>
 
@@ -70,13 +82,19 @@ export default function SignInScreen() {
             loading={busy === 'kakao'}
             disabled={busy !== null}
           />
+          <Button
+            label="로그인 없이 기기에 저장하며 쓰기"
+            variant="secondary"
+            onPress={continueWithoutAccount}
+            disabled={busy !== null}
+          />
           {error ? (
             <ThemedText type="small" themeColor="danger">
               {error}
             </ThemedText>
           ) : null}
           <ThemedText type="small" themeColor="textSecondary">
-            처음 로그인하면 자동으로 가입됩니다.
+            기기에 먼저 적어 둔 내용도 로그인하면 자동으로 계정에 동기화됩니다.
           </ThemedText>
         </View>
       </View>

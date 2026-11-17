@@ -9,8 +9,9 @@
 | --- | --- |
 | 언어 | TypeScript |
 | 웹 + 앱 | Expo (React Native), Expo Router |
-| 데이터·로그인 | Supabase (Postgres, Row Level Security) |
+| 데이터·로그인 | 기기 내 저장(AsyncStorage) 기본 + 선택적 계정 연동(Supabase Postgres, RLS) |
 | 데이터 요청 | TanStack Query |
+| 화면 모드 | 라이트 모드 / 다크 모드 / 기기 설정 연동 |
 
 ## 실행하기
 
@@ -98,11 +99,11 @@ Client Secret 은 Supabase 대시보드에만 넣는다. 이 저장소나 `.env`
 ```
 src/
   app/                  화면. 파일 하나가 주소 하나다.
-    _layout.tsx         가장 바깥 틀. 로그인 여부에 따라 화면을 나눈다.
-    sign-in.tsx         구글·카카오 로그인
+    _layout.tsx         가장 바깥 틀. 화면 이동과 테마(라이트/다크)를 제공한다.
+    sign-in.tsx         구글·카카오 로그인 (선택)
     auth-callback.tsx   로그인을 마치고 돌아오는 화면
-    account.tsx         계정(로그아웃)
-    (tabs)/             로그인 후의 다섯 탭
+    account.tsx         계정 연동 및 화면 테마(라이트·다크·기기 설정)
+    (tabs)/             다섯 기능 탭 (비로그인 시 기기 저장, 로그인 시 DB 저장)
       index.tsx         할 일
       calendar.tsx      일정
       habits.tsx        습관

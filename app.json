@@ -33,11 +33,42 @@
           "image": "./assets/images/splash-icon.png",
           "imageWidth": 76
         }
+      ],
+      [
+        "expo-widgets",
+        {
+          "enableAndroid": true,
+          "widgets": [
+            {
+              "name": "MeoreoseoAllInOneWidget",
+              "displayName": "멀어서 위젯",
+              "description": "할 일, 일정, 습관, 메모, 가계부를 홈 화면에서 모두 전환하고 바로 기록합니다.",
+              "android": {
+                "minWidth": 250,
+                "minHeight": 180,
+                "targetCellWidth": 4,
+                "targetCellHeight": 3,
+                "resizeMode": "both",
+                "initialLayout": "./src/widgets/meoreoseo-widgets.tsx"
+              }
+            }
+          ]
+        }
       ]
     ],
     "experiments": {
       "typedRoutes": true,
       "reactCompiler": true
+    },
+    "extra": {
+      "router": {
+        "asyncRoutes": {
+          "web": true
+        }
+      },
+      "eas": {
+        "projectId": "acf9fe9b-79d8-4df0-bc1b-31b3ee107c77"
+      }
     }
   }
 }

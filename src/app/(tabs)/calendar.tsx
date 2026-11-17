@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 
 import { ThemedText } from '@/components/themed-text';
@@ -38,8 +38,21 @@ export default function CalendarScreen() {
   const [editing, setEditing] = useState<CalendarEvent | 'new' | null>(null);
 
   const events = useEvents(month);
-  const marks = new Set((events.data ?? []).map((event) => event.event_date));
-  const dayEvents = (events.data ?? []).filter((event) => event.event_date === selected);
+  const { marks, eventsByDate } = useMemo(() => {
+    const dateMarks = new Set<string>();
+    const byDate = new Map<string, CalendarEvent[]>();
+    for (const event of events.data ?? []) {
+      dateMarks.add(event.event_date);
+      const list = byDate.get(event.event_date);
+      if (list) {
+        list.push(event);
+      } else {
+        byDate.set(event.event_date, [event]);
+      }
+    }
+    return { marks: dateMarks, eventsByDate: byDate };
+  }, [events.data]);
+  const dayEvents = eventsByDate.get(selected) ?? [];
 
   // 달을 넘기면 그 달 안의 날짜를 선택한다(이번 달이면 오늘, 아니면 1일).
   function changeMonth(next: YearMonth) {

@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 
 import { ThemedText } from '@/components/themed-text';
@@ -61,9 +61,21 @@ export default function MoneyScreen() {
   const transactions = useTransactions(month);
   const items = transactions.data ?? [];
 
-  const income = items.filter((t) => t.kind === 'income').reduce((sum, t) => sum + t.amount, 0);
-  const expense = items.filter((t) => t.kind === 'expense').reduce((sum, t) => sum + t.amount, 0);
-  const categories = expenseByCategory(items);
+  const { income, expense, categories, groups } = useMemo(() => {
+    const list = transactions.data ?? [];
+    let totalIncome = 0;
+    let totalExpense = 0;
+    for (const item of list) {
+      if (item.kind === 'income') totalIncome += item.amount;
+      else if (item.kind === 'expense') totalExpense += item.amount;
+    }
+    return {
+      income: totalIncome,
+      expense: totalExpense,
+      categories: expenseByCategory(list),
+      groups: groupByDate(list),
+    };
+  }, [transactions.data]);
 
   // 새 내역의 기본 날짜: 보고 있는 달이 이번 달이면 오늘, 아니면 그 달의 1일.
   const today = todayISO();
@@ -95,7 +107,10 @@ export default function MoneyScreen() {
                 <View
                   style={[
                     styles.barFill,
-                    { backgroundColor: theme.tint, width: `${(total / expense) * 100}%` },
+                    {
+                      backgroundColor: theme.tint,
+                      width: `${expense > 0 ? Math.min(100, Math.max(0, (total / expense) * 100)) : 0}%`,
+                    },
                   ]}
                 />
               </View>
@@ -115,7 +130,7 @@ export default function MoneyScreen() {
         onRetry={transactions.refetch}
       />
 
-      {groupByDate(items).map((group) => (
+      {groups.map((group) => (
         <View key={group.date} style={styles.group}>
           <ThemedText type="small" themeColor="textSecondary">
             {formatDate(group.date)}

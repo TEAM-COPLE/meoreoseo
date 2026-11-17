@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 
 import { ThemedText } from '@/components/themed-text';
@@ -28,8 +28,16 @@ export default function HabitsScreen() {
   const [editing, setEditing] = useState<Habit | 'new' | null>(null);
 
   // 최근 7일. 마지막이 오늘이다.
-  const days = lastDays(7);
+  const days = useMemo(() => lastDays(7), []);
   const today = days[days.length - 1];
+  const streaks = useMemo(() => {
+    const map = new Map<string, number>();
+    if (!logs.data) return map;
+    for (const habit of habits.data ?? []) {
+      map.set(habit.id, streakOf(logs.data.get(habit.id)));
+    }
+    return map;
+  }, [habits.data, logs.data]);
 
   return (
     <Screen
@@ -49,7 +57,7 @@ export default function HabitsScreen() {
       {logs.data
         ? (habits.data ?? []).map((habit) => {
             const dates = logs.data.get(habit.id);
-            const streak = streakOf(dates);
+            const streak = streaks.get(habit.id) ?? 0;
             return (
               <Card key={habit.id}>
                 <View style={styles.header}>

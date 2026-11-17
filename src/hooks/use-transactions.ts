@@ -1,7 +1,13 @@
 import { useQuery } from '@tanstack/react-query';
 
+import { hasActiveSession, useAuth } from '@/lib/auth';
 import type { Tables } from '@/lib/database.types';
 import { monthRange, type YearMonth } from '@/lib/dates';
+import {
+  deleteLocalTransaction,
+  listLocalTransactions,
+  saveLocalTransaction,
+} from '@/lib/local-store';
 import { check, useInvalidatingMutation } from '@/lib/query';
 import { supabase } from '@/lib/supabase';
 
@@ -27,11 +33,16 @@ const KEY = ['transactions'];
 
 /** 한 달 동안의 수입·지출 내역. 최근 날짜가 먼저 온다. */
 export function useTransactions(month: YearMonth) {
+  const { session } = useAuth();
+  const scope = session?.user.id ?? 'local';
   const { start, end } = monthRange(month);
 
   return useQuery({
-    queryKey: [...KEY, start, end],
+    queryKey: [...KEY, scope, start, end],
     queryFn: async () => {
+      if (!session) {
+        return listLocalTransactions(start, end);
+      }
       const { data, error } = await supabase
         .from('transactions')
         .select('*')
@@ -47,6 +58,10 @@ export function useTransactions(month: YearMonth) {
 
 export function useSaveTransaction() {
   return useInvalidatingMutation(KEY, async ({ id, ...values }: TransactionInput) => {
+    if (!hasActiveSession()) {
+      await saveLocalTransaction({ id, ...values });
+      return;
+    }
     const { error } = id
       ? await supabase.from('transactions').update(values).eq('id', id)
       : await supabase.from('transactions').insert(values);
@@ -56,6 +71,10 @@ export function useSaveTransaction() {
 
 export function useDeleteTransaction() {
   return useInvalidatingMutation(KEY, async (id: string) => {
+    if (!hasActiveSession()) {
+      await deleteLocalTransaction(id);
+      return;
+    }
     const { error } = await supabase.from('transactions').delete().eq('id', id);
     check(error);
   });

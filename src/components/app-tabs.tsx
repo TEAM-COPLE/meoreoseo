@@ -1,7 +1,7 @@
 import { NativeTabs } from 'expo-router/native-tabs';
-import { useColorScheme } from 'react-native';
 
 import { Colors } from '@/constants/theme';
+import { useColorScheme } from '@/hooks/use-theme';
 
 /** 휴대폰용 아래쪽 탭 막대. name 은 src/app/(tabs) 안의 파일 이름과 같아야 한다. */
 export default function AppTabs() {

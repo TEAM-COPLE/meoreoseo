@@ -1,5 +1,5 @@
 import { router } from 'expo-router';
-import { useState } from 'react';
+import { useDeferredValue, useMemo, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 
 import { ThemedText } from '@/components/themed-text';
@@ -16,16 +16,19 @@ import { formatDate, toISODate } from '@/lib/dates';
 export default function NotesScreen() {
   const notes = useNotes();
   const [query, setQuery] = useState('');
+  const deferredQuery = useDeferredValue(query);
 
   const all = notes.data ?? [];
   // 검색어가 있으면 제목이나 내용에 그 말이 들어 있는 메모만 보여준다(대소문자 구분 없음).
-  const keyword = query.trim().toLowerCase();
-  const visible = keyword
-    ? all.filter(
-        (note) =>
-          note.title.toLowerCase().includes(keyword) || note.body.toLowerCase().includes(keyword),
-      )
-    : all;
+  const keyword = deferredQuery.trim().toLowerCase();
+  const visible = useMemo(() => {
+    const list = notes.data ?? [];
+    if (!keyword) return list;
+    return list.filter(
+      (note) =>
+        note.title.toLowerCase().includes(keyword) || note.body.toLowerCase().includes(keyword),
+    );
+  }, [notes.data, keyword]);
 
   return (
     <Screen

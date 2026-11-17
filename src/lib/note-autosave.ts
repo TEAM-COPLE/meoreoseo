@@ -1,3 +1,5 @@
+import { hasActiveSession } from './auth';
+import { deleteLocalNote, insertLocalNote, updateLocalNote } from './local-store';
 import { queryClient } from './query';
 import { supabase } from './supabase';
 
@@ -16,9 +18,9 @@ const DELAY_MS = 800;
 /**
  * 메모 자동 저장기.
  *
- * 글자를 칠 때마다 서버에 저장하면 요청이 너무 많아지므로,
+ * 글자를 칠 때마다 저장하면 요청이 너무 많아지므로,
  * 입력이 잠깐 멈췄을 때 가장 마지막 내용만 저장한다.
- * 새 메모는 처음 내용이 생겼을 때 한 번 만들고, 그 뒤로는 같은 메모를 고친다.
+ * 로그인되어 있으면 Supabase 데이터베이스에, 아니면 기기 내부 저장소(AsyncStorage)에 저장한다.
  *
  * @param initialId 이미 있는 메모면 그 id, 새 메모면 null
  * @param onStatus 저장 상태가 바뀔 때마다 불린다 (화면에 "저장됨" 등을 보여주는 용도)
@@ -34,6 +36,19 @@ export function createNoteAutosaver(
   let stopped = false;
 
   async function save(draft: NoteDraft): Promise<boolean> {
+    if (!hasActiveSession()) {
+      try {
+        if (noteId) {
+          return await updateLocalNote(noteId, draft);
+        }
+        const created = await insertLocalNote(draft);
+        noteId = created.id;
+        return true;
+      } catch {
+        return false;
+      }
+    }
+
     if (noteId) {
       const { error } = await supabase
         .from('notes')
@@ -111,6 +126,17 @@ export function createNoteAutosaver(
       await running;
 
       if (!noteId) return null;
+
+      if (!hasActiveSession()) {
+        try {
+          await deleteLocalNote(noteId);
+          queryClient.invalidateQueries({ queryKey: ['notes'] });
+          return null;
+        } catch (e) {
+          stopped = false;
+          return e instanceof Error ? e.message : '삭제하지 못했습니다.';
+        }
+      }
 
       const { error } = await supabase.from('notes').delete().eq('id', noteId);
       if (error) {

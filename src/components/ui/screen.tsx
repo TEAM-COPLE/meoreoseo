@@ -5,7 +5,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { ThemedText } from '@/components/themed-text';
 import { BottomTabInset, MaxContentWidth, Radius, Spacing } from '@/constants/theme';
-import { useTheme } from '@/hooks/use-theme';
+import { useTheme, useThemeMode } from '@/hooks/use-theme';
 
 import { Button } from './button';
 
@@ -17,11 +17,13 @@ type Props = PropsWithChildren<{
 
 /**
  * 탭 화면의 공통 틀: 위쪽 제목 줄 + 스크롤되는 내용.
- * 제목 줄 오른쪽 끝의 "계정"을 누르면 계정 화면(로그아웃)으로 간다.
+ * 제목 줄 오른쪽에서 라이트/다크 모드를 바로 전환하거나 "계정" 화면으로 갈 수 있다.
  */
 export function Screen({ title, action, children }: Props) {
   const theme = useTheme();
+  const { resolvedScheme, toggleScheme } = useThemeMode();
   const insets = useSafeAreaInsets();
+  const isDark = resolvedScheme === 'dark';
 
   return (
     <View style={[styles.root, { backgroundColor: theme.background }]}>
@@ -41,7 +43,18 @@ export function Screen({ title, action, children }: Props) {
           {action}
           <Pressable
             accessibilityRole="button"
-            accessibilityLabel="계정"
+            accessibilityLabel={isDark ? '라이트 모드로 전환' : '다크 모드로 전환'}
+            hitSlop={8}
+            onPress={toggleScheme}
+            style={({ pressed }) => [
+              styles.account,
+              { backgroundColor: theme.backgroundElement, opacity: pressed ? 0.7 : 1 },
+            ]}>
+            <ThemedText type="small">{isDark ? '라이트' : '다크'}</ThemedText>
+          </Pressable>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="계정 및 설정"
             hitSlop={8}
             onPress={() => router.push('/account')}
             style={({ pressed }) => [
@@ -85,7 +98,7 @@ export function ListStatus({
     return (
       <View style={styles.status}>
         <ThemedText type="small" themeColor="danger" style={styles.centered}>
-          불러오지 못했습니다. 인터넷 연결을 확인해 주세요.
+          불러오지 못했습니다. 다시 시도해 주세요.
         </ThemedText>
         <Button label="다시 시도" variant="secondary" size="small" onPress={onRetry} />
       </View>

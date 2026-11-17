@@ -7,15 +7,34 @@ const WEEKDAYS = ['일', '월', '화', '수', '목', '금', '토'] as const;
 
 export const WEEKDAY_LABELS: readonly string[] = WEEKDAYS;
 
+const ISO_DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+const TIME_24H_RE = /^([01]\d|2[0-3]):[0-5]\d$/;
+
 const pad = (n: number) => String(n).padStart(2, '0');
 
 export function toISODate(date: Date): string {
-  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
+  const safe = Number.isNaN(date.getTime()) ? new Date() : date;
+  return `${safe.getFullYear()}-${pad(safe.getMonth() + 1)}-${pad(safe.getDate())}`;
 }
 
 export function parseISODate(iso: string): Date {
+  if (!ISO_DATE_RE.test(iso)) {
+    return new Date();
+  }
   const [year, month, day] = iso.split('-').map(Number);
-  return new Date(year, month - 1, day);
+  if (month < 1 || month > 12 || day < 1 || day > 31) {
+    return new Date();
+  }
+  const date = new Date(year, month - 1, day);
+  if (
+    Number.isNaN(date.getTime()) ||
+    date.getFullYear() !== year ||
+    date.getMonth() !== month - 1 ||
+    date.getDate() !== day
+  ) {
+    return new Date();
+  }
+  return date;
 }
 
 export function todayISO(): string {
@@ -68,22 +87,32 @@ export function formatMonth({ year, month }: YearMonth): string {
 
 /** 그 달의 첫날과 마지막 날. */
 export function monthRange({ year, month }: YearMonth): { start: string; end: string } {
+  const dayCount = new Date(year, month + 1, 0).getDate();
+  const ym = `${year}-${pad(month + 1)}`;
   return {
-    start: toISODate(new Date(year, month, 1)),
-    end: toISODate(new Date(year, month + 1, 0)),
+    start: `${ym}-01`,
+    end: `${ym}-${pad(dayCount)}`,
   };
 }
 
+const gridCache = new Map<string, (string | null)[][]>();
+
 /**
  * 달력에 그릴 주 단위 배열. 일요일부터 시작하고, 그 달이 아닌 칸은 null 이다.
+ * 불필요한 Date 객체 생성을 피하고 월별 결과를 캐시해 렌더링 성능을 높인다.
  */
 export function monthGrid({ year, month }: YearMonth): (string | null)[][] {
+  const cacheKey = `${year}-${month}`;
+  const cached = gridCache.get(cacheKey);
+  if (cached) return cached;
+
   const firstWeekday = new Date(year, month, 1).getDay();
   const dayCount = new Date(year, month + 1, 0).getDate();
+  const ym = `${year}-${pad(month + 1)}`;
 
   const cells: (string | null)[] = Array.from({ length: firstWeekday }, () => null);
   for (let day = 1; day <= dayCount; day++) {
-    cells.push(toISODate(new Date(year, month, day)));
+    cells.push(`${ym}-${pad(day)}`);
   }
   while (cells.length % 7 !== 0) cells.push(null);
 
@@ -91,6 +120,12 @@ export function monthGrid({ year, month }: YearMonth): (string | null)[][] {
   for (let i = 0; i < cells.length; i += 7) {
     weeks.push(cells.slice(i, i + 7));
   }
+
+  if (gridCache.size >= 24) {
+    const oldestKey = gridCache.keys().next().value;
+    if (oldestKey !== undefined) gridCache.delete(oldestKey);
+  }
+  gridCache.set(cacheKey, weeks);
   return weeks;
 }
 
@@ -101,5 +136,5 @@ export function formatTime(time: string | null): string {
 
 /** '14:30' 처럼 24시간 형식인지 확인한다. */
 export function isValidTime(text: string): boolean {
-  return /^([01]\d|2[0-3]):[0-5]\d$/.test(text);
+  return TIME_24H_RE.test(text);
 }

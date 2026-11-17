@@ -1,7 +1,15 @@
 import { useQuery } from '@tanstack/react-query';
 
+import { hasActiveSession, useAuth } from '@/lib/auth';
 import type { Tables } from '@/lib/database.types';
 import { addDays, todayISO } from '@/lib/dates';
+import {
+  deleteLocalHabit,
+  listLocalHabitLogs,
+  listLocalHabits,
+  saveLocalHabit,
+  toggleLocalHabitLog,
+} from '@/lib/local-store';
 import { check, useInvalidatingMutation } from '@/lib/query';
 import { supabase } from '@/lib/supabase';
 
@@ -14,9 +22,15 @@ const LOGS_KEY = ['habit-logs'];
 const HISTORY_DAYS = 400;
 
 export function useHabits() {
+  const { session } = useAuth();
+  const scope = session?.user.id ?? 'local';
+
   return useQuery({
-    queryKey: KEY,
+    queryKey: [...KEY, scope],
     queryFn: async () => {
+      if (!session) {
+        return listLocalHabits();
+      }
       const { data, error } = await supabase
         .from('habits')
         .select('*')
@@ -33,17 +47,28 @@ export function useHabits() {
  * 예: logs.get(habitId)?.has('2026-11-15')
  */
 export function useHabitLogs() {
+  const { session } = useAuth();
+  const scope = session?.user.id ?? 'local';
+
   return useQuery({
-    queryKey: LOGS_KEY,
+    queryKey: [...LOGS_KEY, scope],
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from('habit_logs')
-        .select('habit_id, log_date')
-        .gte('log_date', addDays(todayISO(), -HISTORY_DAYS));
-      check(error);
+      const sinceDate = addDays(todayISO(), -HISTORY_DAYS);
+      let rows: { habit_id: string; log_date: string }[];
+
+      if (!session) {
+        rows = await listLocalHabitLogs(sinceDate);
+      } else {
+        const { data, error } = await supabase
+          .from('habit_logs')
+          .select('habit_id, log_date')
+          .gte('log_date', sinceDate);
+        check(error);
+        rows = data ?? [];
+      }
 
       const byHabit = new Map<string, Set<string>>();
-      for (const log of data ?? []) {
+      for (const log of rows) {
         const dates = byHabit.get(log.habit_id) ?? new Set<string>();
         dates.add(log.log_date);
         byHabit.set(log.habit_id, dates);
@@ -69,6 +94,10 @@ export function streakOf(dates: ReadonlySet<string> | undefined): number {
 
 export function useSaveHabit() {
   return useInvalidatingMutation(KEY, async ({ id, name }: { id?: string; name: string }) => {
+    if (!hasActiveSession()) {
+      await saveLocalHabit({ id, name });
+      return;
+    }
     const { error } = id
       ? await supabase.from('habits').update({ name }).eq('id', id)
       : await supabase.from('habits').insert({ name });
@@ -79,6 +108,10 @@ export function useSaveHabit() {
 /** 습관을 지운다. 그 습관의 실천 기록도 함께 지워진다. */
 export function useDeleteHabit() {
   return useInvalidatingMutation(KEY, async (id: string) => {
+    if (!hasActiveSession()) {
+      await deleteLocalHabit(id);
+      return;
+    }
     const { error } = await supabase.from('habits').delete().eq('id', id);
     check(error);
   });
@@ -89,6 +122,10 @@ export function useToggleHabitLog() {
   return useInvalidatingMutation(
     LOGS_KEY,
     async ({ habitId, date, done }: { habitId: string; date: string; done: boolean }) => {
+      if (!hasActiveSession()) {
+        await toggleLocalHabitLog({ habitId, date, done });
+        return;
+      }
       const { error } = done
         ? await supabase.from('habit_logs').delete().eq('habit_id', habitId).eq('log_date', date)
         : await supabase.from('habit_logs').insert({ habit_id: habitId, log_date: date });

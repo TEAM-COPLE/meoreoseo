@@ -1,5 +1,5 @@
 /**
- * 앱 전체에서 쓰는 색, 글꼴, 간격.
+ * 앱 전체에서 쓰는 색과 간격.
  * 밝은 화면(light)과 어두운 화면(dark) 색을 나란히 정의하고,
  * 화면에서는 useTheme() 으로 지금 모드에 맞는 색을 꺼내 쓴다.
  */
@@ -37,27 +37,6 @@ export const Colors = {
 
 export type ThemeColor = keyof typeof Colors.light & keyof typeof Colors.dark;
 
-export const Fonts = Platform.select({
-  ios: {
-    sans: 'system-ui',
-    serif: 'ui-serif',
-    rounded: 'ui-rounded',
-    mono: 'ui-monospace',
-  },
-  default: {
-    sans: 'normal',
-    serif: 'serif',
-    rounded: 'normal',
-    mono: 'monospace',
-  },
-  web: {
-    sans: 'var(--font-display)',
-    serif: 'var(--font-serif)',
-    rounded: 'var(--font-rounded)',
-    mono: 'var(--font-mono)',
-  },
-});
-
 export const Spacing = {
   half: 2,
   one: 4,
@@ -65,7 +44,6 @@ export const Spacing = {
   three: 16,
   four: 24,
   five: 32,
-  six: 64,
 } as const;
 
 export const Radius = {

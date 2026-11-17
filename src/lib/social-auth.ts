@@ -2,7 +2,7 @@ import * as Linking from 'expo-linking';
 import * as WebBrowser from 'expo-web-browser';
 import { Platform } from 'react-native';
 
-import { isProviderEnabled, supabase } from './supabase';
+import { hasSupabaseConfig, isProviderEnabled, supabase } from './supabase';
 
 /**
  * 소셜 로그인 (구글, 카카오).
@@ -11,11 +11,7 @@ import { isProviderEnabled, supabase } from './supabase';
  * 1. Supabase 에게 "구글 로그인 주소"를 받는다.
  * 2. 그 주소를 브라우저로 연다. 사용자가 구글 계정을 고른다.
  * 3. 구글 → Supabase → 우리 앱의 /auth-callback 주소로 돌아온다.
- *    이때 주소 끝(# 뒤)에 로그인 토큰이 붙어 온다.
- * 4. 그 토큰으로 로그인 상태(세션)를 만든다.
- *
- * 웹에서는 페이지 전체가 구글로 이동했다가 돌아오고(3~4단계는 Supabase 가 자동 처리),
- * 휴대폰에서는 앱 위에 브라우저 창이 떴다가 닫힌다.
+ * 4. 주소에 담긴 인증 코드(PKCE) 또는 토큰으로 로그인 상태(세션)를 만든다.
  */
 
 /** 지원하는 로그인 서비스. 값은 Supabase 가 쓰는 이름과 같아야 한다. */
@@ -42,22 +38,42 @@ function callbackUrl(): string {
   return Linking.createURL(CALLBACK_PATH);
 }
 
-/** 주소의 ? 뒤와 # 뒤에 붙은 값들을 꺼낸다. 예: '...#access_token=abc' → { access_token: 'abc' } */
-function readParams(url: string): Record<string, string> {
+/**
+ * 허용된 로그인 콜백 주소인지 검증한다.
+ * 외부에서 조작된 딥링크가 임의의 경로로 세션을 주입하는 것을 막는다.
+ */
+function isAllowedCallbackUrl(url: string): boolean {
+  if (!url || url.length > 4096) return false;
+  if (Platform.OS === 'web' && typeof window !== 'undefined') {
+    return url.startsWith(`${window.location.origin}/${CALLBACK_PATH}`);
+  }
+  const allowedSchemes = ['meoreoseo://', 'exp://', 'http://localhost:', 'https://'];
+  return (
+    allowedSchemes.some((prefix) => url.startsWith(prefix)) && url.includes(CALLBACK_PATH)
+  );
+}
+
+/**
+ * 주소의 ? 뒤와 # 뒤에 붙은 값들을 안전하게 꺼낸다.
+ * 일반 객체({}) 대신 Map 을 써서 __proto__ 등 프로토타입 오염(Prototype Pollution)을 방지한다.
+ */
+function readParams(url: string): ReadonlyMap<string, string> {
   const hashIndex = url.indexOf('#');
   const hash = hashIndex >= 0 ? url.slice(hashIndex + 1) : '';
   const beforeHash = hashIndex >= 0 ? url.slice(0, hashIndex) : url;
   const queryIndex = beforeHash.indexOf('?');
   const query = queryIndex >= 0 ? beforeHash.slice(queryIndex + 1) : '';
 
-  const params: Record<string, string> = {};
+  const params = new Map<string, string>();
   for (const pair of `${query}&${hash}`.split('&')) {
     if (!pair) continue;
     const equals = pair.indexOf('=');
     const key = equals >= 0 ? pair.slice(0, equals) : pair;
     const value = equals >= 0 ? pair.slice(equals + 1) : '';
     try {
-      params[decodeURIComponent(key)] = decodeURIComponent(value.replace(/\+/g, ' '));
+      const decodedKey = decodeURIComponent(key);
+      const decodedValue = decodeURIComponent(value.replace(/\+/g, ' '));
+      params.set(decodedKey, decodedValue);
     } catch {
       // 잘못된 형식의 값은 건너뛴다.
     }
@@ -65,7 +81,18 @@ function readParams(url: string): Record<string, string> {
   return params;
 }
 
-/** Supabase·구글·카카오가 돌려준 영어 오류를 한국어 안내로 바꾼다. */
+/** 웹 브라우저 주소창과 기록(History)에 남은 토큰·인증 코드를 즉시 지운다. */
+function scrubBrowserUrl(): void {
+  if (Platform.OS === 'web' && typeof window !== 'undefined') {
+    try {
+      window.history.replaceState(null, '', window.location.pathname);
+    } catch {
+      // 구형 브라우저 등에서 실패하면 무시한다.
+    }
+  }
+}
+
+/** Supabase·구글·카카오가 돌려준 영어 오류를 안전한 한국어 안내로 바꾼다. */
 function describeError(message: string): string {
   if (message.includes('provider is not enabled') || message.includes('Unsupported provider')) {
     return '이 로그인 방식이 아직 켜져 있지 않습니다. Supabase 대시보드에서 제공자를 설정해 주세요.';
@@ -73,7 +100,10 @@ function describeError(message: string): string {
   if (message.includes('access_denied')) {
     return '로그인을 취소했거나 접근이 거부되었습니다.';
   }
-  return message;
+  if (message.includes('invalid_grant') || message.includes('expired')) {
+    return '로그인 인증 시간이 만료되었습니다. 다시 시도해 주세요.';
+  }
+  return '로그인 처리 중 문제가 발생했습니다. 잠시 후 다시 시도해 주세요.';
 }
 
 // 같은 주소를 두 번 처리하지 않도록 기억해 둔다.
@@ -81,23 +111,33 @@ function describeError(message: string): string {
 let handledUrl: string | null = null;
 
 /**
- * 로그인 후 돌아온 주소에서 토큰을 꺼내 로그인 상태를 만든다.
+ * 로그인 후 돌아온 주소에서 인증 코드 또는 토큰을 꺼내 로그인 상태를 만든다.
  * @returns 실패했으면 보여줄 오류 문장, 성공했거나 할 일이 없으면 null
  */
 export async function completeSignInFromUrl(url: string): Promise<string | null> {
+  if (!isAllowedCallbackUrl(url)) return null;
   if (url === handledUrl) return null;
   handledUrl = url;
 
   const params = readParams(url);
+  scrubBrowserUrl();
 
-  const failure = params.error_description || params.error;
+  const failure = params.get('error_description') || params.get('error');
   if (failure) return describeError(failure);
 
-  if (!params.access_token || !params.refresh_token) return null;
+  const code = params.get('code');
+  if (code) {
+    const { error } = await supabase.auth.exchangeCodeForSession(code);
+    return error ? describeError(error.message) : null;
+  }
+
+  const accessToken = params.get('access_token');
+  const refreshToken = params.get('refresh_token');
+  if (!accessToken || !refreshToken) return null;
 
   const { error } = await supabase.auth.setSession({
-    access_token: params.access_token,
-    refresh_token: params.refresh_token,
+    access_token: accessToken,
+    refresh_token: refreshToken,
   });
   return error ? describeError(error.message) : null;
 }
@@ -109,6 +149,10 @@ export async function completeSignInFromUrl(url: string): Promise<string | null>
  */
 export async function signInWith(provider: SocialProvider): Promise<string | null> {
   const name = PROVIDER_NAMES[provider];
+
+  if (!hasSupabaseConfig) {
+    return 'Supabase 연결 설정(.env.local)이 되어 있지 않아 계정 로그인을 사용할 수 없습니다.';
+  }
 
   if (!(await isProviderEnabled(provider))) {
     return `${name} 로그인이 아직 켜져 있지 않습니다. Supabase 대시보드에서 설정해 주세요.`;
