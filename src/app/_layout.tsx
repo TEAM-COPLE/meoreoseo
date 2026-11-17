@@ -44,36 +44,28 @@ function ThemedRootNavigator() {
   return (
     <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
       <StatusBar style={colorScheme === 'dark' ? 'light' : 'dark'} />
-      <>
-        {/* 로그인해 있는 동안 휴대폰의 예약 알림을 데이터와 맞춘다. 화면에는 보이지 않는다. */}
-        {signedIn && notificationsSupported ? <NotificationSync /> : null}
+      {/* 휴대폰의 예약 알림을 데이터와 맞춘다. 로그인하지 않아도(기기 저장) 동작한다. 화면에는 보이지 않는다. */}
+      {notificationsSupported ? <NotificationSync /> : null}
 
-        <Stack screenOptions={{ headerShown: false }}>
-          {/* 로그인한 사용자만 들어갈 수 있는 화면 */}
-          <Stack.Protected guard={signedIn}>
-            <Stack.Screen name="(tabs)" />
-            {/* 메모장. 탭 위에 전체 화면으로 열린다. */}
-            <Stack.Screen name="note/[id]" />
-            {/* 습관 관리. 오늘 화면에서 연다. */}
-            <Stack.Screen name="habits" />
-            <Stack.Screen
-              name="account"
-              options={{ headerShown: true, title: '계정 및 설정', headerBackTitle: '뒤로' }}
-            />
-          </Stack.Protected>
-
-          {/* 로그인하지 않았을 때만 보이는 화면 */}
-          <Stack.Protected guard={!signedIn}>
-            <Stack.Screen
-              name="sign-in"
-              options={{ headerShown: true, title: '로그인', headerBackTitle: '뒤로' }}
-            />
-          </Stack.Protected>
-
-          {/* 구글·카카오 로그인을 마치고 돌아오는 화면. 로그인 전후 모두 열릴 수 있어야 한다. */}
-          <Stack.Screen name="auth-callback" />
-        </Stack>
-      </>
+      <Stack screenOptions={{ headerShown: false }}>
+        {/* 계정 로그인 없이도 모든 탭과 메모장, 습관, 계정/설정 화면을 바로 쓸 수 있다. */}
+        <Stack.Screen name="(tabs)" />
+        {/* 메모장. 탭 위에 전체 화면으로 열린다. */}
+        <Stack.Screen name="note/[id]" />
+        {/* 습관 관리. 오늘 화면에서 연다. */}
+        <Stack.Screen name="habits" />
+        <Stack.Screen
+          name="account"
+          options={{ headerShown: true, title: '계정 및 설정', headerBackTitle: '뒤로' }}
+        />
+        {/* 로그인은 선택이다. 이미 로그인했으면 sign-in.tsx 가 첫 화면으로 돌려보낸다. */}
+        <Stack.Screen
+          name="sign-in"
+          options={{ headerShown: true, title: '로그인', headerBackTitle: '뒤로' }}
+        />
+        {/* 구글·카카오 로그인을 마치고 돌아오는 화면 */}
+        <Stack.Screen name="auth-callback" />
+      </Stack>
     </ThemeProvider>
   );
 }
