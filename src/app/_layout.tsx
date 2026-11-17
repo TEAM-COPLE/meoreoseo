@@ -39,8 +39,6 @@ function ThemedRootNavigator() {
     if (!loading) SplashScreen.hideAsync();
   }, [loading]);
 
-  if (loading) return null;
-
   return (
     <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
       <StatusBar style={colorScheme === 'dark' ? 'light' : 'dark'} />

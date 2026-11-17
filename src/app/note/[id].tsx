@@ -40,11 +40,11 @@ function leave() {
  * 여기서는 메모를 불러오기만 하고, 실제 편집은 아래 NoteEditor 가 맡는다.
  */
 export default function NoteScreen() {
-  const { id } = useLocalSearchParams<{ id: string }>();
+  const { id, t } = useLocalSearchParams<{ id: string; t?: string }>();
   const isNew = id === 'new';
   const note = useNote(isNew ? null : id);
 
-  if (isNew) return <NoteEditor key="new" initial={null} />;
+  if (isNew) return <NoteEditor key={`new-${t ?? ''}`} initial={null} />;
 
   if (note.isPending) {
     return (

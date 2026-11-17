@@ -5,8 +5,25 @@
  * 그래서 웹에서는 이 파일이 대신 쓰이고, 아무 일도 하지 않는다.
  */
 
+export type WidgetOpenScreen = 'todos' | 'calendar' | 'habits' | 'money';
+export type WidgetOpenRequest =
+  | { mode: 'add'; token: number }
+  | { mode: 'edit'; editId: string; token: number }
+  | null;
+
 /** 웹에는 위젯이 없으므로 아무것도 하지 않는다. */
 export async function syncAllWidgets(_force = false): Promise<void> {}
+
+/** 웹에는 위젯이 없으므로 아무것도 하지 않는다. */
+export function scheduleWidgetSync(_force = false): void {}
+
+/** 웹에는 위젯이 없으므로 아무것도 하지 않는다. */
+export function clearWidgetOpenRequest(_screen: WidgetOpenScreen): void {}
+
+/** 웹에는 위젯이 없으므로 항상 null 을 돌려준다. */
+export function useWidgetOpenRequest(_screen: WidgetOpenScreen): WidgetOpenRequest {
+  return null;
+}
 
 /** 웹에는 위젯이 없으므로 아무것도 하지 않는다. */
 export function useWidgetBridge(): void {}
