@@ -7,7 +7,7 @@ import type { Database } from './database.types';
 const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL;
 const supabaseKey = process.env.EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY;
 
-/** Supabase 환경 변수가 설정되어 있는지 여부. 비로그인(기기 저장) 모드는 없어도 동작한다. */
+/** Supabase 환경 변수가 설정되어 있는지 여부. */
 export const hasSupabaseConfig = Boolean(supabaseUrl && supabaseKey);
 
 /**

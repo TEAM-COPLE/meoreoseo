@@ -143,7 +143,6 @@ function TodoSection({ today }: { today: string }) {
             <Checkbox
               checked={todo.done}
               label={`${todo.title} 완료 표시`}
-              disabled={toggle.isPending}
               onPress={() => toggle.mutate(todo)}
             />
             <View style={styles.rowBody}>
@@ -236,7 +235,6 @@ function HabitSection({ today }: { today: string }) {
                 <Checkbox
                   checked={done}
                   label={`${habit.name} 오늘 실천 표시`}
-                  disabled={toggle.isPending}
                   onPress={() => toggle.mutate({ habitId: habit.id, date: today, done })}
                 />
                 <ThemedText type="default" style={styles.rowBody}>

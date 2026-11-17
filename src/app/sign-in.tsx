@@ -1,4 +1,4 @@
-import { Redirect, router } from 'expo-router';
+import { Redirect } from 'expo-router';
 import { useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -37,14 +37,6 @@ export default function SignInScreen() {
     }
   }
 
-  function continueWithoutAccount() {
-    if (router.canGoBack()) {
-      router.back();
-    } else {
-      router.replace('/');
-    }
-  }
-
   return (
     <View
       style={[
@@ -61,7 +53,8 @@ export default function SignInScreen() {
             멀어서
           </ThemedText>
           <ThemedText type="default" themeColor="textSecondary">
-            계정에 로그인하면 데이터를 데이터베이스에 저장하고 여러 기기에서 이어서 쓸 수 있습니다.
+            계정에 로그인하면 할 일, 일정, 습관, 메모, 가계부를 온라인에 안전하게 저장하고 여러
+            기기에서 이어서 쓸 수 있습니다.
           </ThemedText>
         </View>
 
@@ -82,20 +75,11 @@ export default function SignInScreen() {
             loading={busy === 'kakao'}
             disabled={busy !== null}
           />
-          <Button
-            label="로그인 없이 기기에 저장하며 쓰기"
-            variant="secondary"
-            onPress={continueWithoutAccount}
-            disabled={busy !== null}
-          />
           {error ? (
             <ThemedText type="small" themeColor="danger">
               {error}
             </ThemedText>
           ) : null}
-          <ThemedText type="small" themeColor="textSecondary">
-            기기에 먼저 적어 둔 내용도 로그인하면 자동으로 계정에 동기화됩니다.
-          </ThemedText>
         </View>
       </View>
     </View>

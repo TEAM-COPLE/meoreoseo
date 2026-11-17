@@ -84,6 +84,12 @@ export function reportError(source: string, error: unknown): void {
   const now = Date.now();
   const last = lastReported.get(key);
   if (last !== undefined && now - last < REPEAT_WAIT_MS) return;
+  if (lastReported.size >= 100) {
+    for (const [k, ts] of lastReported) {
+      if (now - ts >= REPEAT_WAIT_MS) lastReported.delete(k);
+    }
+    if (lastReported.size >= 100) lastReported.clear();
+  }
   lastReported.set(key, now);
 
   console.warn(`[오류] ${source}: ${message}`);

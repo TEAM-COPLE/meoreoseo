@@ -1,4 +1,3 @@
-import { router } from 'expo-router';
 import { useState } from 'react';
 import { ScrollView, StyleSheet } from 'react-native';
 
@@ -27,8 +26,6 @@ export default function AccountScreen() {
   const [busy, setBusy] = useState(false);
   const [syncingWidget, setSyncingWidget] = useState(false);
   const [error, setError] = useState<string | null>(null);
-
-  const signedIn = session !== null;
 
   async function signOut() {
     setBusy(true);
@@ -78,30 +75,12 @@ export default function AccountScreen() {
 
       <NotificationSettingsCard />
 
-      {error ? (
-        <ThemedText type="small" themeColor="danger">
-          {error}
-        </ThemedText>
-      ) : null}
-
       <Card>
-        <ThemedText type="smallBold">데이터 저장 방식</ThemedText>
-        {signedIn ? (
-          <>
-            <ThemedText type="default">{session.user.email ?? '로그인된 계정'}</ThemedText>
-            <ThemedText type="small" themeColor="textSecondary">
-              계정에 로그인되어 있어 할 일, 일정, 습관, 메모, 가계부가 데이터베이스에 저장됩니다.
-            </ThemedText>
-          </>
-        ) : (
-          <>
-            <ThemedText type="default">기기 내 저장 (비로그인)</ThemedText>
-            <ThemedText type="small" themeColor="textSecondary">
-              계정 없이도 모든 기능을 이용할 수 있으며, 작성한 데이터는 이 기기 안에 저장됩니다.
-              계정에 로그인하면 데이터를 데이터베이스에 저장하고 다른 기기와 동기화할 수 있습니다.
-            </ThemedText>
-          </>
-        )}
+        <ThemedText type="smallBold">로그인된 계정</ThemedText>
+        <ThemedText type="default">{session?.user.email ?? '로그인된 계정'}</ThemedText>
+        <ThemedText type="small" themeColor="textSecondary">
+          할 일, 일정, 습관, 메모, 가계부가 온라인 계정의 데이터베이스에 저장됩니다.
+        </ThemedText>
       </Card>
 
       {error ? (
@@ -110,11 +89,7 @@ export default function AccountScreen() {
         </ThemedText>
       ) : null}
 
-      {signedIn ? (
-        <Button label="로그아웃" variant="secondary" onPress={signOut} loading={busy} />
-      ) : (
-        <Button label="계정 로그인 / 연동하기" onPress={() => router.push('/sign-in')} />
-      )}
+      <Button label="로그아웃" variant="secondary" onPress={signOut} loading={busy} />
     </ScrollView>
   );
 }
