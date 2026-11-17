@@ -12,6 +12,7 @@ import {
 import { useTheme } from '@/hooks/use-theme';
 import { notificationsSupported, requestNotificationPermission } from '@/lib/notifications';
 import {
+  BRIEFING_HOUR,
   EVENT_LEAD_MINUTES,
   HABIT_HOUR,
   MORNING_HOUR,
@@ -71,7 +72,7 @@ export function NotificationSettingsCard() {
 
       <Row
         label="알림 받기"
-        description="할 일, 일정, 습관을 정해진 시각에 알려줍니다."
+        description="아침 브리핑, 할 일, 일정, 습관을 정해진 시각에 알려줍니다."
         value={settings.enabled}
         onChange={setEnabled}
       />
@@ -92,6 +93,12 @@ export function NotificationSettingsCard() {
 
       {settings.enabled ? (
         <>
+          <Row
+            label="아침 브리핑"
+            description={`매일 ${hourLabel(BRIEFING_HOUR)} 날씨·할 일·일정을 한 번에 요약`}
+            value={settings.briefing}
+            onChange={(briefing) => update({ briefing })}
+          />
           <Row
             label="할 일"
             description={`마감일 ${hourLabel(MORNING_HOUR)}`}

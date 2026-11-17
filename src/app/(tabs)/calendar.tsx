@@ -7,11 +7,13 @@ import { DateField } from '@/components/ui/date-field';
 import { FormModal } from '@/components/ui/form-modal';
 import { MonthCalendar } from '@/components/ui/month-calendar';
 import { Card, ListStatus, Screen } from '@/components/ui/screen';
+import { Segmented } from '@/components/ui/segmented';
 import { TextField } from '@/components/ui/text-field';
 import { Spacing } from '@/constants/theme';
 import {
   timeLabel,
   useDeleteEvent,
+  useEndEventRepeat,
   useEvents,
   useSaveEvent,
   type CalendarEvent,
@@ -26,6 +28,7 @@ import {
   type YearMonth,
 } from '@/lib/dates';
 import { confirm, errorMessage } from '@/lib/format';
+import { isRepeat, REPEAT_OPTIONS, repeatLabel, type RepeatChoice } from '@/lib/repeat';
 
 export default function CalendarScreen() {
   const [selected, setSelected] = useState(todayISO);
@@ -84,13 +87,18 @@ export default function CalendarScreen() {
       />
 
       {dayEvents.map((event) => (
-        <Card key={event.id} onPress={() => setEditing(event)}>
+        <Card key={event.key} onPress={() => setEditing(event)}>
           <View style={styles.eventRow}>
             <ThemedText type="small" themeColor="tint" style={styles.time}>
               {timeLabel(event)}
             </ThemedText>
             <View style={styles.eventBody}>
               <ThemedText type="default">{event.title}</ThemedText>
+              {isRepeat(event.repeat) ? (
+                <ThemedText type="small" themeColor="textSecondary">
+                  {`🔁 ${repeatLabel(event.repeat, event.series_date)}`}
+                </ThemedText>
+              ) : null}
               {event.memo ? (
                 <ThemedText type="small" themeColor="textSecondary" numberOfLines={2}>
                   {event.memo}
@@ -123,12 +131,21 @@ function EventForm({
 }) {
   const save = useSaveEvent();
   const remove = useDeleteEvent();
+  const endRepeat = useEndEventRepeat();
+
+  // 반복 일정이었는지. 반복 일정은 수정·삭제가 반복 전체에 적용된다.
+  const wasRepeating = event !== null && isRepeat(event.repeat);
 
   const [title, setTitle] = useState(event?.title ?? '');
-  const [date, setDate] = useState(event?.event_date ?? defaultDate);
+  // 반복 일정을 고칠 때는 누른 날짜가 아니라 원래 시작 날짜를 보여준다.
+  const [date, setDate] = useState(event?.series_date ?? defaultDate);
   const [start, setStart] = useState(formatTime(event?.start_time ?? null));
   const [end, setEnd] = useState(formatTime(event?.end_time ?? null));
   const [memo, setMemo] = useState(event?.memo ?? '');
+  const [repeat, setRepeat] = useState<RepeatChoice>(
+    wasRepeating ? (event?.repeat as RepeatChoice) : 'none',
+  );
+  const [until, setUntil] = useState<string | null>(event?.repeat_until ?? null);
   const [error, setError] = useState<string | null>(null);
 
   function validate(): string | null {
@@ -137,6 +154,7 @@ function EventForm({
     if (end && !isValidTime(end)) return '종료 시간은 15:30 처럼 입력해 주세요.';
     if (end && !start) return '종료 시간을 쓰려면 시작 시간도 입력해 주세요.';
     if (start && end && end <= start) return '종료 시간은 시작 시간보다 늦어야 합니다.';
+    if (repeat !== 'none' && until && until < date) return '반복 종료일은 시작 날짜보다 늦어야 합니다.';
     return null;
   }
 
@@ -154,6 +172,8 @@ function EventForm({
         start_time: start || null,
         end_time: end || null,
         memo: memo.trim() || null,
+        repeat: repeat === 'none' ? null : repeat,
+        repeat_until: repeat === 'none' ? null : until,
       });
       onClose();
     } catch (e) {
@@ -162,7 +182,10 @@ function EventForm({
   }
 
   async function deleteEvent() {
-    if (!event || !(await confirm('이 일정을 삭제할까요?'))) return;
+    const message = wasRepeating
+      ? '반복 일정 전체를 삭제할까요? (지난 날짜의 일정도 모두 사라집니다)'
+      : '이 일정을 삭제할까요?';
+    if (!event || !(await confirm(message))) return;
     try {
       await remove.mutateAsync(event.id);
       onClose();
@@ -171,12 +194,25 @@ function EventForm({
     }
   }
 
+  /** 누른 날짜부터 반복을 끝낸다. 그 전 날짜의 일정은 남는다. */
+  async function stopFromHere() {
+    if (!event) return;
+    const message = `${formatDate(event.event_date)}부터 이 반복 일정을 그만할까요? 이전 날짜는 그대로 남습니다.`;
+    if (!(await confirm(message, '그만하기'))) return;
+    try {
+      await endRepeat.mutateAsync({ event, from: event.event_date });
+      onClose();
+    } catch (e) {
+      setError(errorMessage(e));
+    }
+  }
+
   return (
     <FormModal
-      title={event ? '일정 수정' : '새 일정'}
+      title={event ? (wasRepeating ? '반복 일정 수정' : '일정 수정') : '새 일정'}
       onClose={onClose}
       onSubmit={submit}
-      submitting={save.isPending || remove.isPending}
+      submitting={save.isPending || remove.isPending || endRepeat.isPending}
       onDelete={event ? deleteEvent : undefined}
       error={error}>
       <TextField
@@ -187,7 +223,25 @@ function EventForm({
         maxLength={200}
         autoFocus={!event}
       />
-      <DateField label="날짜" value={date} onChange={(value) => value && setDate(value)} />
+      {wasRepeating ? (
+        <ThemedText type="small" themeColor="textSecondary">
+          반복 일정을 고치면 모든 날짜에 함께 적용됩니다.
+        </ThemedText>
+      ) : null}
+      <DateField
+        label={repeat === 'none' ? '날짜' : '시작 날짜'}
+        value={date}
+        onChange={(value) => value && setDate(value)}
+      />
+      <Segmented label="반복" options={REPEAT_OPTIONS} value={repeat} onChange={setRepeat} />
+      {repeat !== 'none' ? (
+        <>
+          <ThemedText type="small" themeColor="textSecondary">
+            {`${repeatLabel(repeat, date)} 반복합니다.`}
+          </ThemedText>
+          <DateField label="반복 종료일 (비우면 계속)" value={until} onChange={setUntil} clearable />
+        </>
+      ) : null}
       <View style={styles.times}>
         <View style={styles.timeField}>
           <TextField
@@ -211,6 +265,14 @@ function EventForm({
         </View>
       </View>
       <TextField label="메모" value={memo} onChangeText={setMemo} multiline />
+      {wasRepeating && event ? (
+        <Button
+          label={`${formatDate(event.event_date)}부터 반복 그만하기`}
+          variant="secondary"
+          size="small"
+          onPress={stopFromHere}
+        />
+      ) : null}
     </FormModal>
   );
 }

@@ -5,6 +5,7 @@ import { useUpcomingEvents } from '@/hooks/use-events';
 import { useHabitLogs, useHabits } from '@/hooks/use-habits';
 import { useNotificationSettings } from '@/hooks/use-notification-settings';
 import { useTodos } from '@/hooks/use-todos';
+import { useWeather, useWeatherCity } from '@/hooks/use-weather';
 import { todayISO } from '@/lib/dates';
 import {
   cancelAllReminders,
@@ -25,6 +26,12 @@ export function NotificationSync() {
   const events = useUpcomingEvents(EVENT_DAYS_AHEAD).data;
   const habits = useHabits().data;
   const logs = useHabitLogs().data;
+  // 아침 브리핑에 넣을 날씨. 날씨는 못 받아도 기다리지 않는다(브리핑에서 날씨 줄만 빠진다).
+  const city = useWeatherCity().data;
+  const weather = useWeather(city).data;
+  const forecast = city && weather ? { city: city.name, days: weather.days } : null;
+  // 날씨가 30분마다 새로 와도, 예보 내용이 같으면 알림을 다시 예약하지 않도록 글자로 비교한다.
+  const forecastKey = JSON.stringify(forecast);
 
   // 앱이 다시 화면에 나타날 때마다 숫자를 올려, 아래의 예약 작업을 한 번 더 돌린다.
   // (날짜가 바뀌었거나 휴대폰 설정에서 알림 권한을 바꿨을 수 있다.)
@@ -51,6 +58,7 @@ export function NotificationSync() {
       events,
       habitCount: habits.length,
       habitsDoneToday: habits.filter((habit) => logs.get(habit.id)?.has(today)).length,
+      forecast: JSON.parse(forecastKey),
     });
 
     // 연달아 여러 번 바뀔 때(예: 체크를 빠르게 여러 개) 마지막 한 번만 예약한다.
@@ -67,7 +75,7 @@ export function NotificationSync() {
       }
     }, 800);
     return () => clearTimeout(timer);
-  }, [settings, todos, events, habits, logs, wakeCount]);
+  }, [settings, todos, events, habits, logs, forecastKey, wakeCount]);
 
   // 로그아웃하면 이 부품이 화면에서 빠진다. 그때 예약해 둔 알림도 지운다.
   useEffect(() => {

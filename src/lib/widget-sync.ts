@@ -3,8 +3,10 @@ import { addUserInteractionListener } from 'expo-widgets';
 import { useEffect } from 'react';
 import { Platform } from 'react-native';
 
+import { loadEvents, type CalendarEvent } from '@/hooks/use-events';
 import { streakOf } from '@/hooks/use-habits';
 import { useColorScheme } from '@/hooks/use-theme';
+import { toggleTodo } from '@/hooks/use-todos';
 import {
   MeoreoseoAllInOneWidget,
   type MeoreoseoWidgetProps,
@@ -18,7 +20,6 @@ import { formatWon } from './format';
 import {
   getLocalNote,
   isValidUuid,
-  listLocalEvents,
   listLocalHabitLogs,
   listLocalHabits,
   listLocalNotes,
@@ -26,7 +27,6 @@ import {
   listLocalTransactions,
   saveLocalTransaction,
   toggleLocalHabitLog,
-  toggleLocalTodo,
   updateLocalNote,
 } from './local-store';
 import { queryClient } from './query';
@@ -71,7 +71,7 @@ export async function buildWidgetSnapshot(): Promise<MeoreoseoWidgetProps> {
   const scope = signedIn ? currentScope : 'local';
 
   const cachedTodos = queryClient.getQueryData<Tables<'todos'>[]>(['todos', scope]);
-  const cachedEvents = queryClient.getQueryData<Tables<'events'>[]>(['events', scope, start, end]);
+  const cachedEvents = queryClient.getQueryData<CalendarEvent[]>(['events', scope, start, end]);
   const cachedHabits = queryClient.getQueryData<Tables<'habits'>[]>(['habits', scope]);
   const cachedLogsMap = queryClient.getQueryData<Map<string, Set<string>>>(['habit-logs', scope]);
   const cachedNotes = queryClient.getQueryData<Tables<'notes'>[]>(['notes', scope]);
@@ -95,18 +95,8 @@ export async function buildWidgetSnapshot(): Promise<MeoreoseoWidgetProps> {
             .limit(50)
             .then(({ data }) => data ?? [])
         : listLocalTodos(),
-    cachedEvents
-      ? Promise.resolve(cachedEvents)
-      : signedIn
-        ? supabase
-            .from('events')
-            .select('*')
-            .gte('event_date', start)
-            .lte('event_date', end)
-            .order('event_date')
-            .order('start_time', { ascending: true, nullsFirst: true })
-            .then(({ data }) => data ?? [])
-        : listLocalEvents(start, end),
+    // 반복 일정도 날짜마다 펼쳐서 받는다(앱 화면과 같은 함수).
+    cachedEvents ? Promise.resolve(cachedEvents) : loadEvents(start, end).catch(() => []),
     cachedHabits
       ? Promise.resolve(cachedHabits)
       : signedIn
@@ -206,7 +196,8 @@ export async function buildWidgetSnapshot(): Promise<MeoreoseoWidgetProps> {
       priority: todo.priority,
     })),
     events: upcomingEvents.slice(0, 5).map((event) => ({
-      id: event.id,
+      // 반복 일정은 같은 id 가 여러 날짜에 나오므로 날짜가 붙은 key 를 쓴다.
+      id: event.key,
       title: event.title,
       dateLabel: event.event_date === today ? '오늘' : formatDate(event.event_date),
       timeLabel: event.start_time
@@ -282,20 +273,11 @@ async function handleWidgetAction(rawTarget: string): Promise<void> {
   if (action.startsWith('todo:toggle:')) {
     const todoId = action.slice('todo:toggle:'.length);
     if (!isValidUuid(todoId)) return;
-    if (!hasActiveSession()) {
-      const todos = await listLocalTodos();
-      const target = todos.find((t) => t.id === todoId);
-      if (target) await toggleLocalTodo(target);
-    } else {
-      const { data } = await supabase.from('todos').select('*').eq('id', todoId).maybeSingle();
-      if (data) {
-        const done = !data.done;
-        await supabase
-          .from('todos')
-          .update({ done, done_at: done ? new Date().toISOString() : null })
-          .eq('id', todoId);
-      }
-    }
+    // 앱 화면과 같은 함수로 완료를 바꾼다(반복 할 일이면 다음 할 일도 만든다).
+    const target = hasActiveSession()
+      ? (await supabase.from('todos').select('*').eq('id', todoId).maybeSingle()).data
+      : (await listLocalTodos()).find((t) => t.id === todoId);
+    if (target) await toggleTodo(target).catch(() => {});
     await queryClient.invalidateQueries({ queryKey: ['todos'] });
     await syncAllWidgets(true);
     return;

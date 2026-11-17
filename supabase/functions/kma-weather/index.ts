@@ -24,6 +24,14 @@ const CORS_HEADERS = {
   'Access-Control-Allow-Methods': 'POST, OPTIONS',
 };
 
+type DayForecast = {
+  date: string;
+  high: number;
+  low: number;
+  rainChance: number | null;
+  code: number;
+};
+
 type Weather = {
   temperature: number;
   feelsLike: number;
@@ -32,6 +40,8 @@ type Weather = {
   rainChance: number | null;
   code: number;
   isDay: boolean;
+  /** 오늘부터 3일간의 예보 (아침 브리핑 알림용) */
+  days: DayForecast[];
 };
 
 type KmaItem = {
@@ -123,6 +133,11 @@ function koreaNow(date = new Date()) {
 /** 하루 전 날짜 (YYYYMMDD) */
 function previousDay(kst: Date): string {
   return new Date(kst.getTime() - 24 * 60 * 60 * 1000).toISOString().slice(0, 10).replaceAll('-', '');
+}
+
+/** 'YYYYMMDD' → 'YYYY-MM-DD' */
+function isoOf(ymd: string): string {
+  return `${ymd.slice(0, 4)}-${ymd.slice(4, 6)}-${ymd.slice(6, 8)}`;
 }
 
 function pad(hour: number) {
@@ -284,6 +299,37 @@ function toNumber(value: string | undefined): number | null {
   return Number.isFinite(number) ? number : null;
 }
 
+/** 가장 많이 나온 값 (같으면 먼저 나온 값) */
+function mostCommon(values: number[]): number | null {
+  const counts = new Map<number, number>();
+  let best: number | null = null;
+  for (const value of values) {
+    const count = (counts.get(value) ?? 0) + 1;
+    counts.set(value, count);
+    if (best === null || count > (counts.get(best) ?? 0)) best = value;
+  }
+  return best;
+}
+
+/**
+ * 그날 낮(6시~21시)의 대표 날씨 번호.
+ * 비·눈이 오는 시간이 있으면 그중 가장 많은 강수 형태, 없으면 가장 많은 하늘 상태.
+ */
+function dayCode(items: KmaItem[]): number {
+  const daytime = items.filter((item) => {
+    const hour = Number(item.fcstTime?.slice(0, 2));
+    return hour >= 6 && hour <= 21;
+  });
+  const pick = (category: string) =>
+    (daytime.length > 0 ? daytime : items)
+      .filter((item) => item.category === category)
+      .map((item) => toNumber(item.fcstValue))
+      .filter((value): value is number => value !== null);
+  const rain = mostCommon(pick('PTY').filter((value) => value > 0));
+  if (rain !== null) return toWeatherCode(rain, null);
+  return toWeatherCode(0, mostCommon(pick('SKY')));
+}
+
 async function loadWeather(latitude: number, longitude: number, serviceKey: string): Promise<Weather> {
   const grid = toGrid(latitude, longitude);
   const cacheKey = `${grid.nx},${grid.ny}`;
@@ -299,7 +345,8 @@ async function loadWeather(latitude: number, longitude: number, serviceKey: stri
 
   const [observed, latest, morning] = await Promise.all([
     currentObservation(now, grid, serviceKey),
-    callKma('getVilageFcst', { ...gridParams, ...latestBase, numOfRows: '300' }, serviceKey),
+    // 오늘 남은 시간 + 내일 + 모레 예보가 다 들어가도록 넉넉히 받는다.
+    callKma('getVilageFcst', { ...gridParams, ...latestBase, numOfRows: '1000' }, serviceKey),
     sameBase
       ? Promise.resolve(null)
       : callKma('getVilageFcst', { ...gridParams, ...morningBase, numOfRows: '400' }, serviceKey),
@@ -333,6 +380,31 @@ async function loadWeather(latitude: number, longitude: number, serviceKey: stri
   const nextSky = toNumber(latest.find((item) => item.category === 'SKY')?.fcstValue);
   const month = now.kst.getUTCMonth() + 1;
 
+  // 오늘·내일·모레 예보. 오늘은 위에서 계산한 값과 같게 맞춘다.
+  const days: DayForecast[] = [
+    {
+      date: isoOf(now.ymd),
+      high,
+      low,
+      rainChance,
+      code: dayCode([...todayMorning, ...todayLatest]),
+    },
+  ];
+  for (let offset = 1; offset <= 2; offset++) {
+    const ymd = koreaNow(new Date(Date.now() + offset * 86_400_000)).ymd;
+    const items = latest.filter((item) => item.fcstDate === ymd);
+    const temps = values(items, 'TMP');
+    if (temps.length === 0) continue; // 아직 그날 예보가 없다.
+    const pops = values(items, 'POP');
+    days.push({
+      date: isoOf(ymd),
+      high: values(items, 'TMX')[0] ?? Math.max(...temps),
+      low: values(items, 'TMN')[0] ?? Math.min(...temps),
+      rainChance: pops.length > 0 ? Math.max(...pops) : null,
+      code: dayCode(items),
+    });
+  }
+
   const weather: Weather = {
     temperature,
     feelsLike: feelsLike(temperature, observedValue('REH'), observedValue('WSD'), month),
@@ -341,6 +413,7 @@ async function loadWeather(latitude: number, longitude: number, serviceKey: stri
     rainChance,
     code: toWeatherCode(observedValue('PTY'), nextSky),
     isDay: isDaytime(latitude, longitude),
+    days,
   };
   cache.set(cacheKey, { expires: Date.now() + CACHE_MS, weather });
   return weather;

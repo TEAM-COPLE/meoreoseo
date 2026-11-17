@@ -1,6 +1,8 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 import type { Tables } from './database.types';
+import { todayISO } from './dates';
+import { isRepeat, nextOccurrence } from './repeat';
 import { supabase } from './supabase';
 
 type TodoRow = Tables<'todos'>;
@@ -124,11 +126,16 @@ export async function saveLocalTodo(input: {
   notes: string | null;
   due_date: string | null;
   priority: number;
+  repeat: string | null;
+  repeat_start: string | null;
 }): Promise<void> {
   const title = input.title.trim().slice(0, 200);
   if (!title) throw new Error('제목을 입력해 주세요.');
   const notes = clampText(input.notes, 5000);
   const priority = Math.min(2, Math.max(0, Math.trunc(input.priority)));
+  const repeat = isRepeat(input.repeat) ? input.repeat : null;
+  if (repeat && !input.due_date) throw new Error('반복하려면 마감일을 정해 주세요.');
+  const repeat_start = repeat ? (input.repeat_start ?? input.due_date) : null;
 
   return withLock(async () => {
     const items = await readList<TodoRow>(KEYS.todos);
@@ -136,7 +143,9 @@ export async function saveLocalTodo(input: {
       await writeList(
         KEYS.todos,
         items.map((item) =>
-          item.id === input.id ? { ...item, title, notes, due_date: input.due_date, priority } : item,
+          item.id === input.id
+            ? { ...item, title, notes, due_date: input.due_date, priority, repeat, repeat_start }
+            : item,
         ),
       );
       return;
@@ -152,21 +161,54 @@ export async function saveLocalTodo(input: {
         done: false,
         done_at: null,
         created_at: new Date().toISOString(),
+        repeat,
+        repeat_start,
+        previous_id: null,
       },
       ...items,
     ]);
   });
 }
 
+/**
+ * 완료 표시를 켜거나 끈다.
+ * 반복 할 일을 완료하면 다음 할 일을 만들고, 완료를 취소하면 그때 만든 할 일(아직 안 끝낸 것)을 지운다.
+ */
 export async function toggleLocalTodo(todo: TodoRow): Promise<void> {
   return withLock(async () => {
     const items = await readList<TodoRow>(KEYS.todos);
     const done = !todo.done;
     const done_at = done ? new Date().toISOString() : null;
-    await writeList(
-      KEYS.todos,
-      items.map((item) => (item.id === todo.id ? { ...item, done, done_at } : item)),
-    );
+    let next = items.map((item) => (item.id === todo.id ? { ...item, done, done_at } : item));
+
+    const repeat = todo.repeat ?? null;
+    if (done && isRepeat(repeat) && todo.due_date) {
+      const alreadyMade = next.some((item) => item.previous_id === todo.id && !item.done);
+      if (!alreadyMade) {
+        const anchor = todo.repeat_start ?? todo.due_date;
+        next = [
+          {
+            id: createId(),
+            user_id: LOCAL_USER_ID,
+            title: todo.title,
+            notes: todo.notes,
+            due_date: nextOccurrence(anchor, repeat, todo.due_date, todayISO()),
+            priority: todo.priority,
+            done: false,
+            done_at: null,
+            created_at: new Date().toISOString(),
+            repeat,
+            repeat_start: anchor,
+            previous_id: todo.id,
+          },
+          ...next,
+        ];
+      }
+    } else if (!done) {
+      next = next.filter((item) => !(item.previous_id === todo.id && !item.done));
+    }
+
+    await writeList(KEYS.todos, next);
   });
 }
 
@@ -174,17 +216,18 @@ export const deleteLocalTodo = (id: string) => deleteFromList<TodoRow>(KEYS.todo
 
 // ───────────────────────── 일정 (events) ─────────────────────────
 
+/**
+ * start ~ end 기간에 보일 수 있는 일정의 원본 줄.
+ * 반복 일정은 시작 날짜가 기간보다 앞이어도 포함한다. 날짜별로 펼치는 일은 부르는 쪽이 한다.
+ */
 export async function listLocalEvents(start: string, end: string): Promise<EventRow[]> {
   const items = await readList<EventRow>(KEYS.events);
-  return items
-    .filter((item) => item.event_date >= start && item.event_date <= end)
-    .sort((a, b) => {
-      if (a.event_date !== b.event_date) return a.event_date.localeCompare(b.event_date);
-      if (a.start_time === b.start_time) return 0;
-      if (a.start_time === null) return -1;
-      if (b.start_time === null) return 1;
-      return a.start_time.localeCompare(b.start_time);
-    });
+  return items.filter((item) => {
+    if (item.event_date > end) return false;
+    if (item.event_date >= start) return true;
+    // 기간보다 먼저 시작한 반복 일정: 그 전에 끝나지 않았으면 포함
+    return isRepeat(item.repeat) && (!item.repeat_until || item.repeat_until >= start);
+  });
 }
 
 export async function saveLocalEvent(input: {
@@ -194,10 +237,17 @@ export async function saveLocalEvent(input: {
   start_time: string | null;
   end_time: string | null;
   memo: string | null;
+  repeat: string | null;
+  repeat_until: string | null;
 }): Promise<void> {
   const title = input.title.trim().slice(0, 200);
   if (!title) throw new Error('제목을 입력해 주세요.');
   const memo = clampText(input.memo, 5000);
+  const repeat = isRepeat(input.repeat) ? input.repeat : null;
+  const repeat_until = repeat ? input.repeat_until : null;
+  if (repeat_until && repeat_until < input.event_date) {
+    throw new Error('반복 종료일은 시작 날짜보다 늦어야 합니다.');
+  }
 
   return withLock(async () => {
     const items = await readList<EventRow>(KEYS.events);
@@ -213,6 +263,8 @@ export async function saveLocalEvent(input: {
                 start_time: input.start_time,
                 end_time: input.end_time,
                 memo,
+                repeat,
+                repeat_until,
               }
             : item,
         ),
@@ -230,6 +282,8 @@ export async function saveLocalEvent(input: {
         end_time: input.end_time,
         memo,
         created_at: new Date().toISOString(),
+        repeat,
+        repeat_until,
       },
     ]);
   });

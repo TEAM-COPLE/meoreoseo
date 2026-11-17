@@ -133,6 +133,19 @@ export type Weather = {
   code: number;
   /** 낮이면 true. 맑은 밤에는 해 대신 달을 보여준다. */
   isDay: boolean;
+  /** 오늘부터 며칠간(최대 3일)의 날씨 예보. 아침 브리핑 알림에 쓴다. */
+  days: DayForecast[];
+};
+
+/** 하루 날씨 예보 */
+export type DayForecast = {
+  /** 'YYYY-MM-DD' */
+  date: string;
+  high: number;
+  low: number;
+  rainChance: number | null;
+  /** 그날 낮의 대표 날씨 번호 (WMO 기준) */
+  code: number;
 };
 
 /** 날씨 API 가 돌려주는 값 중 여기서 쓰는 부분 */
@@ -144,6 +157,8 @@ type ForecastResponse = {
     is_day: number;
   };
   daily: {
+    time: string[];
+    weather_code: number[];
     temperature_2m_max: number[];
     temperature_2m_min: number[];
     precipitation_probability_max: (number | null)[];
@@ -175,7 +190,8 @@ async function fetchKmaWeather(city: City): Promise<Weather> {
     throw error;
   }
   if (!data || !Number.isFinite(data.temperature)) throw new Error('기상청 날씨: 받은 값이 비어 있습니다');
-  return data;
+  // 예전 서버 함수는 며칠 치 예보(days)를 주지 않는다.
+  return { ...data, days: Array.isArray(data.days) ? data.days : [] };
 }
 
 /**
@@ -203,9 +219,9 @@ async function fetchOpenMeteoWeather(city: City): Promise<Weather> {
     latitude: String(city.latitude),
     longitude: String(city.longitude),
     current: 'temperature_2m,apparent_temperature,weather_code,is_day',
-    daily: 'temperature_2m_max,temperature_2m_min,precipitation_probability_max',
+    daily: 'weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max',
     timezone: 'Asia/Seoul',
-    forecast_days: '1',
+    forecast_days: '3',
   });
 
   const response = await fetchWithTimeout(`https://api.open-meteo.com/v1/forecast?${params}`);
@@ -220,29 +236,15 @@ async function fetchOpenMeteoWeather(city: City): Promise<Weather> {
     rainChance: data.daily.precipitation_probability_max[0] ?? null,
     code: data.current.weather_code,
     isDay: data.current.is_day === 1,
+    days: data.daily.time.map((date, i) => ({
+      date,
+      high: data.daily.temperature_2m_max[i],
+      low: data.daily.temperature_2m_min[i],
+      rainChance: data.daily.precipitation_probability_max[i] ?? null,
+      code: data.daily.weather_code[i],
+    })),
   };
 }
 
-/** 날씨 종류 번호를 한글 설명과 그림 문자로 바꾼다. */
-export function describeWeather(code: number, isDay: boolean): { label: string; icon: string } {
-  if (code === 0) return { label: '맑음', icon: isDay ? '☀️' : '🌙' };
-  if (code === 1) return { label: '대체로 맑음', icon: isDay ? '🌤️' : '🌙' };
-  // 기상청의 "구름많음"도 이 번호로 바꿔서 보여준다.
-  if (code === 2) return { label: '구름 많음', icon: '⛅' };
-  if (code === 3) return { label: '흐림', icon: '☁️' };
-  if (code === 45 || code === 48) return { label: '안개', icon: '🌫️' };
-  if (code >= 51 && code <= 57) return { label: '이슬비', icon: '🌦️' };
-  // 66, 67: 어는 비 (기상청의 "비/눈"도 66 으로 바꾼다)
-  if (code === 66 || code === 67) return { label: '비 또는 눈', icon: '🌨️' };
-  if (code >= 61 && code <= 65) return { label: '비', icon: '🌧️' };
-  if (code >= 71 && code <= 77) return { label: '눈', icon: '🌨️' };
-  if (code >= 80 && code <= 82) return { label: '소나기', icon: '🌦️' };
-  if (code === 85 || code === 86) return { label: '눈 소나기', icon: '🌨️' };
-  if (code >= 95) return { label: '뇌우', icon: '⛈️' };
-  return { label: '알 수 없음', icon: '🌡️' };
-}
-
-/** 기온을 "12°" 처럼 반올림해서 보여준다. */
-export function formatTemperature(value: number): string {
-  return `${Math.round(value)}°`;
-}
+// 글자로 바꾸는 도우미는 weather-format.ts 에 있다. 예전처럼 여기서도 가져다 쓸 수 있게 다시 내보낸다.
+export { describeWeather, formatTemperature } from './weather-format';
