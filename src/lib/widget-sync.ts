@@ -1,7 +1,8 @@
+import * as Linking from 'expo-linking';
 import { router } from 'expo-router';
 import { addUserInteractionListener } from 'expo-widgets';
-import { useEffect } from 'react';
-import { Platform } from 'react-native';
+import { useEffect, useSyncExternalStore } from 'react';
+import { AppState, Platform } from 'react-native';
 
 import { loadEvents, type CalendarEvent } from '@/hooks/use-events';
 import { streakOf } from '@/hooks/use-habits';
@@ -9,6 +10,11 @@ import { useColorScheme } from '@/hooks/use-theme';
 import { toggleTodo } from '@/hooks/use-todos';
 import {
   MeoreoseoAllInOneWidget,
+  MeoreoseoCalendarWidget,
+  MeoreoseoHabitsWidget,
+  MeoreoseoMoneyWidget,
+  MeoreoseoNotesWidget,
+  MeoreoseoTodosWidget,
   type MeoreoseoWidgetProps,
   type WidgetTab,
 } from '@/widgets/meoreoseo-widgets';
@@ -35,10 +41,54 @@ import { supabase } from './supabase';
 const ACTION_MARKER = '_action:';
 const HISTORY_DAYS = 400;
 
+export type WidgetOpenScreen = 'todos' | 'calendar' | 'habits' | 'money';
+export type WidgetOpenRequest =
+  | { mode: 'add'; token: number }
+  | { mode: 'edit'; editId: string; token: number }
+  | null;
+
+const openRequests: Record<WidgetOpenScreen, WidgetOpenRequest> = {
+  todos: null,
+  calendar: null,
+  habits: null,
+  money: null,
+};
+const openRequestListeners = new Set<() => void>();
+
+function setWidgetOpenRequest(screen: WidgetOpenScreen, request: WidgetOpenRequest): void {
+  openRequests[screen] = request;
+  for (const listener of openRequestListeners) {
+    listener();
+  }
+}
+
+export function clearWidgetOpenRequest(screen: WidgetOpenScreen): void {
+  if (openRequests[screen] !== null) {
+    openRequests[screen] = null;
+    for (const listener of openRequestListeners) {
+      listener();
+    }
+  }
+}
+
+export function useWidgetOpenRequest(screen: WidgetOpenScreen): WidgetOpenRequest {
+  return useSyncExternalStore(
+    (listener) => {
+      openRequestListeners.add(listener);
+      return () => {
+        openRequestListeners.delete(listener);
+      };
+    },
+    () => openRequests[screen],
+    () => null,
+  );
+}
+
 /** 위젯에서 허용된 원터치 빠른 지출 프리셋만 실행되도록 화이트리스트로 제한한다. */
 const ALLOWED_QUICK_EXPENSES: Readonly<Record<string, { category: string; amount: number }>> = {
   '식비:10000': { category: '식비', amount: 10000 },
   '교통:1500': { category: '교통', amount: 1500 },
+  '식비:5000': { category: '식비', amount: 5000 },
 };
 
 let currentWidgetTab: WidgetTab = 'todos';
@@ -46,6 +96,7 @@ let currentIsDark = false;
 let currentScope = 'local';
 let lastSnapshotJson = '';
 let syncTimer: ReturnType<typeof setTimeout> | null = null;
+let handledInitialUrl: string | null = null;
 
 function isWidgetTab(value: string): value is WidgetTab {
   return (
@@ -58,11 +109,22 @@ function isWidgetTab(value: string): value is WidgetTab {
 }
 
 /**
+ * 캐시가 무효화(invalidated)되지 않았고 강제 새로고침이 아닐 때만 캐시 데이터를 돌려준다.
+ * 위젯 액션 직후나 백그라운드에서 invalidateQueries 만 호출된 경우에는
+ * 오래된 캐시 대신 저장소/DB의 최신 데이터를 읽도록 보장한다.
+ */
+function getFreshCachedData<T>(key: readonly unknown[], forceFresh: boolean): T | undefined {
+  if (forceFresh) return undefined;
+  const state = queryClient.getQueryState(key);
+  if (!state || state.isInvalidated) return undefined;
+  return queryClient.getQueryData<T>(key);
+}
+
+/**
  * 현재 기기 저장소(비로그인) 또는 Supabase 데이터베이스(로그인)에서
  * 안드로이드 홈 화면 위젯에 보여줄 다섯 기능의 요약 데이터를 모은다.
- * 이미 QueryClient 캐시에 최신 데이터가 있으면 네트워크 재요청 없이 즉시 재사용한다.
  */
-export async function buildWidgetSnapshot(): Promise<MeoreoseoWidgetProps> {
+export async function buildWidgetSnapshot(forceFresh = false): Promise<MeoreoseoWidgetProps> {
   const today = todayISO();
   const month = yearMonthOf(today);
   const { start, end } = monthRange(month);
@@ -70,17 +132,23 @@ export async function buildWidgetSnapshot(): Promise<MeoreoseoWidgetProps> {
   const signedIn = hasActiveSession();
   const scope = signedIn ? currentScope : 'local';
 
-  const cachedTodos = queryClient.getQueryData<Tables<'todos'>[]>(['todos', scope]);
-  const cachedEvents = queryClient.getQueryData<CalendarEvent[]>(['events', scope, start, end]);
-  const cachedHabits = queryClient.getQueryData<Tables<'habits'>[]>(['habits', scope]);
-  const cachedLogsMap = queryClient.getQueryData<Map<string, Set<string>>>(['habit-logs', scope]);
-  const cachedNotes = queryClient.getQueryData<Tables<'notes'>[]>(['notes', scope]);
-  const cachedTransactions = queryClient.getQueryData<Tables<'transactions'>[]>([
-    'transactions',
-    scope,
-    start,
-    end,
-  ]);
+  const todosKey = ['todos', scope] as const;
+  const eventsKey = ['events', scope, start, end] as const;
+  const habitsKey = ['habits', scope] as const;
+  const habitLogsKey = ['habit-logs', scope] as const;
+  const notesKey = ['notes', scope] as const;
+  const transactionsKey = ['transactions', scope, start, end] as const;
+
+  const cachedTodos = getFreshCachedData<Tables<'todos'>[]>(todosKey, forceFresh);
+  // 일정 캐시에는 반복 일정이 날짜마다 펼쳐진 값(CalendarEvent)이 들어 있다.
+  const cachedEvents = getFreshCachedData<CalendarEvent[]>(eventsKey, forceFresh);
+  const cachedHabits = getFreshCachedData<Tables<'habits'>[]>(habitsKey, forceFresh);
+  const cachedLogsMap = getFreshCachedData<Map<string, Set<string>>>(habitLogsKey, forceFresh);
+  const cachedNotes = getFreshCachedData<Tables<'notes'>[]>(notesKey, forceFresh);
+  const cachedTransactions = getFreshCachedData<Tables<'transactions'>[]>(
+    transactionsKey,
+    forceFresh,
+  );
 
   const [todos, events, habits, habitLogs, notes, transactions] = await Promise.all([
     cachedTodos
@@ -215,6 +283,8 @@ export async function buildWidgetSnapshot(): Promise<MeoreoseoWidgetProps> {
       preview: note.body.replace(/\s+/g, ' ').trim().slice(0, 30),
       pinned: note.pinned,
     })),
+    incomeAmount: income,
+    expenseAmount: expense,
     incomeLabel: formatWon(income),
     expenseLabel: formatWon(expense),
     balanceLabel: formatWon(income - expense),
@@ -229,30 +299,242 @@ export async function buildWidgetSnapshot(): Promise<MeoreoseoWidgetProps> {
 }
 
 /**
- * 안드로이드 홈 화면에 배치된 모든 멀어서 위젯(통합 위젯 + 기능별 위젯 5종)을 최신 데이터로 갱신한다.
+ * 안드로이드 홈 화면에 배치된 모든 멀어서 위젯(통합 위젯 + 기능별 단독 위젯 5종)을 최신 데이터로 갱신한다.
  * 이전 스냅샷과 내용이 완전히 같으면 네이티브 브리지 호출을 건너뛴다.
  */
 export async function syncAllWidgets(force = false): Promise<void> {
   if (Platform.OS !== 'android') return;
   try {
-    const snapshot = await buildWidgetSnapshot();
+    const snapshot = await buildWidgetSnapshot(force);
     const json = JSON.stringify(snapshot);
     if (!force && json === lastSnapshotJson) return;
     lastSnapshotJson = json;
 
-    MeoreoseoAllInOneWidget.updateSnapshot(snapshot);
+    const widgets = [
+      MeoreoseoAllInOneWidget,
+      MeoreoseoTodosWidget,
+      MeoreoseoCalendarWidget,
+      MeoreoseoHabitsWidget,
+      MeoreoseoNotesWidget,
+      MeoreoseoMoneyWidget,
+    ];
+
+    for (const widget of widgets) {
+      try {
+        widget.updateSnapshot(snapshot);
+      } catch {
+        // 개별 위젯이 배치되지 않았거나 사용할 수 없는 환경에서는 무시한다.
+      }
+    }
   } catch {
     // 위젯이 배치되지 않았거나 사용할 수 없는 환경에서는 무시한다.
   }
 }
 
-function scheduleWidgetSync() {
+export function scheduleWidgetSync(force = false) {
   if (Platform.OS !== 'android') return;
   if (syncTimer) clearTimeout(syncTimer);
   syncTimer = setTimeout(() => {
     syncTimer = null;
-    syncAllWidgets();
-  }, 200);
+    syncAllWidgets(force);
+  }, 150);
+}
+
+/**
+ * 위젯의 일정 버튼 이름("event:아이디:날짜")에서 일정 아이디만 꺼낸다.
+ * 반복 일정은 같은 아이디가 여러 날짜에 나오므로 위젯에는 날짜를 붙인 key 를 보낸다.
+ */
+function eventIdOf(openAction: string): string {
+  return openAction.slice('event:'.length).split(':')[0];
+}
+
+function buildDeepLinkForOpenAction(openAction: string): string {
+  if (openAction === 'todos' || openAction === 'todos:add') {
+    return 'meoreoseo://todos?add=1&from=widget';
+  }
+  if (openAction === 'todos:list') {
+    return 'meoreoseo://todos?from=widget';
+  }
+  if (openAction.startsWith('todo:')) {
+    const id = openAction.slice('todo:'.length);
+    return `meoreoseo://todos?editId=${encodeURIComponent(id)}&from=widget`;
+  }
+  if (openAction === 'calendar' || openAction === 'calendar:add') {
+    return 'meoreoseo://calendar?add=1&from=widget';
+  }
+  if (openAction === 'calendar:list') {
+    return 'meoreoseo://calendar?from=widget';
+  }
+  if (openAction.startsWith('event:')) {
+    const id = eventIdOf(openAction);
+    return `meoreoseo://calendar?editId=${encodeURIComponent(id)}&from=widget`;
+  }
+  if (openAction === 'habits' || openAction === 'habits:add') {
+    return 'meoreoseo://habits?add=1&from=widget';
+  }
+  if (openAction === 'habits:list') {
+    return 'meoreoseo://habits?from=widget';
+  }
+  if (openAction.startsWith('habit:')) {
+    const id = openAction.slice('habit:'.length);
+    return `meoreoseo://habits?editId=${encodeURIComponent(id)}&from=widget`;
+  }
+  if (openAction === 'notes' || openAction === 'notes:list') {
+    return 'meoreoseo://notes?from=widget';
+  }
+  if (openAction === 'note:new') {
+    return 'meoreoseo://note/new?from=widget';
+  }
+  if (openAction.startsWith('note:')) {
+    const id = openAction.slice('note:'.length);
+    return `meoreoseo://note/${encodeURIComponent(id)}?from=widget`;
+  }
+  if (openAction === 'money' || openAction === 'money:add') {
+    return 'meoreoseo://money?add=1&from=widget';
+  }
+  if (openAction === 'money:list') {
+    return 'meoreoseo://money?from=widget';
+  }
+  if (openAction.startsWith('tx:')) {
+    const id = openAction.slice('tx:'.length);
+    return `meoreoseo://money?editId=${encodeURIComponent(id)}&from=widget`;
+  }
+  return 'meoreoseo://?from=widget';
+}
+
+function navigateFromOpenAction(openAction: string) {
+  const token = Date.now();
+  const stamp = String(token);
+
+  if (openAction === 'todos' || openAction === 'todos:add') {
+    setWidgetOpenRequest('todos', { mode: 'add', token });
+    router.navigate({ pathname: '/todos', params: { add: stamp } });
+  } else if (openAction === 'todos:list') {
+    router.navigate('/todos');
+  } else if (openAction.startsWith('todo:')) {
+    const todoId = openAction.slice('todo:'.length);
+    if (isValidUuid(todoId)) {
+      setWidgetOpenRequest('todos', { mode: 'edit', editId: todoId, token });
+      router.navigate({ pathname: '/todos', params: { editId: todoId } });
+    } else {
+      router.navigate('/todos');
+    }
+  } else if (openAction === 'calendar' || openAction === 'calendar:add') {
+    setWidgetOpenRequest('calendar', { mode: 'add', token });
+    router.navigate({ pathname: '/calendar', params: { add: stamp } });
+  } else if (openAction === 'calendar:list') {
+    router.navigate('/calendar');
+  } else if (openAction.startsWith('event:')) {
+    const eventId = eventIdOf(openAction);
+    if (isValidUuid(eventId)) {
+      setWidgetOpenRequest('calendar', { mode: 'edit', editId: eventId, token });
+      router.navigate({ pathname: '/calendar', params: { editId: eventId } });
+    } else {
+      router.navigate('/calendar');
+    }
+  } else if (openAction === 'habits' || openAction === 'habits:add') {
+    setWidgetOpenRequest('habits', { mode: 'add', token });
+    router.navigate({ pathname: '/habits', params: { add: stamp } });
+  } else if (openAction === 'habits:list') {
+    router.navigate('/habits');
+  } else if (openAction.startsWith('habit:')) {
+    const habitId = openAction.slice('habit:'.length);
+    if (isValidUuid(habitId)) {
+      setWidgetOpenRequest('habits', { mode: 'edit', editId: habitId, token });
+      router.navigate({ pathname: '/habits', params: { editId: habitId } });
+    } else {
+      router.navigate('/habits');
+    }
+  } else if (openAction === 'notes' || openAction === 'notes:list') {
+    router.navigate('/notes');
+  } else if (openAction === 'note:new') {
+    router.navigate({ pathname: '/note/[id]', params: { id: 'new', t: stamp } });
+  } else if (openAction.startsWith('note:')) {
+    const noteId = openAction.slice('note:'.length);
+    if (isValidUuid(noteId)) {
+      router.navigate({ pathname: '/note/[id]', params: { id: noteId } });
+    } else {
+      router.navigate('/notes');
+    }
+  } else if (openAction === 'money' || openAction === 'money:add') {
+    setWidgetOpenRequest('money', { mode: 'add', token });
+    router.navigate({ pathname: '/money', params: { add: stamp } });
+  } else if (openAction === 'money:list') {
+    router.navigate('/money');
+  } else if (openAction.startsWith('tx:')) {
+    const txId = openAction.slice('tx:'.length);
+    if (isValidUuid(txId)) {
+      setWidgetOpenRequest('money', { mode: 'edit', editId: txId, token });
+      router.navigate({ pathname: '/money', params: { editId: txId } });
+    } else {
+      router.navigate('/money');
+    }
+  }
+}
+
+function handleWidgetDeepLinkUrl(url: string) {
+  try {
+    const parsed = Linking.parse(url);
+    const params = parsed.queryParams ?? {};
+    if (params.from !== 'widget') return;
+
+    const rawPath = (parsed.hostname ? `${parsed.hostname}/${parsed.path ?? ''}` : parsed.path ?? '')
+      .replace(/^\/+|\/+$/g, '');
+    const token = Date.now();
+    const addParam = params.add ? String(token) : undefined;
+    const editIdParam = typeof params.editId === 'string' ? params.editId : undefined;
+
+    if (rawPath === 'todos') {
+      if (addParam) {
+        setWidgetOpenRequest('todos', { mode: 'add', token });
+        router.navigate({ pathname: '/todos', params: { add: addParam } });
+      } else if (editIdParam && isValidUuid(editIdParam)) {
+        setWidgetOpenRequest('todos', { mode: 'edit', editId: editIdParam, token });
+        router.navigate({ pathname: '/todos', params: { editId: editIdParam } });
+      } else {
+        router.navigate('/todos');
+      }
+    } else if (rawPath === 'calendar') {
+      if (addParam) {
+        setWidgetOpenRequest('calendar', { mode: 'add', token });
+        router.navigate({ pathname: '/calendar', params: { add: addParam } });
+      } else if (editIdParam && isValidUuid(editIdParam)) {
+        setWidgetOpenRequest('calendar', { mode: 'edit', editId: editIdParam, token });
+        router.navigate({ pathname: '/calendar', params: { editId: editIdParam } });
+      } else {
+        router.navigate('/calendar');
+      }
+    } else if (rawPath === 'habits') {
+      if (addParam) {
+        setWidgetOpenRequest('habits', { mode: 'add', token });
+        router.navigate({ pathname: '/habits', params: { add: addParam } });
+      } else if (editIdParam && isValidUuid(editIdParam)) {
+        setWidgetOpenRequest('habits', { mode: 'edit', editId: editIdParam, token });
+        router.navigate({ pathname: '/habits', params: { editId: editIdParam } });
+      } else {
+        router.navigate('/habits');
+      }
+    } else if (rawPath === 'notes') {
+      router.navigate('/notes');
+    } else if (rawPath === 'note/new') {
+      router.navigate({ pathname: '/note/[id]', params: { id: 'new', t: String(token) } });
+    } else if (rawPath.startsWith('note/')) {
+      const noteId = rawPath.slice('note/'.length);
+      if (isValidUuid(noteId)) router.navigate({ pathname: '/note/[id]', params: { id: noteId } });
+    } else if (rawPath === 'money') {
+      if (addParam) {
+        setWidgetOpenRequest('money', { mode: 'add', token });
+        router.navigate({ pathname: '/money', params: { add: addParam } });
+      } else if (editIdParam && isValidUuid(editIdParam)) {
+        setWidgetOpenRequest('money', { mode: 'edit', editId: editIdParam, token });
+        router.navigate({ pathname: '/money', params: { editId: editIdParam } });
+      } else {
+        router.navigate('/money');
+      }
+    }
+  } catch {
+    // 잘못된 주소 형식은 무시한다.
+  }
 }
 
 async function handleWidgetAction(rawTarget: string): Promise<void> {
@@ -359,28 +641,20 @@ async function handleWidgetAction(rawTarget: string): Promise<void> {
     return;
   }
 
-  if (action === 'open:todos') {
-    router.push('/');
-  } else if (action === 'open:calendar') {
-    router.push('/calendar');
-  } else if (action === 'open:habits') {
-    router.push('/habits');
-  } else if (action === 'open:notes') {
-    router.push('/notes');
-  } else if (action === 'open:note:new') {
-    router.push('/note/new');
-  } else if (action.startsWith('open:note:')) {
-    const noteId = action.slice('open:note:'.length);
-    if (isValidUuid(noteId)) router.push(`/note/${noteId}`);
-  } else if (action === 'open:money') {
-    router.push('/money');
+  if (action.startsWith('open:')) {
+    const openAction = action.slice('open:'.length);
+    const deepLink = buildDeepLinkForOpenAction(openAction);
+    if (AppState.currentState !== 'active') {
+      await Linking.openURL(deepLink).catch(() => {});
+    }
+    navigateFromOpenAction(openAction);
   }
 }
 
 /**
  * 앱의 루트 레이아웃에서 실행되어,
- * 1) 앱 데이터나 화면 모드(다크/라이트)가 바뀔 때 안드로이드 위젯을 자동 갱신하고
- * 2) 위젯에서 누른 버튼 동작(완료 토글, 습관 체크, 빠른 가계부 기록, 화면 열기)을 처리한다.
+ * 1) 앱 데이터나 화면 모드(다크/라이트)가 바뀔 때 안드로이드 위젯 6종(통합 1종 + 기능별 5종)을 자동 갱신하고
+ * 2) 위젯에서 누른 버튼 동작(완료 토글, 습관 체크, 빠른 가계부 기록, 각 기능 추가 창·편집 창 열기)을 처리한다.
  */
 export function useWidgetBridge(): void {
   const colorScheme = useColorScheme();
@@ -390,16 +664,46 @@ export function useWidgetBridge(): void {
     currentIsDark = colorScheme === 'dark';
     currentScope = session?.user.id ?? 'local';
     if (!loading) {
-      scheduleWidgetSync();
+      scheduleWidgetSync(true);
     }
   }, [colorScheme, session?.user.id, loading]);
 
   useEffect(() => {
     if (Platform.OS !== 'android') return;
 
-    const unsubscribeCache = queryClient.getQueryCache().subscribe((event) => {
+    Linking.getInitialURL()
+      .then((initialUrl) => {
+        if (initialUrl && initialUrl !== handledInitialUrl) {
+          handledInitialUrl = initialUrl;
+          handleWidgetDeepLinkUrl(initialUrl);
+        }
+      })
+      .catch(() => {});
+
+    const urlSub = Linking.addEventListener('url', ({ url }) => {
+      handleWidgetDeepLinkUrl(url);
+    });
+
+    return () => {
+      urlSub.remove();
+    };
+  }, []);
+
+  useEffect(() => {
+    if (Platform.OS !== 'android') return;
+
+    const unsubscribeQueryCache = queryClient.getQueryCache().subscribe((event) => {
+      if (
+        event.type === 'updated' &&
+        (event.action.type === 'success' || event.action.type === 'invalidate')
+      ) {
+        scheduleWidgetSync(event.action.type === 'invalidate');
+      }
+    });
+
+    const unsubscribeMutationCache = queryClient.getMutationCache().subscribe((event) => {
       if (event.type === 'updated' && event.action.type === 'success') {
-        scheduleWidgetSync();
+        scheduleWidgetSync(true);
       }
     });
 
@@ -407,9 +711,17 @@ export function useWidgetBridge(): void {
       handleWidgetAction(event.target).catch(() => {});
     });
 
+    const appStateSub = AppState.addEventListener('change', (nextState) => {
+      if (nextState === 'background' || nextState === 'active') {
+        scheduleWidgetSync(true);
+      }
+    });
+
     return () => {
-      unsubscribeCache();
+      unsubscribeQueryCache();
+      unsubscribeMutationCache();
       interactionSub.remove();
+      appStateSub.remove();
     };
   }, []);
 }

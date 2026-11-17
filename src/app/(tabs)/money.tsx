@@ -1,3 +1,4 @@
+import { router, useLocalSearchParams } from 'expo-router';
 import { useMemo, useState } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 
@@ -21,6 +22,7 @@ import {
 } from '@/hooks/use-transactions';
 import { formatDate, monthRange, todayISO, yearMonthOf } from '@/lib/dates';
 import { confirm, errorMessage, formatWon } from '@/lib/format';
+import { clearWidgetOpenRequest, useWidgetOpenRequest } from '@/lib/widget-sync';
 
 const KINDS = [
   { value: 'expense', label: '지출' },
@@ -54,12 +56,31 @@ function expenseByCategory(items: Transaction[]): { category: string; total: num
 }
 
 export default function MoneyScreen() {
+  const { add, editId } = useLocalSearchParams<{ add?: string; editId?: string }>();
+  const widgetReq = useWidgetOpenRequest('money');
   const theme = useTheme();
   const [month, setMonth] = useState(() => yearMonthOf(todayISO()));
   const [editing, setEditing] = useState<Transaction | 'new' | null>(null);
 
   const transactions = useTransactions(month);
   const items = transactions.data ?? [];
+
+  const targetEditId = widgetReq?.mode === 'edit' ? widgetReq.editId : editId;
+  const activeEditing: Transaction | 'new' | null =
+    editing ??
+    (widgetReq?.mode === 'add' || add
+      ? 'new'
+      : targetEditId
+        ? ((transactions.data ?? []).find((tx) => tx.id === targetEditId) ?? null)
+        : null);
+
+  function closeForm() {
+    setEditing(null);
+    clearWidgetOpenRequest('money');
+    if (add || editId) {
+      router.setParams({ add: undefined, editId: undefined });
+    }
+  }
 
   const { income, expense, categories, groups } = useMemo(() => {
     const list = transactions.data ?? [];
@@ -163,11 +184,11 @@ export default function MoneyScreen() {
         </View>
       ))}
 
-      {editing ? (
+      {activeEditing ? (
         <TransactionForm
-          transaction={editing === 'new' ? null : editing}
-          defaultDate={defaultDate}
-          onClose={() => setEditing(null)}
+          transaction={activeEditing === 'new' ? null : activeEditing}
+          defaultDate={add ? today : defaultDate}
+          onClose={closeForm}
         />
       ) : null}
     </Screen>
