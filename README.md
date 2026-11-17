@@ -3,6 +3,19 @@
 할 일, 일정, 습관, 메모, 가계부를 한곳에서 관리하는 생산성 앱.
 코드 하나로 웹사이트와 Android 앱을 함께 만든다.
 
+## 함께 작업하기
+
+저장소는 GitHub 의 TEAM-COPLE 조직에 있다: https://github.com/TEAM-COPLE/meoreoseo
+
+1. 저장소를 내려받고 아래 "실행하기"대로 준비한다. `.env.local` 에 넣을 값은 팀원에게 받는다
+   (Supabase 주소와 공개용 키. `eas.json` 에 있는 것과 같은 값이다).
+2. `main` 에 바로 올리지 않는다. 작업마다 가지(branch)를 만들고 Pull Request 로 합친다.
+   `main` 에 합쳐지면 웹사이트가 자동으로 다시 배포된다.
+3. 올리기 전에 `npx tsc --noEmit` 과 `npx expo lint` 를 돌린다.
+4. 데이터베이스 구조를 바꿀 때는 `supabase/migrations/` 에 SQL 파일을 추가한다.
+
+비밀 값(Supabase secret key, 구글·카카오 Client Secret)은 저장소에 올리지 않는다.
+
 ## 사용 기술
 
 | 영역 | 기술 |
@@ -93,6 +106,36 @@ Client Secret 은 Supabase 대시보드에만 넣는다. 이 저장소나 `.env`
 - Supabase 주소와 공개용 키는 Vercel 프로젝트의 환경 변수에 넣어 두었다.
 - 배포된 주소에서 로그인하려면 Supabase 의 Redirect URLs 에 그 주소가 등록되어 있어야 한다.
 
+## Android 앱 만들기 (APK)
+
+Expo 의 클라우드 빌드(EAS Build)로 설치 파일(APK)을 만든다. 설정은 `eas.json` 에 있다.
+
+```bash
+npx eas-cli@latest login
+```
+
+```bash
+npx eas-cli@latest build -p android --profile preview
+```
+
+빌드가 끝나면 나오는 링크를 휴대폰에서 열어 설치한다.
+알림처럼 휴대폰 기능을 쓰는 라이브러리를 새로 넣으면 APK 를 다시 만들어야 한다.
+
+## 알림
+
+휴대폰 앱의 계정 화면에서 켠다. 서버가 보내는 알림이 아니라 휴대폰이 스스로 띄우는 예약 알림이다.
+
+| 종류 | 알리는 때 |
+| --- | --- |
+| 할 일 | 마감일 오전 9시 |
+| 일정 | 시작 10분 전 (하루 종일 일정은 오전 9시) |
+| 습관 | 매일 오후 9시 (그날 다 체크했으면 알리지 않음) |
+
+- 무엇을 언제 알릴지는 `src/lib/reminders.ts` 가 계산하고, 실제 예약은 `src/lib/notifications.ts` 가 한다.
+- `src/components/notification-sync.tsx` 가 데이터가 바뀔 때마다 예약을 다시 맞춘다.
+- 다른 기기(웹 포함)에서 추가한 할 일·일정은 휴대폰 앱을 한 번 열어야 알림에 반영된다.
+- 웹에서는 알림을 지원하지 않는다.
+
 ## 폴더 구조
 
 ```
@@ -101,17 +144,18 @@ src/
     _layout.tsx         가장 바깥 틀. 로그인 여부에 따라 화면을 나눈다.
     sign-in.tsx         구글·카카오 로그인
     auth-callback.tsx   로그인을 마치고 돌아오는 화면
-    account.tsx         계정(로그아웃)
-    (tabs)/             로그인 후의 다섯 탭
-      index.tsx         할 일
+    account.tsx         계정(알림 설정, 로그아웃)
+    (tabs)/             로그인 후의 다섯 탭 (Android 는 탭을 5개까지만 놓을 수 있다)
+      index.tsx         오늘 (오늘 볼 할 일·일정·습관·지출을 모은 첫 화면)
+      todos.tsx         할 일
       calendar.tsx      일정
-      habits.tsx        습관
       notes.tsx         메모 목록 (검색)
       money.tsx         가계부
+    habits.tsx          습관 관리 (오늘 화면의 "관리"에서 연다)
     note/[id].tsx       메모장 (전체 화면 편집, 자동 저장)
   components/           여러 화면이 함께 쓰는 부품 (버튼, 입력 칸, 달력 등)
   hooks/                기능별 데이터 요청 (use-todos.ts 등)
-  lib/                  Supabase 연결, 로그인 상태, 구글·카카오 로그인, 날짜·금액 도우미
+  lib/                  Supabase 연결, 로그인 상태, 구글·카카오 로그인, 알림, 날짜·금액 도우미
   constants/theme.ts    색, 간격 (밝은 화면 / 어두운 화면)
 supabase/migrations/    데이터베이스 구조와 접근 규칙 (SQL)
 ```
@@ -121,6 +165,19 @@ supabase/migrations/    데이터베이스 구조와 접근 규칙 (SQL)
 모든 테이블에 `user_id` 가 있고 Row Level Security 가 켜져 있다.
 로그인한 사용자는 자기 데이터만 읽고 쓸 수 있고, 로그인하지 않으면 아무 데이터에도 접근할 수 없다.
 규칙은 `supabase/migrations/20261115000000_init.sql` 에 있다.
+
+### 휴대폰에 저장되는 정보
+
+| 저장되는 것 | 저장 방식 |
+| --- | --- |
+| 로그인 정보(토큰) | Android Keystore 로 암호화해 저장한다(`src/lib/auth-storage.ts`, expo-secure-store). |
+| 알림 설정 | 켜고 끈 값뿐이라 암호화하지 않는다. |
+| Supabase 주소·공개용 키 | 앱에 들어 있지만 공개되어도 되는 값이다. 데이터는 위의 접근 규칙이 지킨다. |
+
+- Android 백업을 껐다(`app.json` 의 `allowBackup: false`). 백업 파일로 앱 데이터를 빼낼 수 없다.
+- 비밀 키(Supabase secret key, 구글·카카오 Client Secret)는 앱이나 이 저장소에 넣지 않는다.
+- 웹에서는 브라우저 저장소(localStorage)에 로그인 정보를 둔다. 브라우저에는 Keystore 같은 보안 영역이 없다.
+- 루팅된 휴대폰에서 관리자 권한으로 앱을 직접 들여다보는 공격까지 막지는 못한다.
 
 ## 일시정지 방지
 

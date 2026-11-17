@@ -10,6 +10,7 @@ import { Card, ListStatus, Screen } from '@/components/ui/screen';
 import { TextField } from '@/components/ui/text-field';
 import { Spacing } from '@/constants/theme';
 import {
+  timeLabel,
   useDeleteEvent,
   useEvents,
   useSaveEvent,
@@ -25,12 +26,6 @@ import {
   type YearMonth,
 } from '@/lib/dates';
 import { confirm, errorMessage } from '@/lib/format';
-
-function timeLabel(event: CalendarEvent): string {
-  if (!event.start_time) return '하루 종일';
-  const start = formatTime(event.start_time);
-  return event.end_time ? `${start} – ${formatTime(event.end_time)}` : start;
-}
 
 export default function CalendarScreen() {
   const [selected, setSelected] = useState(todayISO);

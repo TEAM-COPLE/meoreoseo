@@ -1,3 +1,4 @@
+import { router } from 'expo-router';
 import { useState } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 
@@ -20,6 +21,20 @@ import { useTheme } from '@/hooks/use-theme';
 import { dayOf, lastDays, weekdayOf } from '@/lib/dates';
 import { confirm, errorMessage } from '@/lib/format';
 
+/** 오늘 화면으로 돌아간다. 이 화면을 주소로 바로 연 경우에는 돌아갈 곳이 없으므로 새로 연다. */
+function leave() {
+  if (router.canGoBack()) {
+    router.back();
+  } else {
+    router.replace('/');
+  }
+}
+
+/**
+ * 습관 관리 화면. 오늘 화면의 습관 상자에서 "관리"를 누르면 열린다.
+ * 습관을 추가·수정·삭제하고, 지난 7일의 기록을 보고 고칠 수 있다.
+ * (Android 는 아래 탭이 5개까지라, 오늘 화면에서 매일 체크할 수 있는 습관을 탭에서 뺐다.)
+ */
 export default function HabitsScreen() {
   const theme = useTheme();
   const habits = useHabits();
@@ -34,6 +49,7 @@ export default function HabitsScreen() {
   return (
     <Screen
       title="습관"
+      onBack={leave}
       action={<Button label="추가" size="small" onPress={() => setEditing('new')} />}>
       <ListStatus
         loading={habits.isPending || logs.isPending}
