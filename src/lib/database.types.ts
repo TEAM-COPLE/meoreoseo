@@ -82,6 +82,17 @@ type UserSettingsRow = {
   updated_at: string;
 };
 
+type ErrorLogRow = {
+  id: string;
+  user_id: string;
+  created_at: string;
+  source: string;
+  message: string;
+  detail: string | null;
+  platform: string;
+  app_version: string | null;
+};
+
 export type Database = {
   __InternalSupabase: {
     PostgrestVersion: '14.18';
@@ -115,6 +126,10 @@ export type Database = {
         | 'weather_latitude'
         | 'weather_longitude'
         | 'updated_at'
+      >;
+      error_logs: Table<
+        ErrorLogRow,
+        'id' | 'user_id' | 'created_at' | 'detail' | 'app_version'
       >;
     };
     Views: { [_ in never]: never };

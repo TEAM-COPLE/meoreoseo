@@ -7,12 +7,16 @@ import { useEffect } from 'react';
 import { ThemeModeProvider, useColorScheme } from '@/hooks/use-theme';
 import { NotificationSync } from '@/components/notification-sync';
 import { AuthProvider, useAuth } from '@/lib/auth';
+import { installGlobalErrorHandler } from '@/lib/error-report';
 import { notificationsSupported } from '@/lib/notifications';
 import { queryClient } from '@/lib/query';
 import { useWidgetBridge } from '@/lib/widget-sync';
 
 // 초기 상태를 확인할 때까지 시작 화면(스플래시)을 그대로 둔다.
 SplashScreen.preventAutoHideAsync();
+
+// 앱이 멈출 정도의 큰 오류도 휴대폰 알림으로 알리고 DB 에 기록한다(src/lib/error-report.ts).
+installGlobalErrorHandler();
 
 /**
  * 앱의 가장 바깥 틀.

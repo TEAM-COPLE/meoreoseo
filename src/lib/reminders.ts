@@ -18,6 +18,8 @@ export type NotificationSettings = {
   events: boolean;
   /** 습관: 매일 저녁에 알림 */
   habits: boolean;
+  /** 오류 알림: 앱에서 오류가 나면 바로 알림으로 알려준다. "알림 받기"와 따로 켜고 끈다. */
+  errors: boolean;
 };
 
 export const DEFAULT_SETTINGS: NotificationSettings = {
@@ -25,6 +27,7 @@ export const DEFAULT_SETTINGS: NotificationSettings = {
   todos: true,
   events: true,
   habits: true,
+  errors: true,
 };
 
 /** 할 일 마감일과 하루 종일 일정을 알리는 시각(오전 9시) */

@@ -119,6 +119,7 @@ export function useSaveWeatherCity() {
   const userId = session?.user.id;
 
   return useMutation({
+    mutationKey: [CITY_KEY],
     mutationFn: async (city: City) => {
       if (userId) await writeAccountCity(userId, city);
       // 기기에도 같이 남겨 둔다. 인터넷이 안 될 때나 로그아웃한 뒤에도 이 지역을 보여준다.
@@ -131,7 +132,7 @@ export function useSaveWeatherCity() {
 
 /** 입력한 이름으로 지역을 찾는다. "검색"을 누를 때마다 한 번씩 부른다. */
 export function useSearchPlaces() {
-  return useMutation({ mutationFn: searchPlaces });
+  return useMutation({ mutationKey: ['weather-search'], mutationFn: searchPlaces });
 }
 
 /** 고른 지역의 오늘 날씨. 지역을 아직 읽는 중이면 기다린다. */

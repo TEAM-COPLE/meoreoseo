@@ -52,6 +52,39 @@ export async function hasNotificationPermission(): Promise<boolean> {
   return current.granted;
 }
 
+/** 오류 알림 채널. 할 일·일정 알림과 따로 휴대폰 설정에서 끌 수 있다. */
+const ERROR_CHANNEL_ID = 'errors';
+
+/** 이번에 앱을 켠 동안 알림 권한을 이미 물어봤는지. 오류가 날 때마다 묻지 않도록 한 번만 묻는다. */
+let askedForErrorPermission = false;
+
+/**
+ * 오류 알림을 지금 바로 띄운다.
+ * 알림 권한이 없으면 이번 실행 중 한 번만 권한을 물어보고, 거절하면 조용히 넘어간다.
+ * @returns 알림을 띄웠으면 true
+ */
+export async function showErrorNotification(title: string, body: string): Promise<boolean> {
+  await Notifications.setNotificationChannelAsync(ERROR_CHANNEL_ID, {
+    name: '오류 알림',
+    importance: AndroidImportance.DEFAULT,
+  });
+
+  const current = await Notifications.getPermissionsAsync();
+  let granted = current.granted;
+  if (!granted && current.canAskAgain && !askedForErrorPermission) {
+    askedForErrorPermission = true;
+    granted = (await Notifications.requestPermissionsAsync()).granted;
+  }
+  if (!granted) return false;
+
+  await Notifications.scheduleNotificationAsync({
+    content: { title, body },
+    // 시각 없이 채널만 정하면 지금 바로 뜬다. 예약 알림이 아니라서 cancelAllReminders 에 지워지지 않는다.
+    trigger: { channelId: ERROR_CHANNEL_ID },
+  });
+  return true;
+}
+
 /** 예약해 둔 알림을 모두 지운다. 알림을 끄거나 로그아웃할 때 쓴다. */
 export async function cancelAllReminders(): Promise<void> {
   await Notifications.cancelAllScheduledNotificationsAsync();

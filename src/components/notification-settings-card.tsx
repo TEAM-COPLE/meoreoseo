@@ -115,6 +115,14 @@ export function NotificationSettingsCard() {
           </ThemedText>
         </>
       ) : null}
+
+      {/* 오류 알림은 위의 "알림 받기"와 따로 켜고 끈다. 끄면 알림만 안 뜨고 기록은 계속 남는다. */}
+      <Row
+        label="오류 알림"
+        description="앱에서 오류가 나면 바로 알려줍니다. 같은 오류는 5분에 한 번만 알립니다."
+        value={settings.errors}
+        onChange={(errors) => update({ errors })}
+      />
     </Card>
   );
 }
