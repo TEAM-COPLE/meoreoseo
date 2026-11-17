@@ -11,7 +11,7 @@ create table public.todos (
   id uuid primary key default gen_random_uuid(),
   user_id uuid not null default auth.uid() references auth.users (id) on delete cascade,
   title text not null check (char_length(title) between 1 and 200),
-  notes text check (notes is null or char_length(notes) <= 5000),
+  notes text,
   due_date date,
   -- 0: 보통, 1: 중요, 2: 매우 중요
   priority smallint not null default 0 check (priority between 0 and 2),
@@ -29,9 +29,8 @@ create table public.events (
   event_date date not null,
   start_time time,
   end_time time,
-  memo text check (memo is null or char_length(memo) <= 5000),
-  created_at timestamptz not null default now(),
-  check (end_time is null or (start_time is not null and end_time > start_time))
+  memo text,
+  created_at timestamptz not null default now()
 );
 create index events_user_date_idx on public.events (user_id, event_date);
 
@@ -60,8 +59,8 @@ create index habit_logs_user_date_idx on public.habit_logs (user_id, log_date);
 create table public.notes (
   id uuid primary key default gen_random_uuid(),
   user_id uuid not null default auth.uid() references auth.users (id) on delete cascade,
-  title text not null default '' check (char_length(title) <= 200),
-  body text not null default '' check (char_length(body) <= 50000),
+  title text not null default '',
+  body text not null default '',
   pinned boolean not null default false,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
@@ -74,42 +73,16 @@ create table public.transactions (
   user_id uuid not null default auth.uid() references auth.users (id) on delete cascade,
   kind text not null check (kind in ('expense', 'income')),
   -- 원 단위 정수
-  amount bigint not null check (amount > 0 and amount <= 999999999999),
+  amount bigint not null check (amount > 0),
   category text not null check (char_length(category) between 1 and 50),
-  memo text check (memo is null or char_length(memo) <= 500),
+  memo text,
   occurred_on date not null default current_date,
+  -- 기록 경로. 지금은 직접 입력('manual')만 있고,
+  -- 나중에 결제 알림 자동 인식('notification')을 추가할 자리다.
   source text not null default 'manual' check (source in ('manual', 'notification')),
   created_at timestamptz not null default now()
 );
 create index transactions_user_date_idx on public.transactions (user_id, occurred_on);
-
--- ───────────────────────── 불변 컬럼 보호 트리거 ─────────────────────────
-create or replace function public.preserve_immutable_fields()
-returns trigger
-language plpgsql
-security definer
-set search_path = public
-as $$
-begin
-  new.id := old.id;
-  new.user_id := old.user_id;
-  new.created_at := old.created_at;
-  return new;
-end;
-$$;
-
-create trigger todos_preserve_immutable before update on public.todos
-  for each row execute function public.preserve_immutable_fields();
-create trigger events_preserve_immutable before update on public.events
-  for each row execute function public.preserve_immutable_fields();
-create trigger habits_preserve_immutable before update on public.habits
-  for each row execute function public.preserve_immutable_fields();
-create trigger habit_logs_preserve_immutable before update on public.habit_logs
-  for each row execute function public.preserve_immutable_fields();
-create trigger notes_preserve_immutable before update on public.notes
-  for each row execute function public.preserve_immutable_fields();
-create trigger transactions_preserve_immutable before update on public.transactions
-  for each row execute function public.preserve_immutable_fields();
 
 -- ───────────────────────── 접근 규칙 ─────────────────────────
 alter table public.todos enable row level security;

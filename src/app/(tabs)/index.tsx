@@ -1,6 +1,5 @@
 import { router } from 'expo-router';
 import type { PropsWithChildren } from 'react';
-import { useMemo, useState } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, View } from 'react-native';
 
 import { ThemedText } from '@/components/themed-text';
@@ -23,10 +22,6 @@ import { formatWon } from '@/lib/format';
  */
 export default function TodayScreen() {
   const today = todayISO();
-  const visible = useMemo(() => {
-    const wantDone = filter === 'done';
-    return (todos.data ?? []).filter((todo) => todo.done === wantDone);
-  }, [todos.data, filter]);
 
   return (
     <Screen title="오늘">
