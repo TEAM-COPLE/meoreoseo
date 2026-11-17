@@ -9,10 +9,13 @@ import { DateField } from '@/components/ui/date-field';
 import { FormModal } from '@/components/ui/form-modal';
 import { Card, ListStatus, Screen } from '@/components/ui/screen';
 import { Segmented } from '@/components/ui/segmented';
+import { SelectionBar, SelectionIndicator } from '@/components/ui/selection-bar';
 import { TextField } from '@/components/ui/text-field';
 import { Spacing } from '@/constants/theme';
+import { useMultiSelect } from '@/hooks/use-multi-select';
 import {
   useDeleteTodo,
+  useDeleteTodos,
   useSaveTodo,
   useTodos,
   useToggleTodo,
@@ -47,7 +50,10 @@ export default function TodosScreen() {
   const widgetReq = useWidgetOpenRequest('todos');
   const todos = useTodos();
   const toggle = useToggleTodo();
+  const removeMany = useDeleteTodos();
+  const multi = useMultiSelect();
   const [filter, setFilter] = useState<Filter>('open');
+  const [bulkError, setBulkError] = useState<string | null>(null);
   // null: 양식 닫힘, 'new': 새로 추가, Todo: 그 할 일을 수정
   const [editing, setEditing] = useState<Todo | 'new' | null>(null);
 
@@ -68,61 +74,120 @@ export default function TodosScreen() {
     }
   }
 
+  function changeFilter(next: Filter) {
+    setFilter(next);
+    multi.clear();
+    setBulkError(null);
+  }
+
   const today = todayISO();
   const visible = (todos.data ?? []).filter((todo) => todo.done === (filter === 'done'));
   // 아직 차례가 오지 않은 반복 할 일은 아래 "다음 반복"에 따로 모아, 그날이 되기 전에는 체크하지 못하게 한다.
   const ready = visible.filter((todo) => !isWaitingRepeat(todo, today));
   const waiting = visible.filter((todo) => isWaitingRepeat(todo, today));
+  const visibleIds = visible.map((todo) => todo.id);
+  const selectedVisibleIds = visibleIds.filter((id) => multi.isSelected(id));
+  const isSelecting = selectedVisibleIds.length > 0;
+
+  async function deleteSelected() {
+    if (selectedVisibleIds.length === 0) return;
+    const count = selectedVisibleIds.length;
+    const ok = await confirm({
+      title: `할 일 ${count}개를 삭제할까요?`,
+      message: '선택한 할 일은 삭제 후 다시 복구할 수 없습니다.',
+      confirmLabel: `${count}개 삭제`,
+    });
+    if (!ok) return;
+    setBulkError(null);
+    try {
+      await removeMany.mutateAsync(selectedVisibleIds);
+      multi.clear();
+    } catch (e) {
+      setBulkError(errorMessage(e));
+    }
+  }
 
   function renderTodo(todo: Todo, locked: boolean) {
     const overdue = !todo.done && todo.due_date !== null && todo.due_date < today;
     const repeat = isRepeat(todo.repeat) && todo.due_date ? todo.repeat : null;
-    return (
-      <Card key={todo.id}>
-        <View style={[styles.row, locked && styles.locked]}>
-          <Checkbox
-            checked={todo.done}
-            label={
-              locked && todo.due_date
-                ? `${todo.title} (${formatDate(todo.due_date)}부터 체크 가능)`
-                : `${todo.title} 완료 표시`
-            }
-            disabled={locked}
-            onPress={() => toggle.mutate(todo)}
-          />
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel={`${todo.title} 수정`}
-            onPress={() => setEditing(todo)}
-            style={styles.body}>
-            <ThemedText
-              type="default"
-              themeColor={todo.done || locked ? 'textSecondary' : 'text'}
-              style={todo.done && styles.doneTitle}>
-              {todo.title}
-            </ThemedText>
-            {todo.due_date || todo.priority > 0 ? (
-              <View style={styles.meta}>
-                {todo.due_date ? (
-                  <ThemedText type="small" themeColor={overdue ? 'danger' : 'textSecondary'}>
-                    {formatDate(todo.due_date)}
-                    {overdue ? ' · 기한 지남' : ''}
-                    {locked ? '부터 체크할 수 있어요' : ''}
-                  </ThemedText>
-                ) : null}
-                {todo.priority > 0 ? (
-                  <ThemedText type="small" themeColor="tint">
-                    {PRIORITIES[todo.priority]?.label}
-                  </ThemedText>
-                ) : null}
-                {repeat && todo.due_date ? (
-                  <ThemedText type="small" themeColor="textSecondary">
-                    {`🔁 ${repeatLabel(repeat, todo.repeat_start ?? todo.due_date)}`}
-                  </ThemedText>
-                ) : null}
-              </View>
+    const selected = multi.isSelected(todo.id);
+
+    const bodyContent = (
+      <>
+        <ThemedText
+          type="default"
+          themeColor={todo.done || locked ? 'textSecondary' : 'text'}
+          style={todo.done && styles.doneTitle}>
+          {todo.title}
+        </ThemedText>
+        {todo.due_date || todo.priority > 0 ? (
+          <View style={styles.meta}>
+            {todo.due_date ? (
+              <ThemedText type="small" themeColor={overdue ? 'danger' : 'textSecondary'}>
+                {formatDate(todo.due_date)}
+                {overdue ? ' · 기한 지남' : ''}
+                {locked ? '부터 체크할 수 있어요' : ''}
+              </ThemedText>
             ) : null}
-          </Pressable>
+            {todo.priority > 0 ? (
+              <ThemedText type="small" themeColor="tint">
+                {PRIORITIES[todo.priority]?.label}
+              </ThemedText>
+            ) : null}
+            {repeat && todo.due_date ? (
+              <ThemedText type="small" themeColor="textSecondary">
+                {`🔁 ${repeatLabel(repeat, todo.repeat_start ?? todo.due_date)}`}
+              </ThemedText>
+            ) : null}
+          </View>
+        ) : null}
+      </>
+    );
+
+    return (
+      <Card
+        key={todo.id}
+        selected={selected}
+        onPress={isSelecting ? () => multi.toggle(todo.id) : undefined}
+        onLongPress={() => {
+          setBulkError(null);
+          multi.start(todo.id);
+        }}>
+        <View style={[styles.row, locked && !isSelecting && styles.locked]}>
+          {isSelecting ? (
+            <SelectionIndicator selected={selected} />
+          ) : (
+            <Checkbox
+              checked={todo.done}
+              label={
+                locked && todo.due_date
+                  ? `${todo.title} (${formatDate(todo.due_date)}부터 체크 가능)`
+                  : `${todo.title} 완료 표시`
+              }
+              disabled={locked}
+              onPress={() => toggle.mutate(todo)}
+              onLongPress={() => {
+                setBulkError(null);
+                multi.start(todo.id);
+              }}
+            />
+          )}
+          {isSelecting ? (
+            <View style={styles.body}>{bodyContent}</View>
+          ) : (
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={`${todo.title} 수정`}
+              delayLongPress={320}
+              onPress={() => setEditing(todo)}
+              onLongPress={() => {
+                setBulkError(null);
+                multi.start(todo.id);
+              }}
+              style={styles.body}>
+              {bodyContent}
+            </Pressable>
+          )}
         </View>
       </Card>
     );
@@ -131,8 +196,33 @@ export default function TodosScreen() {
   return (
     <Screen
       title="할 일"
-      action={<Button label="추가" size="small" onPress={() => setEditing('new')} />}>
-      <Segmented options={FILTERS} value={filter} onChange={setFilter} />
+      action={
+        isSelecting ? undefined : (
+          <Button label="추가" size="small" onPress={() => setEditing('new')} />
+        )
+      }
+      overlay={
+        isSelecting ? (
+          <SelectionBar
+            count={selectedVisibleIds.length}
+            totalCount={visibleIds.length}
+            deleting={removeMany.isPending}
+            onSelectAll={() => multi.selectAll(visibleIds)}
+            onClear={() => {
+              multi.clear();
+              setBulkError(null);
+            }}
+            onDelete={deleteSelected}
+          />
+        ) : undefined
+      }>
+      <Segmented options={FILTERS} value={filter} onChange={changeFilter} />
+
+      {bulkError ? (
+        <ThemedText type="small" themeColor="danger">
+          {bulkError}
+        </ThemedText>
+      ) : null}
 
       <ListStatus
         loading={todos.isPending}
@@ -215,7 +305,16 @@ function TodoForm({ todo, onClose }: { todo: Todo | null; onClose: () => void })
   }
 
   async function deleteTodo() {
-    if (!todo || !(await confirm('이 할 일을 삭제할까요?'))) return;
+    if (
+      !todo ||
+      !(await confirm({
+        title: '할 일을 삭제할까요?',
+        message: `'${todo.title}' 항목을 삭제하면 다시 복구할 수 없습니다.`,
+        confirmLabel: '삭제',
+      }))
+    ) {
+      return;
+    }
     try {
       await remove.mutateAsync(todo.id);
       onClose();

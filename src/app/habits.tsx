@@ -6,17 +6,20 @@ import { ThemedText } from '@/components/themed-text';
 import { Button } from '@/components/ui/button';
 import { FormModal } from '@/components/ui/form-modal';
 import { Card, ListStatus, Screen } from '@/components/ui/screen';
+import { SelectionBar, SelectionIndicator } from '@/components/ui/selection-bar';
 import { TextField } from '@/components/ui/text-field';
 import { Radius, Spacing } from '@/constants/theme';
 import {
   streakOf,
   useDeleteHabit,
+  useDeleteHabits,
   useHabitLogs,
   useHabits,
   useSaveHabit,
   useToggleHabitLog,
   type Habit,
 } from '@/hooks/use-habits';
+import { useMultiSelect } from '@/hooks/use-multi-select';
 import { useTheme } from '@/hooks/use-theme';
 import { dayOf, lastDays, weekdayOf } from '@/lib/dates';
 import { confirm, errorMessage } from '@/lib/format';
@@ -43,7 +46,11 @@ export default function HabitsScreen() {
   const habits = useHabits();
   const logs = useHabitLogs();
   const toggle = useToggleHabitLog();
+  const removeOne = useDeleteHabit();
+  const removeMany = useDeleteHabits();
+  const multi = useMultiSelect();
   const [editing, setEditing] = useState<Habit | 'new' | null>(null);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
 
   const targetEditId = widgetReq?.mode === 'edit' ? widgetReq.editId : editId;
   const activeEditing: Habit | 'new' | null =
@@ -74,15 +81,78 @@ export default function HabitsScreen() {
     return map;
   }, [habits.data, logs.data]);
 
+  const habitItems = habits.data ?? [];
+  const habitIds = habitItems.map((habit) => habit.id);
+  const selectedVisibleIds = habitIds.filter((id) => multi.isSelected(id));
+  const isSelecting = selectedVisibleIds.length > 0;
+
+  async function deleteSingleHabit(habit: Habit) {
+    const ok = await confirm({
+      title: '습관을 삭제할까요?',
+      message: `'${habit.name}' 습관과 지금까지의 실천 기록이 모두 삭제됩니다.`,
+      confirmLabel: '삭제',
+    });
+    if (!ok) return;
+    setDeleteError(null);
+    try {
+      await removeOne.mutateAsync(habit.id);
+    } catch (e) {
+      setDeleteError(errorMessage(e));
+    }
+  }
+
+  async function deleteSelected() {
+    if (selectedVisibleIds.length === 0) return;
+    const count = selectedVisibleIds.length;
+    const ok = await confirm({
+      title: `습관 ${count}개를 삭제할까요?`,
+      message: '선택한 습관들과 지금까지의 실천 기록이 모두 삭제됩니다.',
+      confirmLabel: `${count}개 삭제`,
+    });
+    if (!ok) return;
+    setDeleteError(null);
+    try {
+      await removeMany.mutateAsync(selectedVisibleIds);
+      multi.clear();
+    } catch (e) {
+      setDeleteError(errorMessage(e));
+    }
+  }
+
   return (
     <Screen
       title="습관"
       onBack={leave}
-      action={<Button label="추가" size="small" onPress={() => setEditing('new')} />}>
+      action={
+        isSelecting ? undefined : (
+          <Button label="추가" size="small" onPress={() => setEditing('new')} />
+        )
+      }
+      overlay={
+        isSelecting ? (
+          <SelectionBar
+            count={selectedVisibleIds.length}
+            totalCount={habitIds.length}
+            deleting={removeMany.isPending}
+            onSelectAll={() => multi.selectAll(habitIds)}
+            onClear={() => {
+              multi.clear();
+              setDeleteError(null);
+            }}
+            onDelete={deleteSelected}
+          />
+        ) : undefined
+      }>
+      {deleteError ? (
+        <ThemedText type="small" themeColor="danger">
+          {deleteError}
+        </ThemedText>
+      ) : null}
+
       <ListStatus
         loading={habits.isPending || logs.isPending}
         error={habits.error ?? logs.error}
-        empty={(habits.data ?? []).length === 0}
+        empty={habitItems.length === 0}
         emptyText={'아직 습관이 없습니다. "추가"를 눌러 매일 할 일을 정해 보세요.'}
         onRetry={() => {
           habits.refetch();
@@ -91,22 +161,61 @@ export default function HabitsScreen() {
       />
 
       {logs.data
-        ? (habits.data ?? []).map((habit) => {
+        ? habitItems.map((habit) => {
             const dates = logs.data.get(habit.id);
             const streak = streaks.get(habit.id) ?? 0;
+            const selected = multi.isSelected(habit.id);
             return (
-              <Card key={habit.id}>
+              <Card
+                key={habit.id}
+                selected={selected}
+                onPress={isSelecting ? () => multi.toggle(habit.id) : undefined}
+                onLongPress={() => {
+                  setDeleteError(null);
+                  multi.start(habit.id);
+                }}>
                 <View style={styles.header}>
-                  <Pressable
-                    accessibilityRole="button"
-                    accessibilityLabel={`${habit.name} 수정`}
-                    onPress={() => setEditing(habit)}
-                    style={styles.name}>
-                    <ThemedText type="default">{habit.name}</ThemedText>
-                  </Pressable>
+                  {isSelecting ? <SelectionIndicator selected={selected} /> : null}
+                  {isSelecting ? (
+                    <View style={styles.name}>
+                      <ThemedText type="default">{habit.name}</ThemedText>
+                    </View>
+                  ) : (
+                    <Pressable
+                      accessibilityRole="button"
+                      accessibilityLabel={`${habit.name} 수정`}
+                      delayLongPress={320}
+                      onPress={() => setEditing(habit)}
+                      onLongPress={() => {
+                        setDeleteError(null);
+                        multi.start(habit.id);
+                      }}
+                      style={styles.name}>
+                      <ThemedText type="default">{habit.name}</ThemedText>
+                    </Pressable>
+                  )}
                   <ThemedText type="small" themeColor={streak > 0 ? 'tint' : 'textSecondary'}>
                     {streak > 0 ? `${streak}일 연속` : '오늘부터 시작'}
                   </ThemedText>
+                  {!isSelecting ? (
+                    <Pressable
+                      accessibilityRole="button"
+                      accessibilityLabel={`${habit.name} 삭제`}
+                      disabled={removeOne.isPending}
+                      hitSlop={6}
+                      onPress={() => deleteSingleHabit(habit)}
+                      style={({ pressed }) => [
+                        styles.deletePill,
+                        {
+                          backgroundColor: theme.dangerSoft,
+                          opacity: removeOne.isPending ? 0.5 : pressed ? 0.72 : 1,
+                        },
+                      ]}>
+                      <ThemedText type="smallBold" style={{ color: theme.danger }}>
+                        삭제
+                      </ThemedText>
+                    </Pressable>
+                  ) : null}
                 </View>
 
                 <View style={styles.days}>
@@ -123,7 +232,16 @@ export default function HabitsScreen() {
                           accessibilityRole="checkbox"
                           accessibilityLabel={`${habit.name}, ${dayOf(date)}일`}
                           accessibilityState={{ checked: done }}
-                          onPress={() => toggle.mutate({ habitId: habit.id, date, done })}
+                          delayLongPress={320}
+                          onPress={() =>
+                            isSelecting
+                              ? multi.toggle(habit.id)
+                              : toggle.mutate({ habitId: habit.id, date, done })
+                          }
+                          onLongPress={() => {
+                            setDeleteError(null);
+                            multi.start(habit.id);
+                          }}
                           style={({ pressed }) => [
                             styles.dot,
                             {
@@ -187,7 +305,16 @@ function HabitForm({ habit, onClose }: { habit: Habit | null; onClose: () => voi
   }
 
   async function deleteHabit() {
-    if (!habit || !(await confirm('이 습관과 지금까지의 기록을 모두 삭제할까요?'))) return;
+    if (
+      !habit ||
+      !(await confirm({
+        title: '습관을 삭제할까요?',
+        message: `'${habit.name}' 습관과 지금까지의 실천 기록이 모두 삭제됩니다.`,
+        confirmLabel: '삭제',
+      }))
+    ) {
+      return;
+    }
     try {
       await remove.mutateAsync(habit.id);
       onClose();
@@ -225,6 +352,11 @@ const styles = StyleSheet.create({
   },
   name: {
     flex: 1,
+  },
+  deletePill: {
+    paddingHorizontal: Spacing.two + 2,
+    paddingVertical: Spacing.one,
+    borderRadius: Radius.full,
   },
   days: {
     flexDirection: 'row',

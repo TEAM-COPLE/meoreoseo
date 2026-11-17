@@ -31,7 +31,12 @@ export function Button({
   const inactive = disabled || loading;
 
   const backgroundColor =
-    colors?.background ?? (variant === 'primary' ? theme.tint : theme.backgroundElement);
+    colors?.background ??
+    (variant === 'primary'
+      ? theme.tint
+      : variant === 'danger'
+        ? theme.dangerSoft
+        : theme.backgroundElement);
   const color =
     colors?.text ??
     (variant === 'primary' ? theme.onTint : variant === 'danger' ? theme.danger : theme.text);

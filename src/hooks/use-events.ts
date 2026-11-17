@@ -133,6 +133,16 @@ export function useDeleteEvent() {
   });
 }
 
+/** 고른 일정 여러 개를 한꺼번에 지운다. 반복 일정이 있으면 반복 전체가 지워진다. */
+export function useDeleteEvents() {
+  return useInvalidatingMutation(KEY, async (ids: string[]) => {
+    if (ids.length === 0) return;
+    requireUserId();
+    const { error } = await supabase.from('events').delete().in('id', ids);
+    check(error);
+  });
+}
+
 /**
  * 반복 일정을 이 날짜부터 끝낸다(이전 날짜는 그대로 남는다).
  * 첫 날짜에서 끝내면 일정 전체를 지운다.

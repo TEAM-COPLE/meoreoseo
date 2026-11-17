@@ -1,4 +1,4 @@
-import { useMutation, useQuery } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
 import { activeUserId, requireUserId, useAuth } from '@/lib/auth';
 import type { Tables } from '@/lib/database.types';
@@ -93,10 +93,36 @@ export function useSaveHabit() {
 
 /** 습관을 지운다. 그 습관의 실천 기록도 함께 지워진다. */
 export function useDeleteHabit() {
-  return useInvalidatingMutation(KEY, async (id: string) => {
-    requireUserId();
-    const { error } = await supabase.from('habits').delete().eq('id', id);
-    check(error);
+  const client = useQueryClient();
+  return useMutation({
+    mutationKey: KEY,
+    mutationFn: async (id: string) => {
+      requireUserId();
+      const { error } = await supabase.from('habits').delete().eq('id', id);
+      check(error);
+    },
+    onSuccess: () => {
+      client.invalidateQueries({ queryKey: KEY });
+      client.invalidateQueries({ queryKey: LOGS_KEY });
+    },
+  });
+}
+
+/** 고른 습관 여러 개를 한꺼번에 지운다. 실천 기록도 함께 지워진다. */
+export function useDeleteHabits() {
+  const client = useQueryClient();
+  return useMutation({
+    mutationKey: KEY,
+    mutationFn: async (ids: string[]) => {
+      if (ids.length === 0) return;
+      requireUserId();
+      const { error } = await supabase.from('habits').delete().in('id', ids);
+      check(error);
+    },
+    onSuccess: () => {
+      client.invalidateQueries({ queryKey: KEY });
+      client.invalidateQueries({ queryKey: LOGS_KEY });
+    },
   });
 }
 

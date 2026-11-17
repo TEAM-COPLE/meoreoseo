@@ -116,7 +116,16 @@ function NoteEditor({ initial }: { initial: Note | null }) {
   async function deleteNote() {
     // 아무것도 적지 않은 새 메모는 물어보지 않고 그냥 닫는다.
     const untouched = initial === null && !title.trim() && !body.trim();
-    if (!untouched && !(await confirm('이 메모를 삭제할까요?'))) return;
+    if (
+      !untouched &&
+      !(await confirm({
+        title: '메모를 삭제할까요?',
+        message: '삭제된 메모는 다시 복구할 수 없습니다.',
+        confirmLabel: '삭제',
+      }))
+    ) {
+      return;
+    }
     setDeleting(true);
     setDeleteError(null);
     const message = await saver.remove();

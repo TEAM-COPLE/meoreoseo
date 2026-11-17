@@ -9,13 +9,13 @@ import { Card, Screen } from '@/components/ui/screen';
 import { WeatherCityPicker } from '@/components/weather-city-picker';
 import { Spacing } from '@/constants/theme';
 import { timeLabel, useEvents } from '@/hooks/use-events';
-import { streakOf, useHabitLogs, useHabits, useToggleHabitLog } from '@/hooks/use-habits';
+import { streakOf, useDeleteHabit, useHabitLogs, useHabits, useToggleHabitLog } from '@/hooks/use-habits';
 import { useTheme } from '@/hooks/use-theme';
 import { useTodos, useToggleTodo, type Todo } from '@/hooks/use-todos';
 import { useTransactions } from '@/hooks/use-transactions';
 import { useSaveWeatherCity, useWeather, useWeatherCity } from '@/hooks/use-weather';
 import { formatDate, toISODate, todayISO, yearMonthOf } from '@/lib/dates';
-import { formatWon } from '@/lib/format';
+import { confirm, errorMessage, formatWon } from '@/lib/format';
 import { describeWeather, formatTemperature } from '@/lib/weather';
 
 /**
@@ -199,10 +199,27 @@ function HabitSection({ today }: { today: string }) {
   const habits = useHabits();
   const logs = useHabitLogs();
   const toggle = useToggleHabitLog();
+  const removeHabit = useDeleteHabit();
+  const [deleteError, setDeleteError] = useState<string | null>(null);
 
   const items = habits.data ?? [];
   const ready = habits.data !== undefined && logs.data !== undefined;
   const doneCount = items.filter((habit) => logs.data?.get(habit.id)?.has(today)).length;
+
+  async function deleteHabit(id: string, name: string) {
+    const ok = await confirm({
+      title: '습관을 삭제할까요?',
+      message: `'${name}' 습관과 지금까지의 실천 기록이 모두 삭제됩니다.`,
+      confirmLabel: '삭제',
+    });
+    if (!ok) return;
+    setDeleteError(null);
+    try {
+      await removeHabit.mutateAsync(id);
+    } catch (e) {
+      setDeleteError(errorMessage(e));
+    }
+  }
 
   return (
     <Section
@@ -236,10 +253,17 @@ function HabitSection({ today }: { today: string }) {
                   checked={done}
                   label={`${habit.name} 오늘 실천 표시`}
                   onPress={() => toggle.mutate({ habitId: habit.id, date: today, done })}
+                  onLongPress={() => deleteHabit(habit.id, habit.name)}
                 />
-                <ThemedText type="default" style={styles.rowBody}>
-                  {habit.name}
-                </ThemedText>
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel={`${habit.name} 수정 또는 삭제`}
+                  delayLongPress={320}
+                  onPress={() => router.push({ pathname: '/habits', params: { editId: habit.id } })}
+                  onLongPress={() => deleteHabit(habit.id, habit.name)}
+                  style={({ pressed }) => [styles.rowBody, pressed && styles.pressed]}>
+                  <ThemedText type="default">{habit.name}</ThemedText>
+                </Pressable>
                 {streak > 0 ? (
                   <ThemedText type="small" themeColor="tint">
                     {streak}일 연속
@@ -251,6 +275,11 @@ function HabitSection({ today }: { today: string }) {
         : null}
 
       {toggle.error ? <SaveError /> : null}
+      {deleteError ? (
+        <ThemedText type="small" themeColor="danger">
+          {deleteError}
+        </ThemedText>
+      ) : null}
     </Section>
   );
 }

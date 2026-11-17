@@ -66,3 +66,12 @@ export function useDeleteTransaction() {
     check(error);
   });
 }
+
+export function useDeleteTransactions() {
+  return useInvalidatingMutation(KEY, async (ids: string[]) => {
+    if (ids.length === 0) return;
+    requireUserId();
+    const { error } = await supabase.from('transactions').delete().in('id', ids);
+    check(error);
+  });
+}

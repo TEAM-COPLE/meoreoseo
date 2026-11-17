@@ -1,6 +1,14 @@
 import { router } from 'expo-router';
 import type { PropsWithChildren, ReactNode } from 'react';
-import { ActivityIndicator, Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import {
+  ActivityIndicator,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  View,
+  type StyleProp,
+  type ViewStyle,
+} from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { ThemedText } from '@/components/themed-text';
@@ -15,17 +23,20 @@ type Props = PropsWithChildren<{
   action?: ReactNode;
   /** 넘기면 제목 왼쪽에 "‹" 뒤로 가기 버튼이 생긴다. 탭이 아닌 화면에서 쓴다. */
   onBack?: () => void;
+  /** 화면 아래쪽에 떠 있는 작업 막대(예: 멀티 삭제 바) */
+  overlay?: ReactNode;
 }>;
 
 /**
  * 탭 화면의 공통 틀: 위쪽 제목 줄 + 스크롤되는 내용.
  * 제목 줄 오른쪽에서 라이트/다크 모드를 바로 전환하거나 "계정" 화면으로 갈 수 있다.
  */
-export function Screen({ title, action, onBack, children }: Props) {
+export function Screen({ title, action, onBack, overlay, children }: Props) {
   const theme = useTheme();
   const { resolvedScheme, toggleScheme } = useThemeMode();
   const insets = useSafeAreaInsets();
   const isDark = resolvedScheme === 'dark';
+  const bottomInset = onBack ? Spacing.four : BottomTabInset + Spacing.four;
 
   return (
     <View style={[styles.root, { backgroundColor: theme.background }]}>
@@ -35,7 +46,7 @@ export function Screen({ title, action, onBack, children }: Props) {
           styles.content,
           {
             paddingTop: insets.top + Spacing.three,
-            paddingBottom: insets.bottom + BottomTabInset + Spacing.four,
+            paddingBottom: insets.bottom + bottomInset + (overlay ? 76 : 0),
           },
         ]}>
         <View style={styles.header}>
@@ -82,6 +93,19 @@ export function Screen({ title, action, onBack, children }: Props) {
 
         {children}
       </ScrollView>
+
+      {overlay ? (
+        <View
+          pointerEvents="box-none"
+          style={[
+            styles.overlayContainer,
+            {
+              bottom: insets.bottom + (onBack ? Spacing.three : BottomTabInset + Spacing.two),
+            },
+          ]}>
+          <View style={styles.overlayInner}>{overlay}</View>
+        </View>
+      ) : null}
     </View>
   );
 }
@@ -132,21 +156,50 @@ export function ListStatus({
 }
 
 /** 목록 항목이나 요약을 담는 둥근 상자. */
-export function Card({ children, onPress }: PropsWithChildren<{ onPress?: () => void }>) {
+export function Card({
+  children,
+  onPress,
+  onLongPress,
+  selected = false,
+  accessibilityLabel,
+  accessibilityHint,
+  style,
+}: PropsWithChildren<{
+  onPress?: () => void;
+  onLongPress?: () => void;
+  selected?: boolean;
+  accessibilityLabel?: string;
+  accessibilityHint?: string;
+  style?: StyleProp<ViewStyle>;
+}>) {
   const theme = useTheme();
+  const baseStyle = [
+    styles.card,
+    {
+      backgroundColor: selected ? theme.tintSoft : theme.backgroundElement,
+      borderColor: selected ? theme.tint : 'transparent',
+    },
+    style,
+  ];
 
-  if (!onPress) {
-    return (
-      <View style={[styles.card, { backgroundColor: theme.backgroundElement }]}>{children}</View>
-    );
+  if (!onPress && !onLongPress) {
+    return <View style={baseStyle}>{children}</View>;
   }
   return (
     <Pressable
       accessibilityRole="button"
+      accessibilityLabel={accessibilityLabel}
+      accessibilityHint={accessibilityHint}
+      accessibilityState={selected ? { selected: true } : undefined}
+      delayLongPress={320}
       onPress={onPress}
+      onLongPress={onLongPress}
       style={({ pressed }) => [
-        styles.card,
-        { backgroundColor: pressed ? theme.backgroundSelected : theme.backgroundElement },
+        ...baseStyle,
+        pressed && {
+          backgroundColor: selected ? theme.tintSoft : theme.backgroundSelected,
+          opacity: selected ? 0.9 : 1,
+        },
       ]}>
       {children}
     </Pressable>
@@ -199,7 +252,20 @@ const styles = StyleSheet.create({
   },
   card: {
     borderRadius: Radius.large,
+    borderWidth: 1.5,
     padding: Spacing.three,
     gap: Spacing.two,
+  },
+  overlayContainer: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    zIndex: 20,
+  },
+  overlayInner: {
+    width: '100%',
+    maxWidth: MaxContentWidth,
+    alignSelf: 'center',
+    paddingHorizontal: Spacing.three,
   },
 });

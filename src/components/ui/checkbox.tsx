@@ -7,13 +7,14 @@ import { useTheme } from '@/hooks/use-theme';
 type Props = {
   checked: boolean;
   onPress: () => void;
+  onLongPress?: () => void;
   /** 화면 낭독기가 읽어줄 이름 (예: 할 일 제목) */
   label: string;
   disabled?: boolean;
 };
 
 /** 동그란 완료 표시 버튼. */
-export function Checkbox({ checked, onPress, label, disabled }: Props) {
+export function Checkbox({ checked, onPress, onLongPress, label, disabled }: Props) {
   const theme = useTheme();
 
   return (
@@ -22,8 +23,10 @@ export function Checkbox({ checked, onPress, label, disabled }: Props) {
       accessibilityLabel={label}
       accessibilityState={{ checked, disabled }}
       disabled={disabled}
+      delayLongPress={320}
       hitSlop={10}
       onPress={onPress}
+      onLongPress={onLongPress}
       style={({ pressed }) => [
         styles.box,
         {
