@@ -21,6 +21,12 @@ type TodoRow = {
   done: boolean;
   done_at: string | null;
   created_at: string;
+  /** 반복 방법: 'daily' | 'weekdays' | 'weekly' | 'monthly' | 'yearly' (반복 안 하면 null) */
+  repeat: string | null;
+  /** 반복의 기준 날짜 */
+  repeat_start: string | null;
+  /** 이 할 일을 자동으로 만든 이전 할 일의 id */
+  previous_id: string | null;
 };
 
 type EventRow = {
@@ -32,6 +38,10 @@ type EventRow = {
   end_time: string | null;
   memo: string | null;
   created_at: string;
+  /** 반복 방법 (반복 안 하면 null) */
+  repeat: string | null;
+  /** 반복이 끝나는 날 (없으면 계속) */
+  repeat_until: string | null;
 };
 
 type HabitRow = {
@@ -101,11 +111,21 @@ export type Database = {
     Tables: {
       todos: Table<
         TodoRow,
-        'id' | 'user_id' | 'notes' | 'due_date' | 'priority' | 'done' | 'done_at' | 'created_at'
+        | 'id'
+        | 'user_id'
+        | 'notes'
+        | 'due_date'
+        | 'priority'
+        | 'done'
+        | 'done_at'
+        | 'created_at'
+        | 'repeat'
+        | 'repeat_start'
+        | 'previous_id'
       >;
       events: Table<
         EventRow,
-        'id' | 'user_id' | 'start_time' | 'end_time' | 'memo' | 'created_at'
+        'id' | 'user_id' | 'start_time' | 'end_time' | 'memo' | 'created_at' | 'repeat' | 'repeat_until'
       >;
       habits: Table<HabitRow, 'id' | 'user_id' | 'archived' | 'created_at'>;
       habit_logs: Table<HabitLogRow, 'id' | 'user_id' | 'created_at'>;

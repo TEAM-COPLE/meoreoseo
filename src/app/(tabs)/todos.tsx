@@ -19,6 +19,7 @@ import {
 } from '@/hooks/use-todos';
 import { formatDate, todayISO } from '@/lib/dates';
 import { confirm, errorMessage } from '@/lib/format';
+import { isRepeat, REPEAT_OPTIONS, repeatLabel, type RepeatChoice } from '@/lib/repeat';
 
 type Filter = 'open' | 'done';
 
@@ -63,6 +64,7 @@ export default function TodosScreen() {
 
       {visible.map((todo) => {
         const overdue = !todo.done && todo.due_date !== null && todo.due_date < today;
+        const repeat = isRepeat(todo.repeat) && todo.due_date ? todo.repeat : null;
         return (
           <Card key={todo.id}>
             <View style={styles.row}>
@@ -95,6 +97,11 @@ export default function TodosScreen() {
                         {PRIORITIES[todo.priority]?.label}
                       </ThemedText>
                     ) : null}
+                    {repeat && todo.due_date ? (
+                      <ThemedText type="small" themeColor="textSecondary">
+                        {`🔁 ${repeatLabel(repeat, todo.repeat_start ?? todo.due_date)}`}
+                      </ThemedText>
+                    ) : null}
                   </View>
                 ) : null}
               </Pressable>
@@ -118,13 +125,29 @@ function TodoForm({ todo, onClose }: { todo: Todo | null; onClose: () => void })
   const [notes, setNotes] = useState(todo?.notes ?? '');
   const [dueDate, setDueDate] = useState<string | null>(todo?.due_date ?? null);
   const [priority, setPriority] = useState<number>(todo?.priority ?? 0);
+  const [repeat, setRepeat] = useState<RepeatChoice>(
+    isRepeat(todo?.repeat) ? (todo?.repeat as RepeatChoice) : 'none',
+  );
   const [error, setError] = useState<string | null>(null);
+
+  // 반복을 고르면서 마감일이 비어 있으면 오늘로 채운다(반복의 기준 날짜가 필요하다).
+  function changeRepeat(value: RepeatChoice) {
+    setRepeat(value);
+    if (value !== 'none' && !dueDate) setDueDate(todayISO());
+  }
 
   async function submit() {
     if (!title.trim()) {
       setError('제목을 입력해 주세요.');
       return;
     }
+    const repeatValue = repeat === 'none' ? null : repeat;
+    if (repeatValue && !dueDate) {
+      setError('반복하려면 마감일을 정해 주세요.');
+      return;
+    }
+    // 반복 방법과 마감일이 그대로면 기준 날짜를 유지한다(매월 31일 같은 반복이 짧은 달 뒤에도 31일로 돌아오게).
+    const keepStart = todo && todo.repeat === repeatValue && todo.due_date === dueDate;
     try {
       await save.mutateAsync({
         id: todo?.id,
@@ -132,6 +155,8 @@ function TodoForm({ todo, onClose }: { todo: Todo | null; onClose: () => void })
         notes: notes.trim() || null,
         due_date: dueDate,
         priority,
+        repeat: repeatValue,
+        repeat_start: repeatValue ? (keepStart ? (todo.repeat_start ?? dueDate) : dueDate) : null,
       });
       onClose();
     } catch (e) {
@@ -165,7 +190,22 @@ function TodoForm({ todo, onClose }: { todo: Todo | null; onClose: () => void })
         maxLength={200}
         autoFocus={!todo}
       />
-      <DateField label="마감일" value={dueDate} onChange={setDueDate} clearable />
+      <DateField
+        label="마감일"
+        value={dueDate}
+        onChange={(value) => {
+          setDueDate(value);
+          // 마감일을 지우면 반복도 끈다.
+          if (!value) setRepeat('none');
+        }}
+        clearable
+      />
+      <Segmented label="반복" options={REPEAT_OPTIONS} value={repeat} onChange={changeRepeat} />
+      {repeat !== 'none' && dueDate ? (
+        <ThemedText type="small" themeColor="textSecondary">
+          {`${repeatLabel(repeat, dueDate)} 반복합니다. 완료하면 다음 할 일이 자동으로 생깁니다.`}
+        </ThemedText>
+      ) : null}
       <Segmented label="중요도" options={PRIORITIES} value={priority} onChange={setPriority} />
       <TextField label="메모" value={notes} onChangeText={setNotes} multiline />
     </FormModal>

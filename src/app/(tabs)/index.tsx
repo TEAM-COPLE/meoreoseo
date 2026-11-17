@@ -183,7 +183,7 @@ function EventSection({ today }: { today: string }) {
       ) : null}
 
       {items.map((event) => (
-        <View key={event.id} style={styles.row}>
+        <View key={event.key} style={styles.row}>
           <ThemedText type="small" themeColor="tint" style={styles.time}>
             {timeLabel(event)}
           </ThemedText>

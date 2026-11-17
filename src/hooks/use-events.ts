@@ -5,9 +5,21 @@ import type { Tables } from '@/lib/database.types';
 import { addDays, formatTime, monthRange, todayISO, type YearMonth } from '@/lib/dates';
 import { deleteLocalEvent, listLocalEvents, saveLocalEvent } from '@/lib/local-store';
 import { check, useInvalidatingMutation } from '@/lib/query';
+import { isRepeat, occurrencesBetween } from '@/lib/repeat';
 import { supabase } from '@/lib/supabase';
 
-export type CalendarEvent = Tables<'events'>;
+type EventRow = Tables<'events'>;
+
+/**
+ * 화면에 보여줄 일정 하나.
+ * 반복 일정은 날짜마다 하나씩 펼쳐지며, event_date 는 그 칸의 날짜, series_date 는 원래 시작 날짜다.
+ */
+export type CalendarEvent = EventRow & {
+  /** 원래 저장된 시작 날짜 (반복 일정이 아니면 event_date 와 같다) */
+  series_date: string;
+  /** 목록에서 쓰는 고유 이름. 반복 일정은 같은 id 가 여러 날짜에 나오므로 날짜를 붙인다. */
+  key: string;
+};
 
 export type EventInput = {
   id?: string;
@@ -16,18 +28,64 @@ export type EventInput = {
   start_time: string | null;
   end_time: string | null;
   memo: string | null;
+  /** 반복 방법 (반복 안 하면 null) */
+  repeat: string | null;
+  /** 반복이 끝나는 날 (없으면 계속) */
+  repeat_until: string | null;
 };
 
 const KEY = ['events'];
 
 /** 일정의 시간을 보여줄 글자로 바꾼다. 예: '하루 종일', '14:30', '14:30 – 16:00' */
-export function timeLabel(event: CalendarEvent): string {
+export function timeLabel(event: Pick<EventRow, 'start_time' | 'end_time'>): string {
   if (!event.start_time) return '하루 종일';
   const start = formatTime(event.start_time);
   return event.end_time ? `${start} – ${formatTime(event.end_time)}` : start;
 }
 
-/** 한 달 동안의 일정. 날짜순, 같은 날이면 시작 시간순이다. */
+/** 저장된 일정 줄들을 start ~ end 기간의 날짜별 일정으로 펼친다. 날짜순, 같은 날이면 시작 시간순. */
+export function expandEvents(rows: EventRow[], start: string, end: string): CalendarEvent[] {
+  const result: CalendarEvent[] = [];
+  for (const row of rows) {
+    const repeat = row.repeat ?? null;
+    if (isRepeat(repeat)) {
+      for (const date of occurrencesBetween(row.event_date, repeat, start, end, row.repeat_until)) {
+        result.push({ ...row, event_date: date, series_date: row.event_date, key: `${row.id}:${date}` });
+      }
+    } else if (row.event_date >= start && row.event_date <= end) {
+      result.push({ ...row, repeat: null, series_date: row.event_date, key: row.id });
+    }
+  }
+  return result.sort((a, b) => {
+    if (a.event_date !== b.event_date) return a.event_date.localeCompare(b.event_date);
+    if (a.start_time === b.start_time) return 0;
+    if (a.start_time === null) return -1;
+    if (b.start_time === null) return 1;
+    return a.start_time.localeCompare(b.start_time);
+  });
+}
+
+/**
+ * start ~ end 기간의 일정을 불러와 날짜별로 펼친다.
+ * 로그인했으면 DB, 아니면 기기 저장소에서 읽는다. 위젯도 이 함수를 쓴다.
+ */
+export async function loadEvents(start: string, end: string): Promise<CalendarEvent[]> {
+  if (!hasActiveSession()) {
+    return expandEvents(await listLocalEvents(start, end), start, end);
+  }
+  const { data, error } = await supabase
+    .from('events')
+    .select('*')
+    .lte('event_date', end)
+    // 기간 안에 시작하는 일정 + 그 전에 시작했지만 아직 끝나지 않은 반복 일정
+    .or(
+      `event_date.gte.${start},and(repeat.not.is.null,or(repeat_until.is.null,repeat_until.gte.${start}))`,
+    );
+  check(error);
+  return expandEvents(data ?? [], start, end);
+}
+
+/** 한 달 동안의 일정. 반복 일정은 날짜마다 펼쳐진다. */
 export function useEvents(month: YearMonth) {
   const { session } = useAuth();
   const scope = session?.user.id ?? 'local';
@@ -35,57 +93,43 @@ export function useEvents(month: YearMonth) {
 
   return useQuery({
     queryKey: [...KEY, scope, start, end],
-    queryFn: async () => {
-      if (!session) {
-        return listLocalEvents(start, end);
-      }
-      const { data, error } = await supabase
-        .from('events')
-        .select('*')
-        .gte('event_date', start)
-        .lte('event_date', end)
-        .order('event_date')
-        .order('start_time', { ascending: true, nullsFirst: true });
-      check(error);
-      return data ?? [];
-    },
+    queryFn: () => loadEvents(start, end),
   });
 }
 
 /** 오늘부터 `days` 일 뒤까지의 일정. 알림을 예약할 때 쓴다. */
 export function useUpcomingEvents(days: number) {
+  const { session } = useAuth();
+  const scope = session?.user.id ?? 'local';
   const start = todayISO();
   const end = addDays(start, days);
 
   return useQuery({
     // KEY 로 시작하므로 일정을 추가·수정·삭제하면 이 목록도 함께 새로 받아온다.
-    queryKey: [...KEY, 'upcoming', start, end],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from('events')
-        .select('title, event_date, start_time')
-        .gte('event_date', start)
-        .lte('event_date', end)
-        .order('event_date');
-      check(error);
-      return data ?? [];
-    },
+    queryKey: [...KEY, scope, 'upcoming', start, end],
+    queryFn: () => loadEvents(start, end),
   });
 }
 
 export function useSaveEvent() {
   return useInvalidatingMutation(KEY, async ({ id, ...values }: EventInput) => {
+    const repeat = isRepeat(values.repeat) ? values.repeat : null;
+    const row = { ...values, repeat, repeat_until: repeat ? values.repeat_until : null };
+    if (row.repeat_until && row.repeat_until < row.event_date) {
+      throw new Error('반복 종료일은 시작 날짜보다 늦어야 합니다.');
+    }
     if (!hasActiveSession()) {
-      await saveLocalEvent({ id, ...values });
+      await saveLocalEvent({ id, ...row });
       return;
     }
     const { error } = id
-      ? await supabase.from('events').update(values).eq('id', id)
-      : await supabase.from('events').insert(values);
+      ? await supabase.from('events').update(row).eq('id', id)
+      : await supabase.from('events').insert(row);
     check(error);
   });
 }
 
+/** 일정을 지운다. 반복 일정이면 반복 전체가 지워진다. */
 export function useDeleteEvent() {
   return useInvalidatingMutation(KEY, async (id: string) => {
     if (!hasActiveSession()) {
@@ -95,4 +139,31 @@ export function useDeleteEvent() {
     const { error } = await supabase.from('events').delete().eq('id', id);
     check(error);
   });
+}
+
+/**
+ * 반복 일정을 이 날짜부터 끝낸다(이전 날짜는 그대로 남는다).
+ * 첫 날짜에서 끝내면 일정 전체를 지운다.
+ */
+export function useEndEventRepeat() {
+  return useInvalidatingMutation(
+    KEY,
+    async ({ event, from }: { event: CalendarEvent; from: string }) => {
+      if (from <= event.series_date) {
+        if (!hasActiveSession()) await deleteLocalEvent(event.id);
+        else check((await supabase.from('events').delete().eq('id', event.id)).error);
+        return;
+      }
+      const until = addDays(from, -1);
+      if (!hasActiveSession()) {
+        await saveLocalEvent({ ...event, event_date: event.series_date, repeat_until: until });
+        return;
+      }
+      const { error } = await supabase
+        .from('events')
+        .update({ repeat_until: until })
+        .eq('id', event.id);
+      check(error);
+    },
+  );
 }
