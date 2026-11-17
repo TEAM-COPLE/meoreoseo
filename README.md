@@ -137,6 +137,17 @@ npx eas-cli@latest build -p android --profile preview
 - 다른 기기(웹 포함)에서 추가한 할 일·일정은 휴대폰 앱을 한 번 열어야 알림에 반영된다.
 - 웹에서는 알림을 지원하지 않는다.
 
+## 날씨
+
+오늘 화면 맨 위에 고른 지역의 지금 날씨, 체감 기온, 최고·최저 기온, 비 올 확률을 보여준다.
+비 올 확률이 50% 이상이면 우산을 챙기라고 알려준다.
+
+- 지역은 "지역 변경"에서 이름을 직접 입력해 찾고(예: 해운대, 판교, 도쿄), 결과 중 하나를 누른다.
+- 고른 지역은 기기 안에 저장한다(기본: 서울). 위치 권한은 묻지 않는다.
+- 날씨: [Open-Meteo](https://open-meteo.com), 지역 검색: OpenStreetMap [Nominatim](https://nominatim.org). 둘 다 무료이고 API 키가 없다.
+- Nominatim 이용 규칙상 글자를 칠 때마다가 아니라 "검색"을 눌렀을 때만 찾는다.
+- 코드는 `src/lib/weather.ts`, `src/hooks/use-weather.ts`, `src/components/weather-city-picker.tsx` 에 있다.
+
 ## 폴더 구조
 
 ```
