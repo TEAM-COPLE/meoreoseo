@@ -1,6 +1,6 @@
 import { router, useLocalSearchParams } from 'expo-router';
 import { useMemo, useState } from 'react';
-import { Platform, Pressable, StyleSheet, View } from 'react-native';
+import { Platform, Pressable, StyleSheet, View, type ViewStyle } from 'react-native';
 
 import { ThemedText } from '@/components/themed-text';
 import { DateField } from '@/components/ui/date-field';
@@ -461,9 +461,10 @@ const styles = StyleSheet.create({
   itemBody: {
     flex: 1,
   },
+  // userSelect 는 웹 전용이라 RN ViewStyle 타입에 없어 캐스팅한다.
   noSelect: {
     userSelect: 'none',
-  },
+  } as ViewStyle,
   pressed: {
     opacity: 0.6,
   },

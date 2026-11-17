@@ -261,9 +261,10 @@ const styles = StyleSheet.create({
     padding: Spacing.three,
     gap: Spacing.two,
   },
+  // userSelect 는 웹 전용이라 RN ViewStyle 타입에 없어 캐스팅한다.
   noSelect: {
     userSelect: 'none',
-  },
+  } as ViewStyle,
   overlayContainer: {
     position: 'absolute',
     left: 0,

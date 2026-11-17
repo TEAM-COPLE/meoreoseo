@@ -1,5 +1,12 @@
 import { useEffect } from 'react';
-import { ActivityIndicator, Platform, Pressable, StyleSheet, View } from 'react-native';
+import {
+  ActivityIndicator,
+  Platform,
+  Pressable,
+  StyleSheet,
+  View,
+  type ViewStyle,
+} from 'react-native';
 
 import { ThemedText } from '@/components/themed-text';
 import { Button } from '@/components/ui/button';
@@ -200,9 +207,10 @@ const styles = StyleSheet.create({
     shadowRadius: 16,
     elevation: 10,
   },
+  // userSelect 는 웹 전용이라 RN ViewStyle 타입에 없어 캐스팅한다.
   webBar: {
     userSelect: 'none',
-  },
+  } as ViewStyle,
   left: {
     flexDirection: 'row',
     alignItems: 'center',
