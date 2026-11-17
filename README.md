@@ -13,6 +13,49 @@
    `main` 에 합쳐지면 웹사이트가 자동으로 다시 배포된다.
 3. 올리기 전에 `npx tsc --noEmit` 과 `npx expo lint` 를 돌린다.
 4. 데이터베이스 구조를 바꿀 때는 `supabase/migrations/` 에 SQL 파일을 추가한다.
+5. `app.json` 의 `owner` 와 `extra.eas.projectId` 는 팀 Expo 프로젝트 값이다. 바꿔서 올리지 않는다
+   (바꾸면 APK·업데이트가 다른 Expo 계정으로 간다).
+
+### 최신 코드로 작업하기
+
+작업을 시작할 때 항상 최신 `main` 에서 가지를 만든다. 오래된 `main` 에서 시작하면 그사이 합쳐진 기능이 빠지고 충돌이 난다.
+
+```bash
+git checkout main
+```
+
+```bash
+git pull origin main
+```
+
+```bash
+git checkout -b feature/할일-이름
+```
+
+PR 을 올리기 전에 `main` 이 앞서 갔는지 확인한다. 아래 명령에 뭔가 나오면 `git merge origin/main` 으로 먼저 합친다.
+
+```bash
+git fetch origin
+```
+
+```bash
+git log --oneline HEAD..origin/main
+```
+
+### 서로 같은 버전인지 확인하기
+
+앱(휴대폰·웹)의 **계정 → 버전 정보** 칸에서 지금 돌고 있는 코드를 볼 수 있다.
+
+| 항목 | 뜻 |
+| --- | --- |
+| 앱 버전 | `app.json` 의 `version`. 같은 버전의 APK 끼리만 업데이트를 주고받는다. |
+| 코드 | 이 앱을 만든 GitHub 커밋 번호 앞 7글자와 만든 시각. **팀원과 이 값을 비교한다.** "커밋 안 한 수정 포함"이 붙으면 커밋하지 않은 코드로 만든 것이다. |
+| 받은 방식 | APK 에 들어 있던 코드 / 업데이트로 받은 코드 / 개발 서버 / 웹사이트 |
+
+- "최신 버전 확인"을 누르면 GitHub `main` 의 최신 커밋과 비교한다. 휴대폰은 받을 업데이트가 있으면 받아서 바로 다시 시작한다.
+- 커밋 번호는 빌드·업데이트·웹 배포 때 `app.config.js` 가 자동으로 넣는다
+  (Expo 빌드 서버·Vercel 은 그쪽이 알려주는 값, 내 컴퓨터는 `git` 에서 읽는다).
+- 업데이트(`eas update`)는 커밋을 마친 뒤 보낸다. 그래야 버전 정보에 정확한 커밋 번호가 남는다.
 
 비밀 값(Supabase secret key, 구글·카카오 Client Secret)은 저장소에 올리지 않는다.
 
