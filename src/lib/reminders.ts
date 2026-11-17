@@ -1,5 +1,7 @@
 import type { Tables } from './database.types';
-import { addDays, formatTime, parseISODate, toISODate } from './dates';
+import { addDays, formatDate, formatTime, parseISODate, toISODate } from './dates';
+import type { DayForecast } from './weather';
+import { describeWeather, formatTemperature } from './weather-format';
 
 /**
  * 알림 계획.
@@ -20,6 +22,8 @@ export type NotificationSettings = {
   habits: boolean;
   /** 오류 알림: 앱에서 오류가 나면 바로 알림으로 알려준다. "알림 받기"와 따로 켜고 끈다. */
   errors: boolean;
+  /** 아침 브리핑: 매일 아침 날씨·할 일·일정을 한 번에 요약해서 알림 */
+  briefing: boolean;
 };
 
 export const DEFAULT_SETTINGS: NotificationSettings = {
@@ -28,8 +32,15 @@ export const DEFAULT_SETTINGS: NotificationSettings = {
   events: true,
   habits: true,
   errors: true,
+  briefing: true,
 };
 
+/** 아침 브리핑을 보내는 시각(오전 7시) */
+export const BRIEFING_HOUR = 7;
+/** 아침 브리핑을 며칠 치 미리 예약해 둘지. 날씨 예보가 3일치라 3일로 맞춘다. */
+const BRIEFING_DAYS_AHEAD = 3;
+/** 비 올 확률이 이 값 이상이면 우산을 챙기라고 알려준다. */
+const UMBRELLA_CHANCE = 50;
 /** 할 일 마감일과 하루 종일 일정을 알리는 시각(오전 9시) */
 export const MORNING_HOUR = 9;
 /** 습관을 알리는 시각(오후 9시) */
@@ -57,7 +68,52 @@ export type ReminderData = {
   habitCount: number;
   /** 그중 오늘 이미 체크한 개수 */
   habitsDoneToday: number;
+  /** 날씨 예보. 아직 못 받았거나 실패했으면 비워 두고, 브리핑에서 날씨 줄만 뺀다. */
+  forecast?: { city: string; days: DayForecast[] } | null;
 };
+
+/** 브리핑 알림의 날씨 한 줄. 예: "🌧️ 광명 5°/9° 비 · 비 60% ☂️ 우산 챙기세요" */
+function weatherLine(city: string, day: DayForecast): string {
+  const { icon, label } = describeWeather(day.code, true);
+  let line = `${icon} ${city} ${formatTemperature(day.low)}/${formatTemperature(day.high)} ${label}`;
+  if (day.rainChance !== null && day.rainChance > 0) line += ` · 비 ${day.rainChance}%`;
+  if (day.rainChance !== null && day.rainChance >= UMBRELLA_CHANCE) line += ' ☂️ 우산 챙기세요';
+  return line;
+}
+
+/** 그날 아침 브리핑 알림의 내용을 만든다. */
+function briefingFor(date: string, data: ReminderData): Reminder {
+  const lines: string[] = [];
+
+  const day = data.forecast?.days.find((item) => item.date === date);
+  if (data.forecast && day) lines.push(weatherLine(data.forecast.city, day));
+
+  // 마감이 그날이거나 이미 지난(밀린) 할 일
+  const todos = data.todos.filter((todo) => !todo.done && todo.due_date && todo.due_date <= date);
+  if (todos.length > 0) {
+    const overdue = todos.filter((todo) => (todo.due_date as string) < date).length;
+    lines.push(`✅ 할 일 ${todos.length}개${overdue > 0 ? ` (밀린 일 ${overdue}개)` : ''}`);
+  }
+
+  // 그날 일정. 하루 종일 일정을 먼저, 그다음 시작 시간 순서로 첫 일정을 보여준다.
+  const events = data.events
+    .filter((event) => event.event_date === date)
+    .sort((a, b) => (a.start_time ?? '').localeCompare(b.start_time ?? ''));
+  if (events.length > 0) {
+    const first = events[0];
+    const when = first.start_time ? `${formatTime(first.start_time)} ` : '';
+    const more = events.length > 1 ? ` 외 ${events.length - 1}개` : '';
+    lines.push(`📅 ${when}${first.title}${more}`);
+  }
+
+  if (todos.length === 0 && events.length === 0) lines.push('오늘은 예정된 할 일과 일정이 없어요.');
+
+  return {
+    at: at(date, BRIEFING_HOUR),
+    title: `좋은 아침이에요 · ${formatDate(date)}`,
+    body: lines.join('\n'),
+  };
+}
 
 /** 'YYYY-MM-DD' 날짜의 몇 시 몇 분을 Date 로 만든다. */
 function at(isoDate: string, hour: number, minute = 0): Date {
@@ -108,6 +164,12 @@ export function buildReminders(
           body: '오늘 하루 종일 일정입니다.',
         });
       }
+    }
+  }
+
+  if (settings.briefing) {
+    for (let offset = 0; offset < BRIEFING_DAYS_AHEAD; offset++) {
+      reminders.push(briefingFor(addDays(today, offset), data));
     }
   }
 
