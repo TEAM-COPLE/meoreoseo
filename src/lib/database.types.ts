@@ -72,6 +72,16 @@ type TransactionRow = {
   created_at: string;
 };
 
+type UserSettingsRow = {
+  user_id: string;
+  weather_place_id: string | null;
+  weather_name: string | null;
+  weather_detail: string | null;
+  weather_latitude: number | null;
+  weather_longitude: number | null;
+  updated_at: string;
+};
+
 export type Database = {
   __InternalSupabase: {
     PostgrestVersion: '14.18';
@@ -95,6 +105,16 @@ export type Database = {
       transactions: Table<
         TransactionRow,
         'id' | 'user_id' | 'memo' | 'occurred_on' | 'source' | 'created_at'
+      >;
+      user_settings: Table<
+        UserSettingsRow,
+        | 'user_id'
+        | 'weather_place_id'
+        | 'weather_name'
+        | 'weather_detail'
+        | 'weather_latitude'
+        | 'weather_longitude'
+        | 'updated_at'
       >;
     };
     Views: { [_ in never]: never };
