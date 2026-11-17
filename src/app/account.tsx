@@ -4,6 +4,7 @@ import { ScrollView, StyleSheet } from 'react-native';
 
 import { NotificationSettingsCard } from '@/components/notification-settings-card';
 import { ThemedText } from '@/components/themed-text';
+import { VersionInfoCard } from '@/components/version-info-card';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/screen';
 import { Segmented } from '@/components/ui/segmented';
@@ -115,6 +116,8 @@ export default function AccountScreen() {
       ) : (
         <Button label="계정 로그인 / 연동하기" onPress={() => router.push('/sign-in')} />
       )}
+
+      <VersionInfoCard />
     </ScrollView>
   );
 }
