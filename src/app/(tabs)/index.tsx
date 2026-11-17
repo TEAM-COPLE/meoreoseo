@@ -1,19 +1,22 @@
 import { router } from 'expo-router';
-import type { PropsWithChildren } from 'react';
+import { useState, type PropsWithChildren } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, View } from 'react-native';
 
 import { ThemedText } from '@/components/themed-text';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Card, Screen } from '@/components/ui/screen';
+import { WeatherCityPicker } from '@/components/weather-city-picker';
 import { Spacing } from '@/constants/theme';
 import { timeLabel, useEvents } from '@/hooks/use-events';
 import { streakOf, useHabitLogs, useHabits, useToggleHabitLog } from '@/hooks/use-habits';
 import { useTheme } from '@/hooks/use-theme';
 import { useTodos, useToggleTodo, type Todo } from '@/hooks/use-todos';
 import { useTransactions } from '@/hooks/use-transactions';
+import { useSaveWeatherCity, useWeather, useWeatherCity } from '@/hooks/use-weather';
 import { formatDate, toISODate, todayISO, yearMonthOf } from '@/lib/dates';
 import { formatWon } from '@/lib/format';
+import { describeWeather, formatTemperature } from '@/lib/weather';
 
 /**
  * 오늘 화면. 앱을 열면 가장 먼저 보인다.
@@ -29,11 +32,79 @@ export default function TodayScreen() {
         {formatDate(today)}
       </ThemedText>
 
+      <WeatherSection />
       <TodoSection today={today} />
       <EventSection today={today} />
       <HabitSection today={today} />
       <MoneySection today={today} />
     </Screen>
+  );
+}
+
+/** 비 올 확률이 이 값(%) 이상이면 우산을 챙기라고 알려준다. */
+const UMBRELLA_RAIN_CHANCE = 50;
+
+/** 고른 도시의 지금 날씨와 오늘 최고·최저 기온. "지역 변경"으로 도시를 바꾼다. */
+function WeatherSection() {
+  const city = useWeatherCity();
+  const weather = useWeather(city.data);
+  const saveCity = useSaveWeatherCity();
+  // 도시 고르는 목록을 펼쳤는지 여부
+  const [picking, setPicking] = useState(false);
+
+  const now = weather.data;
+  const look = now ? describeWeather(now.code, now.isDay) : null;
+
+  return (
+    <Section
+      title={city.data ? `날씨 · ${city.data.name}` : '날씨'}
+      linkLabel={picking ? '닫기' : '지역 변경'}
+      onLink={() => setPicking((open) => !open)}>
+      {picking ? (
+        <WeatherCityPicker
+          disabled={saveCity.isPending}
+          onSelect={(place) => {
+            saveCity.mutate(place);
+            setPicking(false);
+          }}
+        />
+      ) : null}
+
+      <SectionStatus
+        loading={city.isPending || weather.isPending}
+        error={weather.error}
+        onRetry={weather.refetch}
+      />
+
+      {now && look ? (
+        <>
+          <View style={styles.weatherMain}>
+            <ThemedText style={styles.weatherIcon} accessibilityLabel={look.label}>
+              {look.icon}
+            </ThemedText>
+            <View style={styles.rowBody}>
+              <ThemedText type="default" style={styles.weatherTemp}>
+                {formatTemperature(now.temperature)} {look.label}
+              </ThemedText>
+              <ThemedText type="small" themeColor="textSecondary">
+                체감 {formatTemperature(now.feelsLike)} · 최고 {formatTemperature(now.high)} · 최저{' '}
+                {formatTemperature(now.low)}
+              </ThemedText>
+            </View>
+          </View>
+          {now.rainChance !== null ? (
+            <ThemedText
+              type="small"
+              themeColor={now.rainChance >= UMBRELLA_RAIN_CHANCE ? 'tint' : 'textSecondary'}>
+              {`비 올 확률 ${now.rainChance}%`}
+              {now.rainChance >= UMBRELLA_RAIN_CHANCE ? ' · 우산을 챙기세요' : ''}
+            </ThemedText>
+          ) : null}
+        </>
+      ) : null}
+
+      {saveCity.error ? <SaveError /> : null}
+    </Section>
   );
 }
 
@@ -349,5 +420,19 @@ const styles = StyleSheet.create({
   },
   pressed: {
     opacity: 0.6,
+  },
+  weatherMain: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.three,
+  },
+  weatherIcon: {
+    fontSize: 40,
+    lineHeight: 48,
+  },
+  weatherTemp: {
+    fontSize: 22,
+    lineHeight: 30,
+    fontWeight: 700,
   },
 });
