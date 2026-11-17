@@ -1,18 +1,17 @@
 import { router, useLocalSearchParams } from 'expo-router';
 import { useMemo, useState } from 'react';
-import { Pressable, StyleSheet, View } from 'react-native';
+import { Platform, Pressable, StyleSheet, View } from 'react-native';
 
 import { ThemedText } from '@/components/themed-text';
-import { Button } from '@/components/ui/button';
 import { DateField } from '@/components/ui/date-field';
 import { FormModal } from '@/components/ui/form-modal';
 import { MonthSwitcher } from '@/components/ui/month-switcher';
 import { Card, ListStatus, Screen } from '@/components/ui/screen';
 import { Segmented } from '@/components/ui/segmented';
-import { SelectionBar, SelectionIndicator } from '@/components/ui/selection-bar';
+import { SelectionBar, SelectionHeaderActions, SelectionIndicator } from '@/components/ui/selection-bar';
 import { TextField } from '@/components/ui/text-field';
 import { Radius, Spacing } from '@/constants/theme';
-import { useMultiSelect } from '@/hooks/use-multi-select';
+import { hasSelectionModifier, useMultiSelect } from '@/hooks/use-multi-select';
 import { useTheme } from '@/hooks/use-theme';
 import {
   CATEGORIES,
@@ -72,7 +71,7 @@ export default function MoneyScreen() {
   const items = transactions.data ?? [];
   const itemIds = items.map((item) => item.id);
   const selectedVisibleIds = itemIds.filter((id) => multi.isSelected(id));
-  const isSelecting = selectedVisibleIds.length > 0;
+  const isSelecting = itemIds.length > 0 && (multi.active || selectedVisibleIds.length > 0);
 
   function changeMonth(next: typeof month) {
     setMonth(next);
@@ -140,9 +139,19 @@ export default function MoneyScreen() {
     <Screen
       title="가계부"
       action={
-        isSelecting ? undefined : (
-          <Button label="추가" size="small" onPress={() => setEditing('new')} />
-        )
+        <SelectionHeaderActions
+          selecting={isSelecting}
+          canSelect={itemIds.length > 0}
+          onAdd={() => setEditing('new')}
+          onStartSelect={() => {
+            setBulkError(null);
+            multi.enter();
+          }}
+          onCancelSelect={() => {
+            multi.clear();
+            setBulkError(null);
+          }}
+        />
       }
       overlay={
         isSelecting ? (
@@ -151,6 +160,10 @@ export default function MoneyScreen() {
             totalCount={itemIds.length}
             deleting={removeMany.isPending}
             onSelectAll={() => multi.selectAll(itemIds)}
+            onDeselectAll={() => {
+              multi.deselectAll();
+              setBulkError(null);
+            }}
             onClear={() => {
               multi.clear();
               setBulkError(null);
@@ -224,13 +237,23 @@ export default function MoneyScreen() {
                   accessibilityLabel={`${item.category} ${formatWon(item.amount)} ${isSelecting ? '선택' : '수정'}`}
                   accessibilityState={selected ? { selected: true } : undefined}
                   delayLongPress={320}
-                  onPress={() => (isSelecting ? multi.toggle(item.id) : setEditing(item))}
+                  onPress={(e) => {
+                    if (isSelecting) {
+                      multi.handlePress(item.id, itemIds, e);
+                    } else if (hasSelectionModifier(e)) {
+                      setBulkError(null);
+                      multi.start(item.id);
+                    } else {
+                      setEditing(item);
+                    }
+                  }}
                   onLongPress={() => {
                     setBulkError(null);
                     multi.start(item.id);
                   }}
                   style={({ pressed }) => [
                     styles.itemRow,
+                    isSelecting && Platform.OS === 'web' && styles.noSelect,
                     selected && {
                       backgroundColor: theme.tintSoft,
                       borderColor: theme.tint,
@@ -437,6 +460,9 @@ const styles = StyleSheet.create({
   },
   itemBody: {
     flex: 1,
+  },
+  noSelect: {
+    userSelect: 'none',
   },
   pressed: {
     opacity: 0.6,

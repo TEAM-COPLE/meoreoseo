@@ -2,10 +2,12 @@ import { router } from 'expo-router';
 import type { PropsWithChildren, ReactNode } from 'react';
 import {
   ActivityIndicator,
+  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
   View,
+  type GestureResponderEvent,
   type StyleProp,
   type ViewStyle,
 } from 'react-native';
@@ -161,13 +163,15 @@ export function Card({
   onPress,
   onLongPress,
   selected = false,
+  selecting = false,
   accessibilityLabel,
   accessibilityHint,
   style,
 }: PropsWithChildren<{
-  onPress?: () => void;
+  onPress?: (event: GestureResponderEvent) => void;
   onLongPress?: () => void;
   selected?: boolean;
+  selecting?: boolean;
   accessibilityLabel?: string;
   accessibilityHint?: string;
   style?: StyleProp<ViewStyle>;
@@ -179,6 +183,7 @@ export function Card({
       backgroundColor: selected ? theme.tintSoft : theme.backgroundElement,
       borderColor: selected ? theme.tint : 'transparent',
     },
+    selecting && Platform.OS === 'web' && styles.noSelect,
     style,
   ];
 
@@ -255,6 +260,9 @@ const styles = StyleSheet.create({
     borderWidth: 1.5,
     padding: Spacing.three,
     gap: Spacing.two,
+  },
+  noSelect: {
+    userSelect: 'none',
   },
   overlayContainer: {
     position: 'absolute',

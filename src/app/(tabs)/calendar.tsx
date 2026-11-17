@@ -9,7 +9,7 @@ import { FormModal } from '@/components/ui/form-modal';
 import { MonthCalendar } from '@/components/ui/month-calendar';
 import { Card, ListStatus, Screen } from '@/components/ui/screen';
 import { Segmented } from '@/components/ui/segmented';
-import { SelectionBar, SelectionIndicator } from '@/components/ui/selection-bar';
+import { SelectionBar, SelectionHeaderActions, SelectionIndicator } from '@/components/ui/selection-bar';
 import { TextField } from '@/components/ui/text-field';
 import { Spacing } from '@/constants/theme';
 import {
@@ -21,7 +21,7 @@ import {
   useSaveEvent,
   type CalendarEvent,
 } from '@/hooks/use-events';
-import { useMultiSelect } from '@/hooks/use-multi-select';
+import { hasSelectionModifier, useMultiSelect } from '@/hooks/use-multi-select';
 import {
   formatDate,
   formatTime,
@@ -80,7 +80,7 @@ export default function CalendarScreen() {
   const dayEvents = eventsByDate.get(selected) ?? [];
   const dayEventIds = dayEvents.map((event) => event.id);
   const selectedDayIds = dayEventIds.filter((id) => multi.isSelected(id));
-  const isSelecting = selectedDayIds.length > 0;
+  const isSelecting = dayEventIds.length > 0 && (multi.active || selectedDayIds.length > 0);
 
   function selectDate(nextDate: string) {
     setSelected(nextDate);
@@ -125,9 +125,19 @@ export default function CalendarScreen() {
     <Screen
       title="일정"
       action={
-        isSelecting ? undefined : (
-          <Button label="추가" size="small" onPress={() => setEditing('new')} />
-        )
+        <SelectionHeaderActions
+          selecting={isSelecting}
+          canSelect={dayEventIds.length > 0}
+          onAdd={() => setEditing('new')}
+          onStartSelect={() => {
+            setBulkError(null);
+            multi.enter();
+          }}
+          onCancelSelect={() => {
+            multi.clear();
+            setBulkError(null);
+          }}
+        />
       }
       overlay={
         isSelecting ? (
@@ -136,6 +146,10 @@ export default function CalendarScreen() {
             totalCount={dayEventIds.length}
             deleting={removeMany.isPending}
             onSelectAll={() => multi.selectAll(dayEventIds)}
+            onDeselectAll={() => {
+              multi.deselectAll();
+              setBulkError(null);
+            }}
             onClear={() => {
               multi.clear();
               setBulkError(null);
@@ -178,7 +192,17 @@ export default function CalendarScreen() {
           <Card
             key={event.key}
             selected={isItemSelected}
-            onPress={() => (isSelecting ? multi.toggle(event.id) : setEditing(event))}
+            selecting={isSelecting}
+            onPress={(e) => {
+              if (isSelecting) {
+                multi.handlePress(event.id, dayEventIds, e);
+              } else if (hasSelectionModifier(e)) {
+                setBulkError(null);
+                multi.start(event.id);
+              } else {
+                setEditing(event);
+              }
+            }}
             onLongPress={() => {
               setBulkError(null);
               multi.start(event.id);

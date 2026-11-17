@@ -3,10 +3,9 @@ import { useMemo, useState } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 
 import { ThemedText } from '@/components/themed-text';
-import { Button } from '@/components/ui/button';
 import { FormModal } from '@/components/ui/form-modal';
 import { Card, ListStatus, Screen } from '@/components/ui/screen';
-import { SelectionBar, SelectionIndicator } from '@/components/ui/selection-bar';
+import { SelectionBar, SelectionHeaderActions, SelectionIndicator } from '@/components/ui/selection-bar';
 import { TextField } from '@/components/ui/text-field';
 import { Radius, Spacing } from '@/constants/theme';
 import {
@@ -19,7 +18,7 @@ import {
   useToggleHabitLog,
   type Habit,
 } from '@/hooks/use-habits';
-import { useMultiSelect } from '@/hooks/use-multi-select';
+import { hasSelectionModifier, useMultiSelect } from '@/hooks/use-multi-select';
 import { useTheme } from '@/hooks/use-theme';
 import { dayOf, lastDays, weekdayOf } from '@/lib/dates';
 import { confirm, errorMessage } from '@/lib/format';
@@ -84,7 +83,8 @@ export default function HabitsScreen() {
   const habitItems = habits.data ?? [];
   const habitIds = habitItems.map((habit) => habit.id);
   const selectedVisibleIds = habitIds.filter((id) => multi.isSelected(id));
-  const isSelecting = selectedVisibleIds.length > 0;
+  const canSelect = Boolean(logs.data) && habitIds.length > 0;
+  const isSelecting = canSelect && (multi.active || selectedVisibleIds.length > 0);
 
   async function deleteSingleHabit(habit: Habit) {
     const ok = await confirm({
@@ -124,9 +124,19 @@ export default function HabitsScreen() {
       title="습관"
       onBack={leave}
       action={
-        isSelecting ? undefined : (
-          <Button label="추가" size="small" onPress={() => setEditing('new')} />
-        )
+        <SelectionHeaderActions
+          selecting={isSelecting}
+          canSelect={canSelect}
+          onAdd={() => setEditing('new')}
+          onStartSelect={() => {
+            setDeleteError(null);
+            multi.enter();
+          }}
+          onCancelSelect={() => {
+            multi.clear();
+            setDeleteError(null);
+          }}
+        />
       }
       overlay={
         isSelecting ? (
@@ -135,6 +145,10 @@ export default function HabitsScreen() {
             totalCount={habitIds.length}
             deleting={removeMany.isPending}
             onSelectAll={() => multi.selectAll(habitIds)}
+            onDeselectAll={() => {
+              multi.deselectAll();
+              setDeleteError(null);
+            }}
             onClear={() => {
               multi.clear();
               setDeleteError(null);
@@ -169,7 +183,8 @@ export default function HabitsScreen() {
               <Card
                 key={habit.id}
                 selected={selected}
-                onPress={isSelecting ? () => multi.toggle(habit.id) : undefined}
+                selecting={isSelecting}
+                onPress={isSelecting ? (e) => multi.handlePress(habit.id, habitIds, e) : undefined}
                 onLongPress={() => {
                   setDeleteError(null);
                   multi.start(habit.id);
@@ -185,7 +200,14 @@ export default function HabitsScreen() {
                       accessibilityRole="button"
                       accessibilityLabel={`${habit.name} 수정`}
                       delayLongPress={320}
-                      onPress={() => setEditing(habit)}
+                      onPress={(e) => {
+                        if (hasSelectionModifier(e)) {
+                          setDeleteError(null);
+                          multi.start(habit.id);
+                          return;
+                        }
+                        setEditing(habit);
+                      }}
                       onLongPress={() => {
                         setDeleteError(null);
                         multi.start(habit.id);
@@ -233,9 +255,9 @@ export default function HabitsScreen() {
                           accessibilityLabel={`${habit.name}, ${dayOf(date)}일`}
                           accessibilityState={{ checked: done }}
                           delayLongPress={320}
-                          onPress={() =>
+                          onPress={(e) =>
                             isSelecting
-                              ? multi.toggle(habit.id)
+                              ? multi.handlePress(habit.id, habitIds, e)
                               : toggle.mutate({ habitId: habit.id, date, done })
                           }
                           onLongPress={() => {

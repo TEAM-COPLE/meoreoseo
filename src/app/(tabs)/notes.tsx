@@ -3,12 +3,11 @@ import { useDeferredValue, useMemo, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 
 import { ThemedText } from '@/components/themed-text';
-import { Button } from '@/components/ui/button';
 import { Card, ListStatus, Screen } from '@/components/ui/screen';
-import { SelectionBar, SelectionIndicator } from '@/components/ui/selection-bar';
+import { SelectionBar, SelectionHeaderActions, SelectionIndicator } from '@/components/ui/selection-bar';
 import { TextField } from '@/components/ui/text-field';
 import { Spacing } from '@/constants/theme';
-import { useMultiSelect } from '@/hooks/use-multi-select';
+import { hasSelectionModifier, useMultiSelect } from '@/hooks/use-multi-select';
 import { useDeleteNotes, useNotes } from '@/hooks/use-notes';
 import { formatDate, toISODate } from '@/lib/dates';
 import { confirm, errorMessage } from '@/lib/format';
@@ -38,7 +37,7 @@ export default function NotesScreen() {
 
   const visibleIds = visible.map((note) => note.id);
   const selectedVisibleIds = visibleIds.filter((id) => multi.isSelected(id));
-  const isSelecting = selectedVisibleIds.length > 0;
+  const isSelecting = visibleIds.length > 0 && (multi.active || selectedVisibleIds.length > 0);
 
   async function deleteSelected() {
     if (selectedVisibleIds.length === 0) return;
@@ -62,9 +61,20 @@ export default function NotesScreen() {
     <Screen
       title="메모"
       action={
-        isSelecting ? undefined : (
-          <Button label="새 메모" size="small" onPress={() => router.push('/note/new')} />
-        )
+        <SelectionHeaderActions
+          selecting={isSelecting}
+          canSelect={visibleIds.length > 0}
+          addLabel="새 메모"
+          onAdd={() => router.push('/note/new')}
+          onStartSelect={() => {
+            setBulkError(null);
+            multi.enter();
+          }}
+          onCancelSelect={() => {
+            multi.clear();
+            setBulkError(null);
+          }}
+        />
       }
       overlay={
         isSelecting ? (
@@ -73,6 +83,10 @@ export default function NotesScreen() {
             totalCount={visibleIds.length}
             deleting={removeMany.isPending}
             onSelectAll={() => multi.selectAll(visibleIds)}
+            onDeselectAll={() => {
+              multi.deselectAll();
+              setBulkError(null);
+            }}
             onClear={() => {
               multi.clear();
               setBulkError(null);
@@ -116,9 +130,17 @@ export default function NotesScreen() {
           <Card
             key={note.id}
             selected={selected}
-            onPress={() =>
-              isSelecting ? multi.toggle(note.id) : router.push(`/note/${note.id}`)
-            }
+            selecting={isSelecting}
+            onPress={(e) => {
+              if (isSelecting) {
+                multi.handlePress(note.id, visibleIds, e);
+              } else if (hasSelectionModifier(e)) {
+                setBulkError(null);
+                multi.start(note.id);
+              } else {
+                router.push(`/note/${note.id}`);
+              }
+            }}
             onLongPress={() => {
               setBulkError(null);
               multi.start(note.id);

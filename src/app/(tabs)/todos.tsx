@@ -3,16 +3,15 @@ import { useState } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 
 import { ThemedText } from '@/components/themed-text';
-import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { DateField } from '@/components/ui/date-field';
 import { FormModal } from '@/components/ui/form-modal';
 import { Card, ListStatus, Screen } from '@/components/ui/screen';
 import { Segmented } from '@/components/ui/segmented';
-import { SelectionBar, SelectionIndicator } from '@/components/ui/selection-bar';
+import { SelectionBar, SelectionHeaderActions, SelectionIndicator } from '@/components/ui/selection-bar';
 import { TextField } from '@/components/ui/text-field';
 import { Spacing } from '@/constants/theme';
-import { useMultiSelect } from '@/hooks/use-multi-select';
+import { hasSelectionModifier, useMultiSelect } from '@/hooks/use-multi-select';
 import {
   useDeleteTodo,
   useDeleteTodos,
@@ -85,9 +84,9 @@ export default function TodosScreen() {
   // 아직 차례가 오지 않은 반복 할 일은 아래 "다음 반복"에 따로 모아, 그날이 되기 전에는 체크하지 못하게 한다.
   const ready = visible.filter((todo) => !isWaitingRepeat(todo, today));
   const waiting = visible.filter((todo) => isWaitingRepeat(todo, today));
-  const visibleIds = visible.map((todo) => todo.id);
+  const visibleIds = [...ready, ...waiting].map((todo) => todo.id);
   const selectedVisibleIds = visibleIds.filter((id) => multi.isSelected(id));
-  const isSelecting = selectedVisibleIds.length > 0;
+  const isSelecting = visibleIds.length > 0 && (multi.active || selectedVisibleIds.length > 0);
 
   async function deleteSelected() {
     if (selectedVisibleIds.length === 0) return;
@@ -148,7 +147,8 @@ export default function TodosScreen() {
       <Card
         key={todo.id}
         selected={selected}
-        onPress={isSelecting ? () => multi.toggle(todo.id) : undefined}
+        selecting={isSelecting}
+        onPress={isSelecting ? (e) => multi.handlePress(todo.id, visibleIds, e) : undefined}
         onLongPress={() => {
           setBulkError(null);
           multi.start(todo.id);
@@ -179,7 +179,14 @@ export default function TodosScreen() {
               accessibilityRole="button"
               accessibilityLabel={`${todo.title} 수정`}
               delayLongPress={320}
-              onPress={() => setEditing(todo)}
+              onPress={(e) => {
+                if (hasSelectionModifier(e)) {
+                  setBulkError(null);
+                  multi.start(todo.id);
+                  return;
+                }
+                setEditing(todo);
+              }}
               onLongPress={() => {
                 setBulkError(null);
                 multi.start(todo.id);
@@ -197,9 +204,19 @@ export default function TodosScreen() {
     <Screen
       title="할 일"
       action={
-        isSelecting ? undefined : (
-          <Button label="추가" size="small" onPress={() => setEditing('new')} />
-        )
+        <SelectionHeaderActions
+          selecting={isSelecting}
+          canSelect={visibleIds.length > 0}
+          onAdd={() => setEditing('new')}
+          onStartSelect={() => {
+            setBulkError(null);
+            multi.enter();
+          }}
+          onCancelSelect={() => {
+            multi.clear();
+            setBulkError(null);
+          }}
+        />
       }
       overlay={
         isSelecting ? (
@@ -208,6 +225,10 @@ export default function TodosScreen() {
             totalCount={visibleIds.length}
             deleting={removeMany.isPending}
             onSelectAll={() => multi.selectAll(visibleIds)}
+            onDeselectAll={() => {
+              multi.deselectAll();
+              setBulkError(null);
+            }}
             onClear={() => {
               multi.clear();
               setBulkError(null);

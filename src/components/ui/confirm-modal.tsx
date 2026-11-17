@@ -56,6 +56,11 @@ export function hasConfirmHost(): boolean {
   return listeners.size > 0;
 }
 
+/** 현재 확인 창이 열려 있는지 확인한다. */
+export function hasActiveConfirm(): boolean {
+  return activeConfirm !== null;
+}
+
 /**
  * 디자인된 확인 창을 띄우고 사용자의 선택(true/false)을 돌려준다.
  * FormModal 이 열려 있으면 그 안의 오버레이 슬롯에서, 아니면 루트 Modal 에서 띄운다.
