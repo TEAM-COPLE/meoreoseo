@@ -123,7 +123,6 @@ export default function HabitsScreen() {
                           accessibilityRole="checkbox"
                           accessibilityLabel={`${habit.name}, ${dayOf(date)}일`}
                           accessibilityState={{ checked: done }}
-                          disabled={toggle.isPending}
                           onPress={() => toggle.mutate({ habitId: habit.id, date, done })}
                           style={({ pressed }) => [
                             styles.dot,

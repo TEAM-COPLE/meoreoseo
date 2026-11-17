@@ -22,7 +22,9 @@ export function WeatherCityPicker({ onSelect, disabled }: Props) {
   const [query, setQuery] = useState('');
 
   function runSearch() {
-    if (query.trim()) search.mutate(query);
+    const trimmed = query.trim();
+    if (!trimmed || search.isPending) return;
+    search.mutate(trimmed);
   }
 
   return (

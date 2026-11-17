@@ -1,8 +1,10 @@
-import { hasActiveSession } from './auth';
-import { deleteLocalNote, insertLocalNote, updateLocalNote } from './local-store';
+import { activeUserId, hasActiveSession } from './auth';
+import type { Tables } from './database.types';
 import { queryClient } from './query';
 import { supabase } from './supabase';
 import { scheduleWidgetSync } from './widget-sync';
+
+type NoteRow = Tables<'notes'>;
 
 /** 메모장에서 고칠 수 있는 값들. */
 export type NoteDraft = { title: string; body: string; pinned: boolean };
@@ -14,54 +16,86 @@ export type NoteDraft = { title: string; body: string; pinned: boolean };
 export type SaveStatus = 'idle' | 'dirty' | 'saving' | 'saved' | 'error';
 
 /** 입력을 멈춘 뒤 이 시간이 지나면 저장한다. */
-const DELAY_MS = 800;
+const DELAY_MS = 1500;
+
+function draftSignature(draft: NoteDraft): string {
+  return JSON.stringify([draft.title, draft.body, draft.pinned]);
+}
+
+function sortNotes(items: NoteRow[]): NoteRow[] {
+  return [...items].sort((a, b) => {
+    if (a.pinned !== b.pinned) return a.pinned ? -1 : 1;
+    return b.updated_at.localeCompare(a.updated_at);
+  });
+}
+
+function upsertNotesCache(saved: NoteRow): boolean {
+  const scope = activeUserId();
+  if (!scope) return false;
+  const key = ['notes', scope];
+  if (queryClient.getQueryData<NoteRow[]>(key) === undefined) return false;
+  queryClient.setQueryData<NoteRow[]>(key, (old) => {
+    if (!old) return old;
+    const exists = old.some((item) => item.id === saved.id);
+    const next = exists
+      ? old.map((item) => (item.id === saved.id ? saved : item))
+      : [saved, ...old];
+    return sortNotes(next);
+  });
+  return true;
+}
+
+function removeFromNotesCache(id: string): boolean {
+  const scope = activeUserId();
+  if (!scope) return false;
+  const key = ['notes', scope];
+  if (queryClient.getQueryData<NoteRow[]>(key) === undefined) return false;
+  queryClient.setQueryData<NoteRow[]>(key, (old) =>
+    old ? old.filter((item) => item.id !== id) : old,
+  );
+  return true;
+}
 
 /**
  * 메모 자동 저장기.
  *
  * 글자를 칠 때마다 저장하면 요청이 너무 많아지므로,
- * 입력이 잠깐 멈췄을 때 가장 마지막 내용만 저장한다.
- * 로그인되어 있으면 Supabase 데이터베이스에, 아니면 기기 내부 저장소(AsyncStorage)에 저장한다.
+ * 입력이 잠깐 멈췄을 때 가장 마지막 내용만 Supabase 데이터베이스에 저장한다.
  *
  * @param initialId 이미 있는 메모면 그 id, 새 메모면 null
  * @param onStatus 저장 상태가 바뀔 때마다 불린다 (화면에 "저장됨" 등을 보여주는 용도)
+ * @param initialDraft 이미 있는 메모의 초기 내용 (변경 없이 flush될 때 불필요한 DB 저장 방지)
  */
 export function createNoteAutosaver(
   initialId: string | null,
   onStatus: (status: SaveStatus) => void,
+  initialDraft?: NoteDraft | null,
 ) {
   let noteId = initialId;
   let pending: NoteDraft | null = null;
   let timer: ReturnType<typeof setTimeout> | null = null;
   let running: Promise<void> | null = null;
   let stopped = false;
+  let lastSavedSig: string | null = initialId && initialDraft ? draftSignature(initialDraft) : null;
 
-  async function save(draft: NoteDraft): Promise<boolean> {
-    if (!hasActiveSession()) {
-      try {
-        if (noteId) {
-          return await updateLocalNote(noteId, draft);
-        }
-        const created = await insertLocalNote(draft);
-        noteId = created.id;
-        return true;
-      } catch {
-        return false;
-      }
-    }
+  async function save(draft: NoteDraft): Promise<NoteRow | null> {
+    if (!hasActiveSession()) return null;
 
     if (noteId) {
-      const { error } = await supabase
+      const { data, error } = await supabase
         .from('notes')
         .update({ ...draft, updated_at: new Date().toISOString() })
-        .eq('id', noteId);
-      return !error;
+        .eq('id', noteId)
+        .select('*')
+        .single();
+      if (error || !data) return null;
+      return data;
     }
 
-    const { data, error } = await supabase.from('notes').insert(draft).select('id').single();
-    if (error || !data) return false;
+    const { data, error } = await supabase.from('notes').insert(draft).select('*').single();
+    if (error || !data) return null;
     noteId = data.id;
-    return true;
+    return data;
   }
 
   async function run() {
@@ -75,17 +109,26 @@ export function createNoteAutosaver(
         continue;
       }
 
+      const sig = draftSignature(draft);
+      if (noteId && sig === lastSavedSig) {
+        onStatus('saved');
+        continue;
+      }
+
       onStatus('saving');
-      const ok = await save(draft);
-      if (!ok) {
+      const saved = await save(draft);
+      if (!saved) {
         // 실패한 내용을 버리지 않고 남겨 두었다가 다음 저장 때 다시 보낸다.
         pending = pending ?? draft;
         onStatus('error');
         return;
       }
+      lastSavedSig = sig;
       onStatus(pending ? 'dirty' : 'saved');
-      queryClient.invalidateQueries({ queryKey: ['notes'] });
-      scheduleWidgetSync(true);
+      const cacheUpdated = upsertNotesCache(saved);
+      if (!cacheUpdated) {
+        scheduleWidgetSync({ forceDomains: ['notes'] });
+      }
     }
   }
 
@@ -105,6 +148,15 @@ export function createNoteAutosaver(
     /** 고친 내용을 알려준다. 입력이 멈추면 저장된다. */
     schedule(draft: NoteDraft) {
       if (stopped) return;
+      if (noteId && draftSignature(draft) === lastSavedSig) {
+        pending = null;
+        if (timer) {
+          clearTimeout(timer);
+          timer = null;
+        }
+        onStatus('saved');
+        return;
+      }
       pending = draft;
       onStatus('dirty');
       if (timer) clearTimeout(timer);
@@ -128,17 +180,9 @@ export function createNoteAutosaver(
       await running;
 
       if (!noteId) return null;
-
       if (!hasActiveSession()) {
-        try {
-          await deleteLocalNote(noteId);
-          queryClient.invalidateQueries({ queryKey: ['notes'] });
-          scheduleWidgetSync(true);
-          return null;
-        } catch (e) {
-          stopped = false;
-          return e instanceof Error ? e.message : '삭제하지 못했습니다.';
-        }
+        stopped = false;
+        return '로그인이 필요합니다.';
       }
 
       const { error } = await supabase.from('notes').delete().eq('id', noteId);
@@ -146,8 +190,9 @@ export function createNoteAutosaver(
         stopped = false;
         return error.message;
       }
-      queryClient.invalidateQueries({ queryKey: ['notes'] });
-      scheduleWidgetSync(true);
+      if (!removeFromNotesCache(noteId)) {
+        scheduleWidgetSync({ forceDomains: ['notes'] });
+      }
       return null;
     },
   };

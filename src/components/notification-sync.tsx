@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { AppState } from 'react-native';
 
 import { useUpcomingEvents } from '@/hooks/use-events';
@@ -22,16 +22,18 @@ import { buildReminders, EVENT_DAYS_AHEAD } from '@/lib/reminders';
  */
 export function NotificationSync() {
   const settings = useNotificationSettings().data;
-  const todos = useTodos().data;
-  const events = useUpcomingEvents(EVENT_DAYS_AHEAD).data;
-  const habits = useHabits().data;
-  const logs = useHabitLogs().data;
+  const enabled = Boolean(settings?.enabled);
+  const todos = useTodos(enabled).data;
+  const events = useUpcomingEvents(EVENT_DAYS_AHEAD, enabled).data;
+  const habits = useHabits(enabled).data;
+  const logs = useHabitLogs(enabled).data;
   // 아침 브리핑에 넣을 날씨. 날씨는 못 받아도 기다리지 않는다(브리핑에서 날씨 줄만 빠진다).
-  const city = useWeatherCity().data;
-  const weather = useWeather(city).data;
+  const city = useWeatherCity(enabled).data;
+  const weather = useWeather(city, enabled).data;
   const forecast = city && weather ? { city: city.name, days: weather.days } : null;
   // 날씨가 30분마다 새로 와도, 예보 내용이 같으면 알림을 다시 예약하지 않도록 글자로 비교한다.
   const forecastKey = JSON.stringify(forecast);
+  const lastScheduledKeyRef = useRef<string>('');
 
   // 앱이 다시 화면에 나타날 때마다 숫자를 올려, 아래의 예약 작업을 한 번 더 돌린다.
   // (날짜가 바뀌었거나 휴대폰 설정에서 알림 권한을 바꿨을 수 있다.)
@@ -46,7 +48,10 @@ export function NotificationSync() {
   useEffect(() => {
     if (!settings) return;
     if (!settings.enabled) {
-      cancelAllReminders().catch(() => {});
+      if (lastScheduledKeyRef.current !== 'off') {
+        lastScheduledKeyRef.current = 'off';
+        cancelAllReminders().catch(() => {});
+      }
       return;
     }
     // 데이터를 다 받아오기 전에는 건드리지 않는다. 덜 받은 상태로 예약하면 알림이 빠진다.
@@ -60,15 +65,23 @@ export function NotificationSync() {
       habitsDoneToday: habits.filter((habit) => logs.get(habit.id)?.has(today)).length,
       forecast: JSON.parse(forecastKey),
     });
+    const remindersKey = JSON.stringify(
+      reminders.map((r) => [r.at.getTime(), r.title, r.body]),
+    );
 
     // 연달아 여러 번 바뀔 때(예: 체크를 빠르게 여러 개) 마지막 한 번만 예약한다.
     const timer = setTimeout(async () => {
       try {
         if (await hasNotificationPermission()) {
+          if (lastScheduledKeyRef.current === remindersKey) return;
           await replaceReminders(reminders);
+          lastScheduledKeyRef.current = remindersKey;
         } else {
           // 휴대폰 설정에서 알림 권한을 껐다면 예약해 둔 것도 지운다.
-          await cancelAllReminders();
+          if (lastScheduledKeyRef.current !== 'off') {
+            await cancelAllReminders();
+            lastScheduledKeyRef.current = 'off';
+          }
         }
       } catch {
         // 예약에 실패해도 앱 사용에는 지장이 없다. 다음에 데이터가 바뀌면 다시 시도한다.
@@ -80,6 +93,7 @@ export function NotificationSync() {
   // 로그아웃하면 이 부품이 화면에서 빠진다. 그때 예약해 둔 알림도 지운다.
   useEffect(() => {
     return () => {
+      lastScheduledKeyRef.current = '';
       cancelAllReminders().catch(() => {});
     };
   }, []);

@@ -2,6 +2,7 @@ import { router, useLocalSearchParams } from 'expo-router';
 import { useEffect, useState } from 'react';
 import {
   ActivityIndicator,
+  AppState,
   KeyboardAvoidingView,
   Pressable,
   StyleSheet,
@@ -83,11 +84,23 @@ function NoteEditor({ initial }: { initial: Note | null }) {
   const [deleteError, setDeleteError] = useState<string | null>(null);
 
   // 자동 저장기는 화면이 열려 있는 동안 하나만 만들어 계속 쓴다.
-  const [saver] = useState(() => createNoteAutosaver(initial?.id ?? null, setStatus));
+  const [saver] = useState(() =>
+    createNoteAutosaver(
+      initial?.id ?? null,
+      setStatus,
+      initial ? { title: initial.title, body: initial.body, pinned: initial.pinned } : null,
+    ),
+  );
 
-  // 화면을 떠날 때 아직 저장하지 않은 내용이 있으면 바로 저장한다.
+  // 화면을 떠나거나 앱이 백그라운드로 갈 때 아직 저장하지 않은 내용이 있으면 바로 저장한다.
   useEffect(() => {
+    const sub = AppState.addEventListener('change', (nextState) => {
+      if (nextState === 'background' || nextState === 'inactive') {
+        saver.flush();
+      }
+    });
     return () => {
+      sub.remove();
       saver.flush();
     };
   }, [saver]);
