@@ -2,6 +2,7 @@ import { hasActiveSession } from './auth';
 import { deleteLocalNote, insertLocalNote, updateLocalNote } from './local-store';
 import { queryClient } from './query';
 import { supabase } from './supabase';
+import { scheduleWidgetSync } from './widget-sync';
 
 /** 메모장에서 고칠 수 있는 값들. */
 export type NoteDraft = { title: string; body: string; pinned: boolean };
@@ -84,6 +85,7 @@ export function createNoteAutosaver(
       }
       onStatus(pending ? 'dirty' : 'saved');
       queryClient.invalidateQueries({ queryKey: ['notes'] });
+      scheduleWidgetSync(true);
     }
   }
 
@@ -131,6 +133,7 @@ export function createNoteAutosaver(
         try {
           await deleteLocalNote(noteId);
           queryClient.invalidateQueries({ queryKey: ['notes'] });
+          scheduleWidgetSync(true);
           return null;
         } catch (e) {
           stopped = false;
@@ -144,6 +147,7 @@ export function createNoteAutosaver(
         return error.message;
       }
       queryClient.invalidateQueries({ queryKey: ['notes'] });
+      scheduleWidgetSync(true);
       return null;
     },
   };

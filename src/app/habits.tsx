@@ -1,4 +1,4 @@
-import { router } from 'expo-router';
+import { router, useLocalSearchParams } from 'expo-router';
 import { useMemo, useState } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 
@@ -20,6 +20,7 @@ import {
 import { useTheme } from '@/hooks/use-theme';
 import { dayOf, lastDays, weekdayOf } from '@/lib/dates';
 import { confirm, errorMessage } from '@/lib/format';
+import { clearWidgetOpenRequest, useWidgetOpenRequest } from '@/lib/widget-sync';
 
 /** 오늘 화면으로 돌아간다. 이 화면을 주소로 바로 연 경우에는 돌아갈 곳이 없으므로 새로 연다. */
 function leave() {
@@ -36,11 +37,30 @@ function leave() {
  * (Android 는 아래 탭이 5개까지라, 오늘 화면에서 매일 체크할 수 있는 습관을 탭에서 뺐다.)
  */
 export default function HabitsScreen() {
+  const { add, editId } = useLocalSearchParams<{ add?: string; editId?: string }>();
+  const widgetReq = useWidgetOpenRequest('habits');
   const theme = useTheme();
   const habits = useHabits();
   const logs = useHabitLogs();
   const toggle = useToggleHabitLog();
   const [editing, setEditing] = useState<Habit | 'new' | null>(null);
+
+  const targetEditId = widgetReq?.mode === 'edit' ? widgetReq.editId : editId;
+  const activeEditing: Habit | 'new' | null =
+    editing ??
+    (widgetReq?.mode === 'add' || add
+      ? 'new'
+      : targetEditId
+        ? ((habits.data ?? []).find((h) => h.id === targetEditId) ?? null)
+        : null);
+
+  function closeForm() {
+    setEditing(null);
+    clearWidgetOpenRequest('habits');
+    if (add || editId) {
+      router.setParams({ add: undefined, editId: undefined });
+    }
+  }
 
   // 최근 7일. 마지막이 오늘이다.
   const days = useMemo(() => lastDays(7), []);
@@ -138,8 +158,11 @@ export default function HabitsScreen() {
         </ThemedText>
       ) : null}
 
-      {editing ? (
-        <HabitForm habit={editing === 'new' ? null : editing} onClose={() => setEditing(null)} />
+      {activeEditing ? (
+        <HabitForm
+          habit={activeEditing === 'new' ? null : activeEditing}
+          onClose={closeForm}
+        />
       ) : null}
     </Screen>
   );

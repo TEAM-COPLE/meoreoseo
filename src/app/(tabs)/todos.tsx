@@ -1,3 +1,4 @@
+import { router, useLocalSearchParams } from 'expo-router';
 import { useState } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 
@@ -20,6 +21,7 @@ import {
 import { formatDate, todayISO } from '@/lib/dates';
 import { confirm, errorMessage } from '@/lib/format';
 import { isRepeat, REPEAT_OPTIONS, repeatLabel, type RepeatChoice } from '@/lib/repeat';
+import { clearWidgetOpenRequest, useWidgetOpenRequest } from '@/lib/widget-sync';
 
 type Filter = 'open' | 'done';
 
@@ -35,11 +37,30 @@ const PRIORITIES = [
 ] as const;
 
 export default function TodosScreen() {
+  const { add, editId } = useLocalSearchParams<{ add?: string; editId?: string }>();
+  const widgetReq = useWidgetOpenRequest('todos');
   const todos = useTodos();
   const toggle = useToggleTodo();
   const [filter, setFilter] = useState<Filter>('open');
   // null: 양식 닫힘, 'new': 새로 추가, Todo: 그 할 일을 수정
   const [editing, setEditing] = useState<Todo | 'new' | null>(null);
+
+  const targetEditId = widgetReq?.mode === 'edit' ? widgetReq.editId : editId;
+  const activeEditing: Todo | 'new' | null =
+    editing ??
+    (widgetReq?.mode === 'add' || add
+      ? 'new'
+      : targetEditId
+        ? ((todos.data ?? []).find((t) => t.id === targetEditId) ?? null)
+        : null);
+
+  function closeForm() {
+    setEditing(null);
+    clearWidgetOpenRequest('todos');
+    if (add || editId) {
+      router.setParams({ add: undefined, editId: undefined });
+    }
+  }
 
   const today = todayISO();
   const visible = (todos.data ?? []).filter((todo) => todo.done === (filter === 'done'));
@@ -110,8 +131,11 @@ export default function TodosScreen() {
         );
       })}
 
-      {editing ? (
-        <TodoForm todo={editing === 'new' ? null : editing} onClose={() => setEditing(null)} />
+      {activeEditing ? (
+        <TodoForm
+          todo={activeEditing === 'new' ? null : activeEditing}
+          onClose={closeForm}
+        />
       ) : null}
     </Screen>
   );

@@ -1,3 +1,4 @@
+import { router, useLocalSearchParams } from 'expo-router';
 import { useMemo, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 
@@ -29,13 +30,33 @@ import {
 } from '@/lib/dates';
 import { confirm, errorMessage } from '@/lib/format';
 import { isRepeat, REPEAT_OPTIONS, repeatLabel, type RepeatChoice } from '@/lib/repeat';
+import { clearWidgetOpenRequest, useWidgetOpenRequest } from '@/lib/widget-sync';
 
 export default function CalendarScreen() {
+  const { add, editId } = useLocalSearchParams<{ add?: string; editId?: string }>();
+  const widgetReq = useWidgetOpenRequest('calendar');
   const [selected, setSelected] = useState(todayISO);
   const [month, setMonth] = useState(() => yearMonthOf(selected));
   const [editing, setEditing] = useState<CalendarEvent | 'new' | null>(null);
 
   const events = useEvents(month);
+
+  const targetEditId = widgetReq?.mode === 'edit' ? widgetReq.editId : editId;
+  const activeEditing: CalendarEvent | 'new' | null =
+    editing ??
+    (widgetReq?.mode === 'add' || add
+      ? 'new'
+      : targetEditId
+        ? ((events.data ?? []).find((e) => e.id === targetEditId) ?? null)
+        : null);
+
+  function closeForm() {
+    setEditing(null);
+    clearWidgetOpenRequest('calendar');
+    if (add || editId) {
+      router.setParams({ add: undefined, editId: undefined });
+    }
+  }
   const { marks, eventsByDate } = useMemo(() => {
     const dateMarks = new Set<string>();
     const byDate = new Map<string, CalendarEvent[]>();
@@ -109,11 +130,11 @@ export default function CalendarScreen() {
         </Card>
       ))}
 
-      {editing ? (
+      {activeEditing ? (
         <EventForm
-          event={editing === 'new' ? null : editing}
-          defaultDate={selected}
-          onClose={() => setEditing(null)}
+          event={activeEditing === 'new' ? null : activeEditing}
+          defaultDate={add ? todayISO() : selected}
+          onClose={closeForm}
         />
       ) : null}
     </Screen>
