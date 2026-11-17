@@ -122,6 +122,24 @@ npx eas-cli@latest build -p android --profile preview
 빌드가 끝나면 나오는 링크를 휴대폰에서 열어 설치한다.
 알림처럼 휴대폰 기능을 쓰는 라이브러리를 새로 넣으면 APK 를 다시 만들어야 한다.
 
+## 앱 업데이트 보내기 (EAS Update)
+
+화면·기능 코드(JavaScript)만 바꿨다면 APK 를 다시 만들지 않고 휴대폰 앱으로 바로 보낼 수 있다(1~2분).
+휴대폰에서 앱을 껐다 켜면 뒤에서 새 버전을 받고, 한 번 더 껐다 켜면 적용된다.
+
+```bash
+npx eas-cli@latest update --channel preview --environment preview --message "바꾼 내용 한 줄"
+```
+
+- `preview` 프로필로 만든 APK 는 `preview` 채널의 업데이트를 받는다(`eas.json`).
+- 업데이트는 **같은 앱 버전**(`app.json` 의 `version`)의 APK 에만 간다(`runtimeVersion` 정책 `appVersion`).
+- 아래처럼 휴대폰 쪽(네이티브) 부분이 바뀌면 업데이트로는 안 된다.
+  `app.json` 의 `version` 을 올리고(예: 1.0.0 → 1.1.0) APK 를 새로 만든다.
+  - 새 라이브러리 설치(`npx expo install ...`) 중 네이티브 코드가 있는 것
+  - `app.json` 의 아이콘, 위젯 종류, 플러그인, 권한 같은 설정
+  - `plugins/`, `scripts/patch-expo-widgets.js` 수정
+- 웹은 이와 상관없이 `main` 에 합치면 Vercel 이 자동으로 배포한다.
+
 ## 알림
 
 휴대폰 앱의 계정 화면에서 켠다. 서버가 보내는 알림이 아니라 휴대폰이 스스로 띄우는 예약 알림이다.
