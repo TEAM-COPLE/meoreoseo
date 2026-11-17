@@ -22,7 +22,13 @@ export function getVersionInfo(): VersionInfo {
     source: __DEV__ ? 'dev' : 'web',
     channel: null,
     updateId: null,
+    projectId: null,
+    disabledReason: null,
   };
+}
+
+export function useVersionInfo(): VersionInfo {
+  return getVersionInfo();
 }
 
 /** 웹은 페이지를 새로고침해서 최신 배포를 받는다. */
@@ -33,3 +39,8 @@ export async function applyLatestVersion(): Promise<'latest' | 'restarting'> {
   window.location.reload();
   return 'restarting';
 }
+
+export function useAutoUpdateOnAppActive(): void {
+  // 웹은 페이지 로드 시 항상 최신 번들을 받으므로 별도 백그라운드 업데이트 훅이 필요 없다.
+}
+

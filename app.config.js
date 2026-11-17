@@ -1,3 +1,4 @@
+/* global __dirname */
 const { execSync } = require('child_process');
 
 /**

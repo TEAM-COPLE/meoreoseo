@@ -5,11 +5,18 @@ import { ThemedText } from '@/components/themed-text';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/screen';
 import { Spacing } from '@/constants/theme';
-import { applyLatestVersion, canSelfUpdate, getVersionInfo, type VersionInfo } from '@/lib/app-version';
+import {
+  applyLatestVersion,
+  canSelfUpdate,
+  useVersionInfo,
+  type VersionInfo,
+} from '@/lib/app-version';
 import { errorMessage } from '@/lib/format';
 
 /** 비교할 GitHub 저장소와 브랜치 (공개 저장소라 로그인 없이 읽을 수 있다) */
 const GITHUB_MAIN = 'https://api.github.com/repos/TEAM-COPLE/meoreoseo/commits/main';
+/** 팀 공통 EAS 프로젝트 ID 앞 8자리 */
+const TEAM_PROJECT_PREFIX = '97f23e36';
 
 const PLATFORM_LABEL: Record<string, string> = { android: '안드로이드', ios: '아이폰', web: '웹' };
 
@@ -43,11 +50,15 @@ async function latestMainCommit(): Promise<string> {
  * 팀원끼리 화면의 커밋 번호를 비교하면 같은 코드인지 알 수 있다.
  */
 export function VersionInfoCard() {
-  const [info] = useState(getVersionInfo);
+  const info = useVersionInfo();
   const [checking, setChecking] = useState(false);
   const [result, setResult] = useState<{ text: string; ok: boolean } | null>(null);
   // 웹에서 GitHub 가 더 최신이면 새로고침 버튼을 보여준다.
   const [canReload, setCanReload] = useState(false);
+
+  const projectPrefix = info.projectId ? info.projectId.slice(0, 8) : null;
+  const isWrongProject =
+    info.platform !== 'web' && projectPrefix !== null && projectPrefix !== TEAM_PROJECT_PREFIX;
 
   async function check() {
     setChecking(true);
@@ -56,7 +67,10 @@ export function VersionInfoCard() {
     try {
       // 휴대폰: 받을 수 있는 업데이트가 있으면 받아서 앱을 다시 시작한다(이 경우 아래로 내려오지 않는다).
       if (info.platform !== 'web' && canSelfUpdate) {
-        if ((await applyLatestVersion()) === 'restarting') return;
+        if ((await applyLatestVersion()) === 'restarting') {
+          setResult({ ok: true, text: '새 업데이트를 받아 앱을 다시 시작하는 중이에요…' });
+          return;
+        }
       }
       const main = await latestMainCommit();
       if (info.commit && main === info.commit) {
@@ -67,10 +81,22 @@ export function VersionInfoCard() {
           ok: false,
           text: `GitHub main 은 ${shortCommit(main)} 이에요. 새로고침하면 최신 배포를 받아요(배포는 합친 뒤 1~2분 걸려요).`,
         });
+      } else if (info.platform !== 'web' && !canSelfUpdate) {
+        setResult({
+          ok: false,
+          text:
+            info.disabledReason ??
+            `GitHub main 은 ${shortCommit(main)} 이에요. 이 앱에서는 원격 업데이트를 받을 수 없으니 최신 APK 를 설치해 주세요.`,
+        });
+      } else if (isWrongProject) {
+        setResult({
+          ok: false,
+          text: `이 APK 의 프로젝트 번호(${projectPrefix})가 팀 프로젝트(${TEAM_PROJECT_PREFIX})와 달라 업데이트가 서로 연결되지 않아요. main 브랜치에서 빌드한 최신 APK 를 설치해 주세요.`,
+        });
       } else if (info.platform !== 'web' && canSelfUpdate) {
         setResult({
           ok: false,
-          text: `받을 수 있는 업데이트는 다 받았어요. GitHub main(${shortCommit(main)})이 더 최신이면 아직 업데이트를 안 보냈거나, APK 를 새로 만들어야 하는 변경이에요.`,
+          text: `앱이 연결된 ${info.channel ?? 'preview'} 채널의 업데이트는 모두 받았어요. GitHub main(${shortCommit(main)})은 웹에만 자동 배포되고, 모바일 앱은 터미널에서 'npx eas-cli@latest update --channel preview --environment preview' 를 실행해 업데이트를 보내야 반영돼요.`,
         });
       } else {
         setResult({
@@ -102,12 +128,26 @@ export function VersionInfoCard() {
         />
         <Row
           label="받은 방식"
-          value={[SOURCE_LABEL[info.source], info.channel ? `${info.channel} 채널` : null]
+          value={[
+            SOURCE_LABEL[info.source],
+            info.channel ? `${info.channel} 채널` : null,
+            projectPrefix ? `프로젝트 ${projectPrefix}` : null,
+          ]
             .filter(Boolean)
             .join(' · ')}
         />
         {info.updateId ? <Row label="업데이트 번호" value={info.updateId.slice(0, 8)} /> : null}
       </View>
+      {info.disabledReason && !__DEV__ ? (
+        <ThemedText type="small" themeColor="danger">
+          {info.disabledReason}
+        </ThemedText>
+      ) : null}
+      {isWrongProject ? (
+        <ThemedText type="small" themeColor="danger">
+          {`이 APK 는 개인 Expo 프로젝트(${projectPrefix})로 빌드되어 팀 업데이트(${TEAM_PROJECT_PREFIX})를 받지 못합니다. 팀 main 의 APK 로 다시 설치해 주세요.`}
+        </ThemedText>
+      ) : null}
       <ThemedText type="small" themeColor="textSecondary">
         팀원과 &quot;코드&quot;의 앞 7글자를 비교하면 같은 버전인지 알 수 있어요.
       </ThemedText>

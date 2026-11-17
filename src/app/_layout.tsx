@@ -7,6 +7,7 @@ import { useEffect } from 'react';
 import { ThemeModeProvider, useColorScheme } from '@/hooks/use-theme';
 import { NotificationSync } from '@/components/notification-sync';
 import { ConfirmRootHost } from '@/components/ui/confirm-modal';
+import { useAutoUpdateOnAppActive } from '@/lib/app-version';
 import { AuthProvider, useAuth } from '@/lib/auth';
 import { installGlobalErrorHandler } from '@/lib/error-report';
 import { notificationsSupported } from '@/lib/notifications';
@@ -39,6 +40,7 @@ function ThemedRootNavigator() {
   const colorScheme = useColorScheme();
   const { session, loading } = useAuth();
   const signedIn = session !== null;
+  useAutoUpdateOnAppActive();
   useWidgetBridge();
 
   useEffect(() => {
