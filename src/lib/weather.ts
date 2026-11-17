@@ -1,8 +1,13 @@
+import { FunctionsHttpError } from '@supabase/supabase-js';
 import { Platform } from 'react-native';
+
+import { supabase } from './supabase';
 
 /**
  * 날씨 정보.
- * - 날씨: Open-Meteo(https://open-meteo.com) 의 무료 날씨 API. 가입이나 API 키가 필요 없다.
+ * - 국내 지역 날씨: 기상청 단기예보. 기상청 API 키를 숨기려고 Supabase 서버 함수(kma-weather)를 거친다.
+ *   (코드: supabase/functions/kma-weather/index.ts)
+ * - 해외 지역 날씨, 그리고 기상청이 안 될 때의 예비: Open-Meteo(https://open-meteo.com). API 키가 필요 없다.
  * - 지역 검색: OpenStreetMap 의 Nominatim(https://nominatim.org). 한글 지명을 잘 찾는다.
  * 위치 권한을 묻지 않도록, 사용자가 고르거나 직접 입력한 지역의 좌표로 날씨를 물어본다.
  */
@@ -145,8 +150,55 @@ type ForecastResponse = {
   };
 };
 
-/** 고른 도시의 지금 날씨와 오늘 최고·최저 기온을 가져온다. 10초 안에 답이 없으면 실패로 본다. */
+/** 기상청 예보가 있는 곳인지 (대한민국 육지·섬과 가까운 바다를 감싸는 네모 범위) */
+export function isInKorea(city: City): boolean {
+  return (
+    city.latitude >= 32.9 &&
+    city.latitude <= 38.7 &&
+    city.longitude >= 124.0 &&
+    city.longitude <= 132.0
+  );
+}
+
+/** 기상청 날씨를 서버 함수(kma-weather)로 받아 온다. 15초 안에 답이 없으면 실패로 본다. */
+async function fetchKmaWeather(city: City): Promise<Weather> {
+  const { data, error } = await supabase.functions.invoke<Weather>('kma-weather', {
+    body: { latitude: city.latitude, longitude: city.longitude },
+    timeout: 15_000,
+  });
+  if (error) {
+    // 서버 함수가 돌려준 오류 문장(예: "기상청 API 키가 설정되지 않았습니다")을 꺼내 쓴다.
+    if (error instanceof FunctionsHttpError) {
+      const body = await error.context.json().catch(() => null);
+      if (body?.error) throw new Error(`기상청 날씨: ${body.error}`);
+    }
+    throw error;
+  }
+  if (!data || !Number.isFinite(data.temperature)) throw new Error('기상청 날씨: 받은 값이 비어 있습니다');
+  return data;
+}
+
+/**
+ * 고른 지역의 지금 날씨와 오늘 최고·최저 기온을 가져온다.
+ * 국내는 기상청, 해외는 Open-Meteo. 기상청이 실패하면 Open-Meteo 로 한 번 더 시도한다.
+ */
 export async function fetchWeather(city: City): Promise<Weather> {
+  if (!isInKorea(city)) return fetchOpenMeteoWeather(city);
+  try {
+    return await fetchKmaWeather(city);
+  } catch (kmaError) {
+    console.warn('[날씨] 기상청 실패, Open-Meteo 로 다시 시도', kmaError);
+    try {
+      return await fetchOpenMeteoWeather(city);
+    } catch {
+      // 둘 다 실패하면 기상청 쪽 오류를 알린다. 국내 지역의 주 날씨 출처이기 때문이다.
+      throw kmaError;
+    }
+  }
+}
+
+/** Open-Meteo 에서 날씨를 받아 온다. 10초 안에 답이 없으면 실패로 본다. */
+async function fetchOpenMeteoWeather(city: City): Promise<Weather> {
   const params = new URLSearchParams({
     latitude: String(city.latitude),
     longitude: String(city.longitude),
@@ -175,11 +227,14 @@ export async function fetchWeather(city: City): Promise<Weather> {
 export function describeWeather(code: number, isDay: boolean): { label: string; icon: string } {
   if (code === 0) return { label: '맑음', icon: isDay ? '☀️' : '🌙' };
   if (code === 1) return { label: '대체로 맑음', icon: isDay ? '🌤️' : '🌙' };
-  if (code === 2) return { label: '구름 조금', icon: '⛅' };
+  // 기상청의 "구름많음"도 이 번호로 바꿔서 보여준다.
+  if (code === 2) return { label: '구름 많음', icon: '⛅' };
   if (code === 3) return { label: '흐림', icon: '☁️' };
   if (code === 45 || code === 48) return { label: '안개', icon: '🌫️' };
   if (code >= 51 && code <= 57) return { label: '이슬비', icon: '🌦️' };
-  if (code >= 61 && code <= 67) return { label: '비', icon: '🌧️' };
+  // 66, 67: 어는 비 (기상청의 "비/눈"도 66 으로 바꾼다)
+  if (code === 66 || code === 67) return { label: '비 또는 눈', icon: '🌨️' };
+  if (code >= 61 && code <= 65) return { label: '비', icon: '🌧️' };
   if (code >= 71 && code <= 77) return { label: '눈', icon: '🌨️' };
   if (code >= 80 && code <= 82) return { label: '소나기', icon: '🌦️' };
   if (code === 85 || code === 86) return { label: '눈 소나기', icon: '🌨️' };

@@ -20,3 +20,8 @@ export async function cancelAllReminders(): Promise<void> {}
 export async function replaceReminders(_reminders: Reminder[]): Promise<number> {
   return 0;
 }
+
+/** 웹에서는 오류 알림을 띄우지 않는다(오류 기록은 error-report.ts 가 DB 에 남긴다). */
+export async function showErrorNotification(_title: string, _body: string): Promise<boolean> {
+  return false;
+}
