@@ -18,6 +18,7 @@
         "monochromeImage": "./assets/images/android-icon-monochrome.png"
       },
       "predictiveBackGestureEnabled": false,
+      "allowBackup": false,
       "package": "com.meoreoseo.app"
     },
     "web": {
@@ -26,6 +27,13 @@
     },
     "plugins": [
       "expo-router",
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/images/android-icon-monochrome.png",
+          "color": "#3B5BDB"
+        }
+      ],
       [
         "expo-splash-screen",
         {
@@ -54,7 +62,8 @@
             }
           ]
         }
-      ]
+      ],
+      "expo-secure-store"
     ],
     "experiments": {
       "typedRoutes": true,
@@ -67,8 +76,9 @@
         }
       },
       "eas": {
-        "projectId": "acf9fe9b-79d8-4df0-bc1b-31b3ee107c77"
+        "projectId": "97f23e36-20a4-4c00-b17e-925cd69984d0"
       }
-    }
+    },
+    "owner": "hwiwonseo"
   }
 }

@@ -2,6 +2,7 @@ import { router } from 'expo-router';
 import { useState } from 'react';
 import { ScrollView, StyleSheet } from 'react-native';
 
+import { NotificationSettingsCard } from '@/components/notification-settings-card';
 import { ThemedText } from '@/components/themed-text';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/screen';
@@ -74,6 +75,14 @@ export default function AccountScreen() {
           loading={syncingWidget}
         />
       </Card>
+
+      <NotificationSettingsCard />
+
+      {error ? (
+        <ThemedText type="small" themeColor="danger">
+          {error}
+        </ThemedText>
+      ) : null}
 
       <Card>
         <ThemedText type="smallBold">데이터 저장 방식</ThemedText>

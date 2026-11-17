@@ -19,14 +19,14 @@ export default function AppTabs() {
     <Tabs style={styles.root}>
       <TabList asChild>
         <TabBar>
-          <TabTrigger name="todos" href="/" asChild>
+          <TabTrigger name="today" href="/" asChild>
+            <TabButton>오늘</TabButton>
+          </TabTrigger>
+          <TabTrigger name="todos" href="/todos" asChild>
             <TabButton>할 일</TabButton>
           </TabTrigger>
           <TabTrigger name="calendar" href="/calendar" asChild>
             <TabButton>일정</TabButton>
-          </TabTrigger>
-          <TabTrigger name="habits" href="/habits" asChild>
-            <TabButton>습관</TabButton>
           </TabTrigger>
           <TabTrigger name="notes" href="/notes" asChild>
             <TabButton>메모</TabButton>
