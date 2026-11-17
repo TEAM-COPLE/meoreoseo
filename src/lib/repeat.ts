@@ -147,3 +147,23 @@ export function nextOccurrence(
   const found = occurrencesBetween(anchor, repeat, from, addDays(from, 400));
   return found[0] ?? addDays(from, 1);
 }
+
+/**
+ * 반복 할 일을 끝냈을 때 생기는 다음 할 일의 마감일.
+ * 항상 내일 이후로 잡는다. 오늘 끝냈으면 오늘 몫은 한 것이므로, 밀린 할 일을 오늘 끝내도
+ * 오늘 날짜의 할 일이 또 생기지 않는다.
+ */
+export function nextTodoDate(anchor: string, repeat: Repeat, due: string, today: string): string {
+  return nextOccurrence(anchor, repeat, due, addDays(today, 1));
+}
+
+/**
+ * 아직 차례가 오지 않은 반복 할 일인지. 이런 할 일은 마감일이 되어야 체크할 수 있다.
+ * (반복이 아닌 할 일은 마감일 전에도 미리 끝낼 수 있다.)
+ */
+export function isWaitingRepeat(
+  todo: { done: boolean; repeat: string | null; due_date: string | null },
+  today: string,
+): boolean {
+  return !todo.done && isRepeat(todo.repeat) && todo.due_date !== null && todo.due_date > today;
+}

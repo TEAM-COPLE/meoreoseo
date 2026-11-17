@@ -36,6 +36,7 @@ import {
   updateLocalNote,
 } from './local-store';
 import { queryClient } from './query';
+import { isWaitingRepeat } from './repeat';
 import { supabase } from './supabase';
 
 const ACTION_MARKER = '_action:';
@@ -150,7 +151,7 @@ export async function buildWidgetSnapshot(forceFresh = false): Promise<Meoreoseo
     forceFresh,
   );
 
-  const [todos, events, habits, habitLogs, notes, transactions] = await Promise.all([
+  const [allTodos, events, habits, habitLogs, notes, transactions] = await Promise.all([
     cachedTodos
       ? Promise.resolve(cachedTodos)
       : signedIn
@@ -221,6 +222,8 @@ export async function buildWidgetSnapshot(forceFresh = false): Promise<Meoreoseo
     }
   }
 
+  // 아직 차례가 오지 않은 반복 할 일은 체크할 수 없으므로 위젯에는 보여주지 않는다.
+  const todos = allTodos.filter((todo) => !isWaitingRepeat(todo, today));
   let openTodoCount = 0;
   let doneTodoCount = 0;
   for (const todo of todos) {
