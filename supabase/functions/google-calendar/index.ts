@@ -35,7 +35,13 @@ declare const EdgeRuntime: { waitUntil(promise: Promise<unknown>): void } | unde
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL') ?? '';
 const CLIENT_ID = Deno.env.get('GOOGLE_CLIENT_ID') ?? '';
 const CLIENT_SECRET = Deno.env.get('GOOGLE_CLIENT_SECRET') ?? '';
-const REDIRECT_URI = `${SUPABASE_URL}/functions/v1/google-calendar/callback`;
+/**
+ * 구글 로그인을 마치고 돌아오는 주소.
+ * 구글 동의 화면에 "meoreoseo.vercel.app에서 …"처럼 우리 주소가 보이도록,
+ * 웹사이트 주소로 받은 뒤 이 함수로 넘긴다 (vercel.json 의 /google-callback).
+ * 구글 클라우드 콘솔의 "승인된 리디렉션 URI"에도 같은 주소가 있어야 한다.
+ */
+const REDIRECT_URI = 'https://meoreoseo.vercel.app/google-callback';
 
 /** 앱이 만든 캘린더("멀어서")와 그 안의 일정을 다루는 권한. 이것만은 꼭 있어야 한다. */
 const CALENDAR_SCOPE = 'https://www.googleapis.com/auth/calendar.app.created';

@@ -29,5 +29,11 @@
       ]
     }
   ],
-  "rewrites": [{ "source": "/:path*", "destination": "/" }]
+  "rewrites": [
+    {
+      "source": "/google-callback",
+      "destination": "https://bwbnhpiphwrpesipuipu.supabase.co/functions/v1/google-calendar/callback"
+    },
+    { "source": "/:path*", "destination": "/" }
+  ]
 }
