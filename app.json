@@ -48,7 +48,118 @@
           "imageWidth": 180
         }
       ],
-      "expo-secure-store"
+      "expo-secure-store",
+      [
+        "expo-widgets",
+        {
+          "enableAndroid": true,
+          "widgets": [
+            {
+              "name": "TodoWidget",
+              "displayName": "할 일",
+              "description": "오늘 해야 할 일과 마감 임박 항목을 확인하고 바로 완료 체크할 수 있어요.",
+              "ios": {
+                "supportedFamilies": ["systemSmall", "systemMedium", "systemLarge"],
+                "initialLayout": "./src/widgets/TodoWidget.ios.tsx"
+              },
+              "android": {
+                "minWidth": 180,
+                "minHeight": 110,
+                "targetCellWidth": 4,
+                "targetCellHeight": 2,
+                "resizeMode": "both",
+                "initialLayout": "./src/widgets/TodoWidget.android.tsx"
+              }
+            },
+            {
+              "name": "EventsWidget",
+              "displayName": "일정",
+              "description": "오늘의 일정을 시간순으로 한눈에 확인하세요.",
+              "ios": {
+                "supportedFamilies": ["systemSmall", "systemMedium", "systemLarge"],
+                "initialLayout": "./src/widgets/EventsWidget.ios.tsx"
+              },
+              "android": {
+                "minWidth": 180,
+                "minHeight": 110,
+                "targetCellWidth": 4,
+                "targetCellHeight": 2,
+                "resizeMode": "both",
+                "initialLayout": "./src/widgets/EventsWidget.android.tsx"
+              }
+            },
+            {
+              "name": "NotesWidget",
+              "displayName": "메모",
+              "description": "고정한 메모와 최근 작성한 메모를 홈 화면에서 바로 확인하세요.",
+              "ios": {
+                "supportedFamilies": ["systemSmall", "systemMedium", "systemLarge"],
+                "initialLayout": "./src/widgets/NotesWidget.ios.tsx"
+              },
+              "android": {
+                "minWidth": 180,
+                "minHeight": 110,
+                "targetCellWidth": 4,
+                "targetCellHeight": 2,
+                "resizeMode": "both",
+                "initialLayout": "./src/widgets/NotesWidget.android.tsx"
+              }
+            },
+            {
+              "name": "HabitsWidget",
+              "displayName": "습관",
+              "description": "오늘 실천할 습관과 연속 기록을 확인하고 바로 체크하세요.",
+              "ios": {
+                "supportedFamilies": ["systemSmall", "systemMedium", "systemLarge"],
+                "initialLayout": "./src/widgets/HabitsWidget.ios.tsx"
+              },
+              "android": {
+                "minWidth": 180,
+                "minHeight": 110,
+                "targetCellWidth": 4,
+                "targetCellHeight": 2,
+                "resizeMode": "both",
+                "initialLayout": "./src/widgets/HabitsWidget.android.tsx"
+              }
+            },
+            {
+              "name": "MoneyWidget",
+              "displayName": "가계부",
+              "description": "이번 달 지출, 수입, 남은 예산과 오늘 쓴 금액을 확인하세요.",
+              "ios": {
+                "supportedFamilies": ["systemSmall", "systemMedium"],
+                "initialLayout": "./src/widgets/MoneyWidget.ios.tsx"
+              },
+              "android": {
+                "minWidth": 180,
+                "minHeight": 110,
+                "targetCellWidth": 4,
+                "targetCellHeight": 2,
+                "resizeMode": "both",
+                "initialLayout": "./src/widgets/MoneyWidget.android.tsx"
+              }
+            },
+            {
+              "name": "DashboardWidget",
+              "displayName": "오늘 통합",
+              "description": "할 일, 일정, 습관, 메모, 가계부를 하나의 위젯에서 한눈에 확인하세요.",
+              "ios": {
+                "supportedFamilies": ["systemMedium", "systemLarge"],
+                "initialLayout": "./src/widgets/DashboardWidget.ios.tsx"
+              },
+              "android": {
+                "minWidth": 250,
+                "minHeight": 180,
+                "targetCellWidth": 4,
+                "targetCellHeight": 4,
+                "resizeMode": "both",
+                "initialLayout": "./src/widgets/DashboardWidget.android.tsx"
+              }
+            }
+          ]
+        }
+      ],
+      "./plugins/with-widget-previews.js"
     ],
     "experiments": {
       "typedRoutes": true,
