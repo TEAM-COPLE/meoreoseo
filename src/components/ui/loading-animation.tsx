@@ -1,3 +1,4 @@
+import { useIsFetching } from '@tanstack/react-query';
 import { Image } from 'expo-image';
 import { useEffect, useState, type PropsWithChildren } from 'react';
 import {
@@ -15,6 +16,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ThemedText } from '@/components/themed-text';
 import { MaxContentWidth, Radius, Spacing } from '@/constants/theme';
 import { useTheme, useThemeMode } from '@/hooks/use-theme';
+import { hasWarmQueryCache } from '@/lib/query';
 
 const USE_NATIVE_DRIVER = Platform.OS !== 'web';
 const STAGGER_MS = 95;
@@ -352,6 +354,68 @@ export function AppLoadingScreen({ statusText }: { statusText?: string }) {
   );
 }
 
+/**
+ * 앱/웹 최초 실행 시 로그인 확인 및 초기 DB 쿼리가 끝날 때까지
+ * AppLoadingScreen 을 오버레이로 유지한 뒤 부드럽게 페이드아웃한다.
+ */
+export function InitialDbLoadingOverlay({
+  authLoading,
+  signedIn,
+}: {
+  authLoading: boolean;
+  signedIn: boolean;
+}) {
+  const isFetching = useIsFetching();
+  const [bootDone, setBootDone] = useState(false);
+  const [unmounted, setUnmounted] = useState(false);
+  const [fade] = useState(() => new Animated.Value(1));
+  const warmReady = !authLoading && signedIn && hasWarmQueryCache();
+  const readyToFade = bootDone || (!authLoading && !signedIn) || warmReady;
+
+  useEffect(() => {
+    if (readyToFade || authLoading || !signedIn) return;
+
+    // DB 요청이 길어져도 6초 후에는 화면을 열어 오류/재시도 UI에 접근할 수 있게 한다.
+    const maxTimer = setTimeout(() => setBootDone(true), 6000);
+    return () => clearTimeout(maxTimer);
+  }, [authLoading, signedIn, readyToFade]);
+
+  useEffect(() => {
+    if (readyToFade || authLoading || !signedIn) return;
+    if (isFetching > 0) return;
+
+    // 첫 마운트 직후 또는 연쇄 쿼리(예: 도시 -> 날씨) 사이 잠깐 0이 될 수 있어 350ms 여유를 둔다.
+    const settleTimer = setTimeout(() => setBootDone(true), 350);
+    return () => clearTimeout(settleTimer);
+  }, [authLoading, signedIn, isFetching, readyToFade]);
+
+  useEffect(() => {
+    if (!readyToFade) return;
+    const anim = Animated.timing(fade, {
+      toValue: 0,
+      duration: 320,
+      easing: Easing.out(Easing.cubic),
+      useNativeDriver: USE_NATIVE_DRIVER,
+    });
+    anim.start(({ finished }) => {
+      if (finished) setUnmounted(true);
+    });
+    return () => anim.stop();
+  }, [readyToFade, fade]);
+
+  if (unmounted) return null;
+
+  return (
+    <Animated.View
+      pointerEvents={readyToFade ? 'none' : 'auto'}
+      style={[styles.overlayRoot, { opacity: fade }]}>
+      <AppLoadingScreen
+        statusText={!authLoading && signedIn ? '데이터를 불러오는 중…' : undefined}
+      />
+    </Animated.View>
+  );
+}
+
 const styles = StyleSheet.create({
   sectionSkeleton: {
     gap: Spacing.two,
@@ -462,5 +526,13 @@ const styles = StyleSheet.create({
   },
   statusLabel: {
     textAlign: 'center',
+  },
+  overlayRoot: {
+    position: 'absolute',
+    top: 0,
+    right: 0,
+    bottom: 0,
+    left: 0,
+    zIndex: 100,
   },
 });

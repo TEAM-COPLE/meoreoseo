@@ -1,6 +1,7 @@
+import { useQueryClient } from '@tanstack/react-query';
 import { router } from 'expo-router';
 import { useState, type PropsWithChildren } from 'react';
-import { Pressable, StyleSheet, View } from 'react-native';
+import { Modal, Platform, Pressable, StyleSheet, useWindowDimensions, View, type StyleProp, type ViewStyle } from 'react-native';
 
 import { ThemedText } from '@/components/themed-text';
 import { Button } from '@/components/ui/button';
@@ -11,11 +12,18 @@ import {
   type SectionSkeletonVariant,
 } from '@/components/ui/loading-animation';
 import { Card, Screen } from '@/components/ui/screen';
+import { getWeatherAtmosphere, WeatherBackdrop } from '@/components/weather-backdrop';
 import { WeatherCityPicker } from '@/components/weather-city-picker';
-import { Spacing } from '@/constants/theme';
+import { Radius, Spacing } from '@/constants/theme';
+import { useMonthlyBudget } from '@/hooks/use-budget';
 import { timeLabel, useEvents } from '@/hooks/use-events';
 import { streakOf, useDeleteHabit, useHabitLogs, useHabits, useToggleHabitLog } from '@/hooks/use-habits';
-import { useTheme } from '@/hooks/use-theme';
+import { useTheme, useThemeMode } from '@/hooks/use-theme';
+import {
+  TODAY_SECTION_LABELS,
+  useTodayLayout,
+  type TodaySectionId,
+} from '@/hooks/use-today-layout';
 import { useTodos, useToggleTodo, type Todo } from '@/hooks/use-todos';
 import { useTransactions } from '@/hooks/use-transactions';
 import { useSaveWeatherCity, useWeather, useWeatherCity } from '@/hooks/use-weather';
@@ -30,18 +38,172 @@ import { describeWeather, formatTemperature } from '@/lib/weather';
  */
 export default function TodayScreen() {
   const today = todayISO();
+  const theme = useTheme();
+  const queryClient = useQueryClient();
+  const { width } = useWindowDimensions();
+  const isWideWeb = Platform.OS === 'web' && width >= 960;
+  const { order, hidden, collapsed, moveSection, toggleHidden, toggleCollapsed, resetLayout } =
+    useTodayLayout();
+  const [editingLayout, setEditingLayout] = useState(false);
+
+  const visibleOrder = order.filter((id) => !hidden.includes(id));
+  const showWeatherTop = visibleOrder.includes('weather');
+  const gridSections = visibleOrder.filter((id) => id !== 'weather');
+
+  function renderSection(id: TodaySectionId, index: number) {
+    const isCollapsed = collapsed.includes(id);
+    const onToggleCollapse = () => toggleCollapsed(id);
+    switch (id) {
+      case 'weather':
+        return (
+          <WeatherSection
+            key={id}
+            index={index}
+            collapsed={isCollapsed}
+            onToggleCollapse={onToggleCollapse}
+          />
+        );
+      case 'todos':
+        return (
+          <TodoSection
+            key={id}
+            today={today}
+            index={index}
+            collapsed={isCollapsed}
+            onToggleCollapse={onToggleCollapse}
+          />
+        );
+      case 'events':
+        return (
+          <EventSection
+            key={id}
+            today={today}
+            index={index}
+            collapsed={isCollapsed}
+            onToggleCollapse={onToggleCollapse}
+          />
+        );
+      case 'habits':
+        return (
+          <HabitSection
+            key={id}
+            today={today}
+            index={index}
+            collapsed={isCollapsed}
+            onToggleCollapse={onToggleCollapse}
+          />
+        );
+      case 'money':
+        return (
+          <MoneySection
+            key={id}
+            today={today}
+            index={index}
+            collapsed={isCollapsed}
+            onToggleCollapse={onToggleCollapse}
+          />
+        );
+    }
+  }
 
   return (
-    <Screen title="오늘">
-      <ThemedText type="default" themeColor="textSecondary">
-        {formatDate(today)}
-      </ThemedText>
+    <Screen
+      title="오늘"
+      wide
+      onRefresh={() => queryClient.refetchQueries({ type: 'active' })}
+      action={
+        <Button
+          label="편집"
+          variant="secondary"
+          size="small"
+          onPress={() => setEditingLayout(true)}
+        />
+      }>
+      <View style={styles.topMetaRow}>
+        <ThemedText type="default" themeColor="textSecondary">
+          {formatDate(today)}
+        </ThemedText>
+        <View style={styles.quickActions}>
+          <Pressable
+            accessibilityRole="button"
+            onPress={() => router.push({ pathname: '/todos', params: { add: '1' } })}
+            style={({ pressed }) => [
+              styles.quickPill,
+              {
+                backgroundColor: theme.backgroundElement,
+                borderColor: theme.border,
+                opacity: pressed ? 0.7 : 1,
+              },
+            ]}>
+            <ThemedText type="small" themeColor="tint">
+              + 할 일
+            </ThemedText>
+          </Pressable>
+          <Pressable
+            accessibilityRole="button"
+            onPress={() => router.push({ pathname: '/money', params: { add: '1' } })}
+            style={({ pressed }) => [
+              styles.quickPill,
+              {
+                backgroundColor: theme.backgroundElement,
+                borderColor: theme.border,
+                opacity: pressed ? 0.7 : 1,
+              },
+            ]}>
+            <ThemedText type="small" themeColor="tint">
+              + 가계부
+            </ThemedText>
+          </Pressable>
+          <Pressable
+            accessibilityRole="button"
+            onPress={() => router.push('/note/new')}
+            style={({ pressed }) => [
+              styles.quickPill,
+              {
+                backgroundColor: theme.backgroundElement,
+                borderColor: theme.border,
+                opacity: pressed ? 0.7 : 1,
+              },
+            ]}>
+            <ThemedText type="small" themeColor="tint">
+              + 메모
+            </ThemedText>
+          </Pressable>
+        </View>
+      </View>
 
-      <WeatherSection />
-      <TodoSection today={today} />
-      <EventSection today={today} />
-      <HabitSection today={today} />
-      <MoneySection today={today} />
+      {isWideWeb ? (
+        <>
+          {showWeatherTop ? renderSection('weather', 0) : null}
+          <View style={styles.webGrid}>
+            {gridSections.map((id, idx) => (
+              <View key={id} style={styles.webGridItem}>
+                {renderSection(id, showWeatherTop ? idx + 1 : idx)}
+              </View>
+            ))}
+          </View>
+        </>
+      ) : (
+        visibleOrder.map((id, idx) => renderSection(id, idx))
+      )}
+
+      {visibleOrder.length === 0 ? (
+        <Card>
+          <ThemedText type="small" themeColor="textSecondary">
+            표시할 카드가 없습니다. 오른쪽 위 &quot;편집&quot;을 눌러 카드를 다시 켜 보세요.
+          </ThemedText>
+        </Card>
+      ) : null}
+
+      <TodayLayoutModal
+        visible={editingLayout}
+        order={order}
+        hidden={hidden}
+        onMove={moveSection}
+        onToggleHidden={toggleHidden}
+        onReset={resetLayout}
+        onClose={() => setEditingLayout(false)}
+      />
     </Screen>
   );
 }
@@ -50,7 +212,16 @@ export default function TodayScreen() {
 const UMBRELLA_RAIN_CHANCE = 50;
 
 /** 고른 도시의 지금 날씨와 오늘 최고·최저 기온. "지역 변경"으로 도시를 바꾼다. */
-function WeatherSection() {
+function WeatherSection({
+  index,
+  collapsed,
+  onToggleCollapse,
+}: {
+  index: number;
+  collapsed: boolean;
+  onToggleCollapse: () => void;
+}) {
+  const { resolvedScheme } = useThemeMode();
   const city = useWeatherCity();
   const weather = useWeather(city.data);
   const saveCity = useSaveWeatherCity();
@@ -59,11 +230,24 @@ function WeatherSection() {
 
   const now = weather.data;
   const look = now ? describeWeather(now.code, now.isDay) : null;
+  const atmosphere = now ? getWeatherAtmosphere(now.code, now.isDay, resolvedScheme) : null;
 
   return (
     <Section
-      index={0}
-      highlight
+      index={index}
+      highlight={!atmosphere}
+      collapsed={collapsed}
+      onToggleCollapse={onToggleCollapse}
+      cardStyle={
+        atmosphere
+          ? {
+              backgroundColor: atmosphere.background,
+              borderColor: atmosphere.border,
+              overflow: 'hidden',
+            }
+          : undefined
+      }
+      backdrop={now ? <WeatherBackdrop code={now.code} isDay={now.isDay} /> : null}
       title={city.data ? `날씨 · ${city.data.name}` : '날씨'}
       linkLabel={picking ? '닫기' : '지역 변경'}
       onLink={() => setPicking((open) => !open)}>
@@ -124,7 +308,17 @@ function isForToday(todo: Todo, today: string): boolean {
   return todo.done_at !== null && toISODate(new Date(todo.done_at)) === today;
 }
 
-function TodoSection({ today }: { today: string }) {
+function TodoSection({
+  today,
+  index,
+  collapsed,
+  onToggleCollapse,
+}: {
+  today: string;
+  index: number;
+  collapsed: boolean;
+  onToggleCollapse: () => void;
+}) {
   const todos = useTodos();
   const toggle = useToggleTodo();
 
@@ -134,7 +328,14 @@ function TodoSection({ today }: { today: string }) {
   const laterCount = all.filter((todo) => !todo.done).length - items.filter((t) => !t.done).length;
 
   return (
-    <Section index={1} title="할 일" linkLabel="전체 보기" onLink={() => router.navigate('/todos')}>
+    <Section
+      index={index}
+      collapsed={collapsed}
+      onToggleCollapse={onToggleCollapse}
+      title="할 일"
+      onQuickAdd={() => router.push({ pathname: '/todos', params: { add: '1' } })}
+      linkLabel="전체 보기"
+      onLink={() => router.navigate('/todos')}>
       <SectionStatus
         loading={todos.isPending}
         error={todos.error}
@@ -180,12 +381,29 @@ function TodoSection({ today }: { today: string }) {
   );
 }
 
-function EventSection({ today }: { today: string }) {
+function EventSection({
+  today,
+  index,
+  collapsed,
+  onToggleCollapse,
+}: {
+  today: string;
+  index: number;
+  collapsed: boolean;
+  onToggleCollapse: () => void;
+}) {
   const events = useEvents(yearMonthOf(today));
   const items = (events.data ?? []).filter((event) => event.event_date === today);
 
   return (
-    <Section index={2} title="일정" linkLabel="달력 보기" onLink={() => router.navigate('/calendar')}>
+    <Section
+      index={index}
+      collapsed={collapsed}
+      onToggleCollapse={onToggleCollapse}
+      title="일정"
+      onQuickAdd={() => router.push({ pathname: '/calendar', params: { add: '1' } })}
+      linkLabel="달력 보기"
+      onLink={() => router.navigate('/calendar')}>
       <SectionStatus
         loading={events.isPending}
         error={events.error}
@@ -213,7 +431,17 @@ function EventSection({ today }: { today: string }) {
   );
 }
 
-function HabitSection({ today }: { today: string }) {
+function HabitSection({
+  today,
+  index,
+  collapsed,
+  onToggleCollapse,
+}: {
+  today: string;
+  index: number;
+  collapsed: boolean;
+  onToggleCollapse: () => void;
+}) {
   const habits = useHabits();
   const logs = useHabitLogs();
   const toggle = useToggleHabitLog();
@@ -241,7 +469,9 @@ function HabitSection({ today }: { today: string }) {
 
   return (
     <Section
-      index={3}
+      index={index}
+      collapsed={collapsed}
+      onToggleCollapse={onToggleCollapse}
       title={ready && items.length > 0 ? `습관 ${doneCount}/${items.length}` : '습관'}
       // 습관을 추가·수정하거나 지난 7일을 보려면 습관 화면(src/app/habits.tsx)으로 간다.
       linkLabel="관리"
@@ -304,8 +534,19 @@ function HabitSection({ today }: { today: string }) {
   );
 }
 
-function MoneySection({ today }: { today: string }) {
+function MoneySection({
+  today,
+  index,
+  collapsed,
+  onToggleCollapse,
+}: {
+  today: string;
+  index: number;
+  collapsed: boolean;
+  onToggleCollapse: () => void;
+}) {
   const theme = useTheme();
+  const { budget } = useMonthlyBudget();
   const transactions = useTransactions(yearMonthOf(today));
   const items = transactions.data ?? [];
 
@@ -314,9 +555,19 @@ function MoneySection({ today }: { today: string }) {
   const income = sum(items.filter((item) => item.kind === 'income'));
   const expense = sum(expenses);
   const todayExpense = sum(expenses.filter((item) => item.occurred_on === today));
+  const budgetRatio = budget && budget > 0 ? expense / budget : 0;
+  const budgetColor =
+    budgetRatio >= 1 ? theme.danger : budgetRatio >= 0.75 ? theme.accentWarm : theme.tint;
 
   return (
-    <Section index={4} title="이번 달 가계부" linkLabel="내역 보기" onLink={() => router.navigate('/money')}>
+    <Section
+      index={index}
+      collapsed={collapsed}
+      onToggleCollapse={onToggleCollapse}
+      title="이번 달 가계부"
+      onQuickAdd={() => router.push({ pathname: '/money', params: { add: '1' } })}
+      linkLabel="내역 보기"
+      onLink={() => router.navigate('/money')}>
       <SectionStatus
         loading={transactions.isPending}
         error={transactions.error}
@@ -331,6 +582,24 @@ function MoneySection({ today }: { today: string }) {
             <Stat label="이번 달 지출" value={formatWon(expense)} color={theme.danger} />
             <Stat label="남은 돈" value={formatWon(income - expense)} color={theme.text} />
           </View>
+          {budget ? (
+            <View style={styles.budgetWrap}>
+              <View style={[styles.budgetTrack, { backgroundColor: theme.backgroundSelected }]}>
+                <View
+                  style={[
+                    styles.budgetFill,
+                    {
+                      backgroundColor: budgetColor,
+                      width: `${Math.min(100, Math.max(0, budgetRatio * 100))}%`,
+                    },
+                  ]}
+                />
+              </View>
+              <ThemedText type="small" themeColor="textSecondary">
+                예산 {formatWon(budget)} 중 {Math.round(budgetRatio * 100)}% 사용
+              </ThemedText>
+            </View>
+          ) : null}
           {items.length === 0 ? (
             <ThemedText type="small" themeColor="textSecondary">
               이번 달에는 아직 기록이 없습니다.
@@ -342,10 +611,15 @@ function MoneySection({ today }: { today: string }) {
   );
 }
 
-/** 제목 줄(왼쪽 제목, 오른쪽 이동 버튼)과 내용을 담는 상자. */
+/** 제목 줄(왼쪽 제목, 오른쪽 이동/추가/접기 버튼)과 내용을 담는 상자. */
 function Section({
   index = 0,
   highlight = false,
+  collapsed = false,
+  onToggleCollapse,
+  onQuickAdd,
+  cardStyle,
+  backdrop,
   title,
   linkLabel,
   onLink,
@@ -353,17 +627,50 @@ function Section({
 }: PropsWithChildren<{
   index?: number;
   highlight?: boolean;
+  collapsed?: boolean;
+  onToggleCollapse?: () => void;
+  onQuickAdd?: () => void;
+  cardStyle?: StyleProp<ViewStyle>;
+  backdrop?: React.ReactNode;
   title: string;
   linkLabel: string;
   onLink: () => void;
 }>) {
+  const theme = useTheme();
   return (
     <StaggeredReveal index={index}>
-      <Card highlight={highlight}>
+      <Card highlight={highlight} style={cardStyle}>
+        {backdrop}
         <View style={styles.sectionHeader}>
-          <ThemedText accessibilityRole="header" type="default" style={styles.sectionTitle}>
-            {title}
-          </ThemedText>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={`${title} ${collapsed ? '펼치기' : '접기'}`}
+            onPress={onToggleCollapse}
+            style={styles.sectionTitlePress}>
+            <ThemedText accessibilityRole="header" type="default" style={styles.sectionTitle}>
+              {title}
+            </ThemedText>
+            {onToggleCollapse ? (
+              <ThemedText type="small" themeColor="textSecondary">
+                {collapsed ? '▸' : '▾'}
+              </ThemedText>
+            ) : null}
+          </Pressable>
+          {onQuickAdd ? (
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={`${title} 빠르게 추가`}
+              hitSlop={8}
+              onPress={onQuickAdd}
+              style={({ pressed }) => [
+                styles.sectionAddBtn,
+                { backgroundColor: theme.tintSoft, opacity: pressed ? 0.7 : 1 },
+              ]}>
+              <ThemedText type="smallBold" themeColor="tint">
+                +
+              </ThemedText>
+            </Pressable>
+          ) : null}
           <Pressable
             accessibilityRole="button"
             accessibilityLabel={`${title} ${linkLabel}`}
@@ -375,9 +682,103 @@ function Section({
             </ThemedText>
           </Pressable>
         </View>
-        {children}
+        {!collapsed ? children : null}
       </Card>
     </StaggeredReveal>
+  );
+}
+
+function TodayLayoutModal({
+  visible,
+  order,
+  hidden,
+  onMove,
+  onToggleHidden,
+  onReset,
+  onClose,
+}: {
+  visible: boolean;
+  order: TodaySectionId[];
+  hidden: TodaySectionId[];
+  onMove: (id: TodaySectionId, dir: -1 | 1) => void;
+  onToggleHidden: (id: TodaySectionId) => void;
+  onReset: () => void;
+  onClose: () => void;
+}) {
+  const theme = useTheme();
+
+  return (
+    <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
+      <Pressable onPress={onClose} style={styles.modalBackdrop}>
+        <Pressable
+          onPress={(e) => e.stopPropagation()}
+          style={[
+            styles.modalCard,
+            { backgroundColor: theme.backgroundElement, borderColor: theme.border },
+          ]}>
+          <ThemedText type="default" style={styles.modalTitle}>
+            오늘 화면 구성
+          </ThemedText>
+          <ThemedText type="small" themeColor="textSecondary">
+            카드 순서를 바꾸거나 필요 없는 카드를 숨길 수 있습니다.
+          </ThemedText>
+
+          <View style={styles.layoutList}>
+            {order.map((id, idx) => {
+              const isHidden = hidden.includes(id);
+              return (
+                <View
+                  key={id}
+                  style={[
+                    styles.layoutRow,
+                    { backgroundColor: theme.background, borderColor: theme.border },
+                  ]}>
+                  <ThemedText
+                    type="smallBold"
+                    themeColor={isHidden ? 'textSecondary' : 'text'}
+                    style={styles.layoutName}>
+                    {TODAY_SECTION_LABELS[id]}
+                  </ThemedText>
+                  <View style={styles.layoutControls}>
+                    <Pressable
+                      disabled={idx === 0}
+                      onPress={() => onMove(id, -1)}
+                      style={[styles.iconBtn, { opacity: idx === 0 ? 0.3 : 1 }]}>
+                      <ThemedText type="small">▲</ThemedText>
+                    </Pressable>
+                    <Pressable
+                      disabled={idx === order.length - 1}
+                      onPress={() => onMove(id, 1)}
+                      style={[styles.iconBtn, { opacity: idx === order.length - 1 ? 0.3 : 1 }]}>
+                      <ThemedText type="small">▼</ThemedText>
+                    </Pressable>
+                    <Pressable
+                      onPress={() => onToggleHidden(id)}
+                      style={[
+                        styles.visPill,
+                        {
+                          backgroundColor: isHidden ? theme.backgroundSelected : theme.tintSoft,
+                        },
+                      ]}>
+                      <ThemedText
+                        type="smallBold"
+                        style={{ color: isHidden ? theme.textSecondary : theme.tint }}>
+                        {isHidden ? '숨김' : '표시'}
+                      </ThemedText>
+                    </Pressable>
+                  </View>
+                </View>
+              );
+            })}
+          </View>
+
+          <View style={styles.modalFooter}>
+            <Button label="기본값 복원" variant="secondary" size="small" onPress={onReset} />
+            <Button label="완료" size="small" onPress={onClose} />
+          </View>
+        </Pressable>
+      </Pressable>
+    </Modal>
   );
 }
 
@@ -484,5 +885,111 @@ const styles = StyleSheet.create({
     fontSize: 22,
     lineHeight: 30,
     fontWeight: 700,
+  },
+  topMetaRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: Spacing.two,
+  },
+  quickActions: {
+    flexDirection: 'row',
+    gap: Spacing.two,
+  },
+  quickPill: {
+    paddingHorizontal: Spacing.two + 2,
+    paddingVertical: Spacing.one + 1,
+    borderRadius: Radius.full,
+    borderWidth: 1,
+  },
+  webGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: Spacing.three,
+    alignItems: 'flex-start',
+  },
+  webGridItem: {
+    flexBasis: '48%',
+    flexGrow: 1,
+    minWidth: 320,
+  },
+  sectionTitlePress: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.one,
+  },
+  sectionAddBtn: {
+    width: 24,
+    height: 24,
+    borderRadius: Radius.full,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  budgetWrap: {
+    gap: Spacing.one,
+  },
+  budgetTrack: {
+    height: 7,
+    borderRadius: Radius.full,
+    overflow: 'hidden',
+  },
+  budgetFill: {
+    height: 7,
+    borderRadius: Radius.full,
+  },
+  modalBackdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(10, 10, 18, 0.56)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: Spacing.three,
+  },
+  modalCard: {
+    width: '100%',
+    maxWidth: 400,
+    borderRadius: Radius.large,
+    borderWidth: 1,
+    padding: Spacing.three,
+    gap: Spacing.three,
+  },
+  modalTitle: {
+    fontWeight: 700,
+    fontSize: 18,
+  },
+  layoutList: {
+    gap: Spacing.two,
+  },
+  layoutRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: Spacing.three - 4,
+    paddingVertical: Spacing.two,
+    borderRadius: Radius.medium,
+    borderWidth: 1,
+  },
+  layoutName: {
+    flex: 1,
+  },
+  layoutControls: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.one,
+  },
+  iconBtn: {
+    paddingHorizontal: Spacing.two,
+    paddingVertical: Spacing.one,
+  },
+  visPill: {
+    paddingHorizontal: Spacing.two + 2,
+    paddingVertical: Spacing.one,
+    borderRadius: Radius.full,
+  },
+  modalFooter: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
   },
 });

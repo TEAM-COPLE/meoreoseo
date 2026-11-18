@@ -1,7 +1,7 @@
 import type { Session } from '@supabase/supabase-js';
 import { createContext, useContext, useEffect, useState, type PropsWithChildren } from 'react';
 
-import { queryClient } from './query';
+import { queryClient, startQueryPersistence, stopQueryPersistence } from './query';
 import { hasSupabaseConfig, supabase } from './supabase';
 
 type AuthState = {
@@ -54,22 +54,31 @@ export function AuthProvider({ children }: PropsWithChildren) {
     if (!hasSupabaseConfig) return;
 
     let currentUserId: string | undefined;
+    let alive = true;
 
-    const apply = (session: Session | null) => {
+    const apply = async (session: Session | null) => {
       activeSession = session;
       const nextUserId = session?.user.id;
       // 사용자가 바뀌면(로그인·로그아웃 포함) 이전 데이터를 화면에 남기지 않게 캐시를 비운다.
       if (currentUserId !== nextUserId) {
+        stopQueryPersistence();
         queryClient.clear();
         currentUserId = nextUserId;
+        if (nextUserId) {
+          await startQueryPersistence(nextUserId);
+        }
       }
+      if (!alive) return;
       setState({ session, loading: false });
     };
 
     supabase.auth.getSession().then(({ data }) => apply(data.session));
     const { data } = supabase.auth.onAuthStateChange((_event, session) => apply(session));
 
-    return () => data.subscription.unsubscribe();
+    return () => {
+      alive = false;
+      data.subscription.unsubscribe();
+    };
   }, []);
 
   return <AuthContext.Provider value={state}>{children}</AuthContext.Provider>;
