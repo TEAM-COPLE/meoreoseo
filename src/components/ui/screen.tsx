@@ -1,5 +1,5 @@
 import { router } from 'expo-router';
-import { useState, type PropsWithChildren, type ReactNode, type Ref } from 'react';
+import { useEffect, useState, type PropsWithChildren, type ReactNode, type Ref } from 'react';
 import {
   Modal,
   Platform,
@@ -22,6 +22,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ThemedText } from '@/components/themed-text';
 import { BottomTabInset, MaxContentWidth, Radius, Spacing } from '@/constants/theme';
 import { useTheme, useThemeMode, type ThemeMode } from '@/hooks/use-theme';
+import { setSwipeLocked } from '@/lib/swipe-navigation';
 
 import { Button } from './button';
 import { SkeletonList } from './loading-animation';
@@ -74,6 +75,12 @@ export function Screen({
   const insets = useSafeAreaInsets();
   const bottomInset = onBack ? Spacing.four : BottomTabInset + Spacing.four;
   const maxWidth = wide && Platform.OS === 'web' && width >= 960 ? 1080 : MaxContentWidth;
+
+  useEffect(() => {
+    if (scrollEnabled) return;
+    setSwipeLocked(true);
+    return () => setSwipeLocked(false);
+  }, [scrollEnabled]);
 
   async function handleRefresh() {
     if (!onRefresh || refreshing) return;
