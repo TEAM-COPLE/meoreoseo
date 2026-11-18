@@ -46,7 +46,7 @@ async function latestMainCommit(): Promise<string> {
 }
 
 /**
- * 계정 화면의 "버전 정보" 칸.
+ * 설정 화면의 "버전 정보" 칸.
  * 팀원끼리 화면의 커밋 번호를 비교하면 같은 코드인지 알 수 있다.
  */
 export function VersionInfoCard() {

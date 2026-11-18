@@ -40,7 +40,7 @@ function leadLabel(minutes: number): string {
   return `시작 ${minutes}분 전`;
 }
 
-/** 계정 화면에 놓이는 알림 설정 상자. 실제 예약은 notification-sync.tsx 가 한다. */
+/** 설정 화면에 놓이는 알림 설정 상자. 실제 예약은 notification-sync.tsx 가 한다. */
 export function NotificationSettingsCard() {
   const settings = useNotificationSettings().data;
   const save = useSaveNotificationSettings();

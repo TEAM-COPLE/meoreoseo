@@ -61,9 +61,11 @@ function ThemedRootNavigator() {
             {/* 습관 관리. 오늘 화면에서 연다. */}
             <Stack.Screen name="habits" />
             <Stack.Screen
-              name="account"
-              options={{ headerShown: true, title: '계정 및 설정', headerBackTitle: '뒤로' }}
+              name="settings"
+              options={{ headerShown: true, title: '설정', headerBackTitle: '뒤로' }}
             />
+            {/* 예전 주소. 설정 화면으로 바로 넘어간다. */}
+            <Stack.Screen name="account" />
           </Stack.Protected>
 
           <Stack.Protected guard={!signedIn} redirectTo="/">
