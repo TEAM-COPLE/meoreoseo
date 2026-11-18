@@ -2,7 +2,6 @@ import { activeUserId, hasActiveSession } from './auth';
 import type { Tables } from './database.types';
 import { queryClient } from './query';
 import { supabase } from './supabase';
-import { scheduleWidgetSync } from './widget-sync';
 
 type NoteRow = Tables<'notes'>;
 
@@ -125,10 +124,7 @@ export function createNoteAutosaver(
       }
       lastSavedSig = sig;
       onStatus(pending ? 'dirty' : 'saved');
-      const cacheUpdated = upsertNotesCache(saved);
-      if (!cacheUpdated) {
-        scheduleWidgetSync({ forceDomains: ['notes'] });
-      }
+      upsertNotesCache(saved);
     }
   }
 
@@ -190,9 +186,7 @@ export function createNoteAutosaver(
         stopped = false;
         return error.message;
       }
-      if (!removeFromNotesCache(noteId)) {
-        scheduleWidgetSync({ forceDomains: ['notes'] });
-      }
+      removeFromNotesCache(noteId);
       return null;
     },
   };

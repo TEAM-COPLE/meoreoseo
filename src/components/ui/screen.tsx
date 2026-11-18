@@ -1,10 +1,13 @@
 import { router } from 'expo-router';
-import type { PropsWithChildren, ReactNode } from 'react';
+import { useState, type PropsWithChildren, type ReactNode } from 'react';
 import {
+  Modal,
   Platform,
   Pressable,
+  RefreshControl,
   ScrollView,
   StyleSheet,
+  useWindowDimensions,
   View,
   type GestureResponderEvent,
   type StyleProp,
@@ -14,7 +17,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { ThemedText } from '@/components/themed-text';
 import { BottomTabInset, MaxContentWidth, Radius, Spacing } from '@/constants/theme';
-import { useTheme, useThemeMode } from '@/hooks/use-theme';
+import { useTheme, useThemeMode, type ThemeMode } from '@/hooks/use-theme';
 
 import { Button } from './button';
 import { SkeletonList } from './loading-animation';
@@ -27,26 +30,54 @@ type Props = PropsWithChildren<{
   onBack?: () => void;
   /** 화면 아래쪽에 떠 있는 작업 막대(예: 멀티 삭제 바) */
   overlay?: ReactNode;
+  /** 아래로 당겨서 새로고침할 때 호출할 함수 */
+  onRefresh?: () => Promise<unknown> | void;
+  /** 웹 데스크톱 넓은 화면에서 최대 너비를 넓힐지 여부 */
+  wide?: boolean;
 }>;
 
 /**
  * 탭 화면의 공통 틀: 위쪽 제목 줄 + 스크롤되는 내용.
- * 제목 줄 오른쪽에서 라이트/다크 모드를 바로 전환하거나 "계정" 화면으로 갈 수 있다.
+ * 제목 줄 오른쪽에서 테마를 바꾸거나 "계정" 화면으로 갈 수 있다.
  */
-export function Screen({ title, action, onBack, overlay, children }: Props) {
+export function Screen({ title, action, onBack, overlay, onRefresh, wide = false, children }: Props) {
   const theme = useTheme();
-  const { resolvedScheme, toggleScheme } = useThemeMode();
+  const { mode, resolvedScheme, setMode } = useThemeMode();
+  const [themeOpen, setThemeOpen] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
+  const { width } = useWindowDimensions();
   const insets = useSafeAreaInsets();
-  const isDark = resolvedScheme === 'dark';
   const bottomInset = onBack ? Spacing.four : BottomTabInset + Spacing.four;
+  const maxWidth = wide && Platform.OS === 'web' && width >= 960 ? 1080 : MaxContentWidth;
+
+  async function handleRefresh() {
+    if (!onRefresh || refreshing) return;
+    setRefreshing(true);
+    try {
+      await onRefresh();
+    } finally {
+      setRefreshing(false);
+    }
+  }
 
   return (
     <View style={[styles.root, { backgroundColor: theme.background }]}>
       <ScrollView
         keyboardShouldPersistTaps="handled"
+        refreshControl={
+          onRefresh ? (
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={handleRefresh}
+              tintColor={theme.tint}
+              colors={[theme.tint]}
+            />
+          ) : undefined
+        }
         contentContainerStyle={[
           styles.content,
           {
+            maxWidth,
             paddingTop: insets.top + Spacing.three,
             paddingBottom: insets.bottom + bottomInset + (overlay ? 76 : 0),
           },
@@ -71,9 +102,9 @@ export function Screen({ title, action, onBack, overlay, children }: Props) {
           {action}
           <Pressable
             accessibilityRole="button"
-            accessibilityLabel={isDark ? '라이트 모드로 전환' : '다크 모드로 전환'}
+            accessibilityLabel="테마 선택"
             hitSlop={8}
-            onPress={toggleScheme}
+            onPress={() => setThemeOpen(true)}
             style={({ pressed }) => [
               styles.account,
               {
@@ -82,7 +113,7 @@ export function Screen({ title, action, onBack, overlay, children }: Props) {
                 opacity: pressed ? 0.7 : 1,
               },
             ]}>
-            <ThemedText type="small">{isDark ? '라이트' : '다크'}</ThemedText>
+            <ThemedText type="small">테마</ThemedText>
           </Pressable>
           <Pressable
             accessibilityRole="button"
@@ -116,7 +147,108 @@ export function Screen({ title, action, onBack, overlay, children }: Props) {
           <View style={styles.overlayInner}>{overlay}</View>
         </View>
       ) : null}
+
+      <ThemePickerModal
+        visible={themeOpen}
+        mode={mode}
+        resolvedScheme={resolvedScheme}
+        onSelect={(next) => {
+          setMode(next);
+          setThemeOpen(false);
+        }}
+        onClose={() => setThemeOpen(false)}
+      />
     </View>
+  );
+}
+
+const THEME_OPTIONS: readonly { value: ThemeMode; label: string; description: string }[] = [
+  { value: 'light', label: '라이트 테마', description: '밝고 선명한 화면' },
+  { value: 'dark', label: '다크 테마', description: '눈이 편안한 어두운 화면' },
+  { value: 'system', label: '기기 설정 따르기', description: '시스템 화면 모드에 맞춤' },
+];
+
+function ThemePickerModal({
+  visible,
+  mode,
+  resolvedScheme,
+  onSelect,
+  onClose,
+}: {
+  visible: boolean;
+  mode: ThemeMode;
+  resolvedScheme: 'light' | 'dark';
+  onSelect: (next: ThemeMode) => void;
+  onClose: () => void;
+}) {
+  const theme = useTheme();
+
+  return (
+    <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel="테마 선택 창 닫기"
+        onPress={onClose}
+        style={styles.modalBackdrop}>
+        <Pressable
+          onPress={(e) => e.stopPropagation()}
+          style={[
+            styles.modalCard,
+            {
+              backgroundColor: theme.backgroundElement,
+              borderColor: theme.border,
+            },
+          ]}>
+          <View style={styles.modalHeader}>
+            <ThemedText type="default" style={styles.modalTitle}>
+              화면 테마
+            </ThemedText>
+            <ThemedText type="small" themeColor="textSecondary">
+              현재 {resolvedScheme === 'dark' ? '다크' : '라이트'} 테마 적용 중
+            </ThemedText>
+          </View>
+
+          <View style={styles.modalOptions}>
+            {THEME_OPTIONS.map((option) => {
+              const selected = mode === option.value;
+              return (
+                <Pressable
+                  key={option.value}
+                  accessibilityRole="radio"
+                  accessibilityState={{ selected }}
+                  onPress={() => onSelect(option.value)}
+                  style={({ pressed }) => [
+                    styles.themeOption,
+                    {
+                      backgroundColor: selected ? theme.tintSoft : theme.background,
+                      borderColor: selected ? theme.tint : theme.border,
+                      opacity: pressed ? 0.8 : 1,
+                    },
+                  ]}>
+                  <View style={styles.themeOptionText}>
+                    <ThemedText
+                      type="smallBold"
+                      style={{ color: selected ? theme.tint : theme.text }}>
+                      {option.label}
+                    </ThemedText>
+                    <ThemedText type="small" themeColor="textSecondary">
+                      {option.description}
+                    </ThemedText>
+                  </View>
+                  {selected ? (
+                    <ThemedText type="smallBold" style={{ color: theme.tint }}>
+                      ✓
+                    </ThemedText>
+                  ) : null}
+                </Pressable>
+              );
+            })}
+          </View>
+
+          <Button label="닫기" variant="secondary" size="small" onPress={onClose} />
+        </Pressable>
+      </Pressable>
+    </Modal>
   );
 }
 
@@ -292,5 +424,42 @@ const styles = StyleSheet.create({
     maxWidth: MaxContentWidth,
     alignSelf: 'center',
     paddingHorizontal: Spacing.three,
+  },
+  modalBackdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(10, 10, 18, 0.56)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: Spacing.three,
+  },
+  modalCard: {
+    width: '100%',
+    maxWidth: 360,
+    borderRadius: Radius.large,
+    borderWidth: 1,
+    padding: Spacing.three,
+    gap: Spacing.three,
+  },
+  modalHeader: {
+    gap: Spacing.half,
+  },
+  modalTitle: {
+    fontWeight: 700,
+    fontSize: 18,
+  },
+  modalOptions: {
+    gap: Spacing.two,
+  },
+  themeOption: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: Spacing.three,
+    paddingVertical: Spacing.two + 2,
+    borderRadius: Radius.medium,
+    borderWidth: 1.5,
+  },
+  themeOptionText: {
+    gap: Spacing.half,
   },
 });

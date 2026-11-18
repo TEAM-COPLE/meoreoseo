@@ -7,13 +7,12 @@ import { useEffect } from 'react';
 import { ThemeModeProvider, useColorScheme } from '@/hooks/use-theme';
 import { NotificationSync } from '@/components/notification-sync';
 import { ConfirmRootHost } from '@/components/ui/confirm-modal';
-import { AppLoadingScreen } from '@/components/ui/loading-animation';
+import { InitialDbLoadingOverlay } from '@/components/ui/loading-animation';
 import { useAutoUpdateOnAppActive } from '@/lib/app-version';
 import { AuthProvider, useAuth } from '@/lib/auth';
 import { installGlobalErrorHandler } from '@/lib/error-report';
 import { notificationsSupported } from '@/lib/notifications';
 import { queryClient } from '@/lib/query';
-import { useWidgetBridge } from '@/lib/widget-sync';
 
 // 초기 상태를 확인할 때까지 시작 화면(스플래시)을 그대로 둔다.
 SplashScreen.preventAutoHideAsync();
@@ -42,20 +41,10 @@ function ThemedRootNavigator() {
   const { session, loading } = useAuth();
   const signedIn = session !== null;
   useAutoUpdateOnAppActive();
-  useWidgetBridge();
 
   useEffect(() => {
     if (!loading) SplashScreen.hideAsync();
   }, [loading]);
-
-  if (loading) {
-    return (
-      <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
-        <StatusBar style={colorScheme === 'dark' ? 'light' : 'dark'} />
-        <AppLoadingScreen />
-      </ThemeProvider>
-    );
-  }
 
   return (
     <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
@@ -63,27 +52,30 @@ function ThemedRootNavigator() {
       {/* 로그인된 상태에서 휴대폰의 예약 알림을 데이터와 맞춘다. 화면에는 보이지 않는다. */}
       {signedIn && notificationsSupported ? <NotificationSync /> : null}
 
-      <Stack screenOptions={{ headerShown: false }}>
-        <Stack.Protected guard={signedIn} redirectTo="/sign-in">
-          <Stack.Screen name="(tabs)" />
-          {/* 메모장. 탭 위에 전체 화면으로 열린다. */}
-          <Stack.Screen name="note/[id]" />
-          {/* 습관 관리. 오늘 화면에서 연다. */}
-          <Stack.Screen name="habits" />
-          <Stack.Screen
-            name="account"
-            options={{ headerShown: true, title: '계정 및 설정', headerBackTitle: '뒤로' }}
-          />
-        </Stack.Protected>
+      {!loading ? (
+        <Stack screenOptions={{ headerShown: false }}>
+          <Stack.Protected guard={signedIn} redirectTo="/sign-in">
+            <Stack.Screen name="(tabs)" />
+            {/* 메모장. 탭 위에 전체 화면으로 열린다. */}
+            <Stack.Screen name="note/[id]" />
+            {/* 습관 관리. 오늘 화면에서 연다. */}
+            <Stack.Screen name="habits" />
+            <Stack.Screen
+              name="account"
+              options={{ headerShown: true, title: '계정 및 설정', headerBackTitle: '뒤로' }}
+            />
+          </Stack.Protected>
 
-        <Stack.Protected guard={!signedIn} redirectTo="/">
-          <Stack.Screen name="sign-in" options={{ headerShown: false }} />
-        </Stack.Protected>
+          <Stack.Protected guard={!signedIn} redirectTo="/">
+            <Stack.Screen name="sign-in" options={{ headerShown: false }} />
+          </Stack.Protected>
 
-        {/* 구글·카카오 로그인을 마치고 돌아오는 화면 */}
-        <Stack.Screen name="auth-callback" />
-      </Stack>
+          {/* 구글·카카오 로그인을 마치고 돌아오는 화면 */}
+          <Stack.Screen name="auth-callback" />
+        </Stack>
+      ) : null}
       <ConfirmRootHost />
+      <InitialDbLoadingOverlay authLoading={loading} signedIn={signedIn} />
     </ThemeProvider>
   );
 }

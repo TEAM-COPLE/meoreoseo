@@ -1,5 +1,5 @@
 import { router, useLocalSearchParams } from 'expo-router';
-import { useState } from 'react';
+import { useDeferredValue, useRef, useState } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 
 import { ThemedText } from '@/components/themed-text';
@@ -9,9 +9,10 @@ import { FormModal } from '@/components/ui/form-modal';
 import { Card, ListStatus, Screen } from '@/components/ui/screen';
 import { Segmented } from '@/components/ui/segmented';
 import { SelectionBar, SelectionHeaderActions, SelectionIndicator } from '@/components/ui/selection-bar';
-import { TextField } from '@/components/ui/text-field';
+import { TextField, type TextFieldRef } from '@/components/ui/text-field';
 import { Spacing } from '@/constants/theme';
 import { hasSelectionModifier, useMultiSelect } from '@/hooks/use-multi-select';
+import { useWebSearchShortcut } from '@/hooks/use-web-shortcut';
 import {
   useDeleteTodo,
   useDeleteTodos,
@@ -29,7 +30,6 @@ import {
   repeatLabel,
   type RepeatChoice,
 } from '@/lib/repeat';
-import { clearWidgetOpenRequest, useWidgetOpenRequest } from '@/lib/widget-sync';
 
 type Filter = 'open' | 'done';
 
@@ -44,30 +44,40 @@ const PRIORITIES = [
   { value: 2, label: '매우 중요' },
 ] as const;
 
+const PRIORITY_FILTERS = [
+  { value: -1, label: '전체' },
+  { value: 0, label: '보통' },
+  { value: 1, label: '중요' },
+  { value: 2, label: '매우 중요' },
+] as const;
+
 export default function TodosScreen() {
   const { add, editId } = useLocalSearchParams<{ add?: string; editId?: string }>();
-  const widgetReq = useWidgetOpenRequest('todos');
   const todos = useTodos();
   const toggle = useToggleTodo();
   const removeMany = useDeleteTodos();
   const multi = useMultiSelect();
   const [filter, setFilter] = useState<Filter>('open');
+  const [priorityFilter, setPriorityFilter] = useState<number>(-1);
+  const [query, setQuery] = useState('');
+  const deferredQuery = useDeferredValue(query);
+  const searchRef = useRef<TextFieldRef | null>(null);
   const [bulkError, setBulkError] = useState<string | null>(null);
   // null: 양식 닫힘, 'new': 새로 추가, Todo: 그 할 일을 수정
   const [editing, setEditing] = useState<Todo | 'new' | null>(null);
 
-  const targetEditId = widgetReq?.mode === 'edit' ? widgetReq.editId : editId;
+  useWebSearchShortcut(() => searchRef.current?.focus());
+
   const activeEditing: Todo | 'new' | null =
     editing ??
-    (widgetReq?.mode === 'add' || add
+    (add
       ? 'new'
-      : targetEditId
-        ? ((todos.data ?? []).find((t) => t.id === targetEditId) ?? null)
+      : editId
+        ? ((todos.data ?? []).find((t) => t.id === editId) ?? null)
         : null);
 
   function closeForm() {
     setEditing(null);
-    clearWidgetOpenRequest('todos');
     if (add || editId) {
       router.setParams({ add: undefined, editId: undefined });
     }
@@ -80,7 +90,16 @@ export default function TodosScreen() {
   }
 
   const today = todayISO();
-  const visible = (todos.data ?? []).filter((todo) => todo.done === (filter === 'done'));
+  const keyword = deferredQuery.trim().toLowerCase();
+  const visible = (todos.data ?? []).filter((todo) => {
+    if (todo.done !== (filter === 'done')) return false;
+    if (priorityFilter !== -1 && todo.priority !== priorityFilter) return false;
+    if (keyword) {
+      const hay = `${todo.title} ${todo.notes ?? ''}`.toLowerCase();
+      if (!hay.includes(keyword)) return false;
+    }
+    return true;
+  });
   // 아직 차례가 오지 않은 반복 할 일은 아래 "다음 반복"에 따로 모아, 그날이 되기 전에는 체크하지 못하게 한다.
   const ready = visible.filter((todo) => !isWaitingRepeat(todo, today));
   const waiting = visible.filter((todo) => isWaitingRepeat(todo, today));
@@ -203,6 +222,7 @@ export default function TodosScreen() {
   return (
     <Screen
       title="할 일"
+      onRefresh={() => todos.refetch()}
       action={
         <SelectionHeaderActions
           selecting={isSelecting}
@@ -238,6 +258,22 @@ export default function TodosScreen() {
         ) : undefined
       }>
       <Segmented options={FILTERS} value={filter} onChange={changeFilter} />
+      <Segmented
+        options={PRIORITY_FILTERS}
+        value={priorityFilter}
+        onChange={(next) => {
+          setPriorityFilter(next);
+          multi.clear();
+        }}
+      />
+      <TextField
+        inputRef={searchRef}
+        label="검색"
+        placeholder="할 일 제목 또는 메모로 검색…"
+        value={query}
+        onChangeText={setQuery}
+        returnKeyType="search"
+      />
 
       {bulkError ? (
         <ThemedText type="small" themeColor="danger">
@@ -250,9 +286,11 @@ export default function TodosScreen() {
         error={todos.error}
         empty={ready.length === 0 && waiting.length === 0}
         emptyText={
-          filter === 'open'
-            ? '진행 중인 할 일이 없습니다. "추가"를 눌러 시작해 보세요.'
-            : '완료한 할 일이 아직 없습니다.'
+          keyword || priorityFilter !== -1
+            ? '조건에 맞는 할 일이 없습니다.'
+            : filter === 'open'
+              ? '진행 중인 할 일이 없습니다. "추가"를 눌러 시작해 보세요.'
+              : '완료한 할 일이 아직 없습니다.'
         }
         onRetry={todos.refetch}
       />

@@ -22,7 +22,6 @@ import { hasSelectionModifier, useMultiSelect } from '@/hooks/use-multi-select';
 import { useTheme } from '@/hooks/use-theme';
 import { dayOf, lastDays, weekdayOf } from '@/lib/dates';
 import { confirm, errorMessage } from '@/lib/format';
-import { clearWidgetOpenRequest, useWidgetOpenRequest } from '@/lib/widget-sync';
 
 /** 오늘 화면으로 돌아간다. 이 화면을 주소로 바로 연 경우에는 돌아갈 곳이 없으므로 새로 연다. */
 function leave() {
@@ -40,7 +39,6 @@ function leave() {
  */
 export default function HabitsScreen() {
   const { add, editId } = useLocalSearchParams<{ add?: string; editId?: string }>();
-  const widgetReq = useWidgetOpenRequest('habits');
   const theme = useTheme();
   const habits = useHabits();
   const logs = useHabitLogs();
@@ -51,18 +49,16 @@ export default function HabitsScreen() {
   const [editing, setEditing] = useState<Habit | 'new' | null>(null);
   const [deleteError, setDeleteError] = useState<string | null>(null);
 
-  const targetEditId = widgetReq?.mode === 'edit' ? widgetReq.editId : editId;
   const activeEditing: Habit | 'new' | null =
     editing ??
-    (widgetReq?.mode === 'add' || add
+    (add
       ? 'new'
-      : targetEditId
-        ? ((habits.data ?? []).find((h) => h.id === targetEditId) ?? null)
+      : editId
+        ? ((habits.data ?? []).find((h) => h.id === editId) ?? null)
         : null);
 
   function closeForm() {
     setEditing(null);
-    clearWidgetOpenRequest('habits');
     if (add || editId) {
       router.setParams({ add: undefined, editId: undefined });
     }
@@ -85,6 +81,30 @@ export default function HabitsScreen() {
   const selectedVisibleIds = habitIds.filter((id) => multi.isSelected(id));
   const canSelect = Boolean(logs.data) && habitIds.length > 0;
   const isSelecting = canSelect && (multi.active || selectedVisibleIds.length > 0);
+
+  const weeklyStats = useMemo(() => {
+    const list = habits.data ?? [];
+    if (!logs.data || list.length === 0) return null;
+    let totalChecks = 0;
+    const perDay = days.map((day) => {
+      let doneCount = 0;
+      for (const habit of list) {
+        if (logs.data.get(habit.id)?.has(day)) {
+          doneCount += 1;
+        }
+      }
+      totalChecks += doneCount;
+      return {
+        day,
+        label: day === today ? '오늘' : weekdayOf(day),
+        doneCount,
+        ratio: doneCount / list.length,
+      };
+    });
+    const totalPossible = list.length * days.length;
+    const rate = totalPossible > 0 ? Math.round((totalChecks / totalPossible) * 100) : 0;
+    return { rate, totalChecks, totalPossible, perDay };
+  }, [days, habits.data, logs.data, today]);
 
   async function deleteSingleHabit(habit: Habit) {
     const ok = await confirm({
@@ -123,6 +143,7 @@ export default function HabitsScreen() {
     <Screen
       title="습관"
       onBack={leave}
+      onRefresh={() => Promise.all([habits.refetch(), logs.refetch()])}
       action={
         <SelectionHeaderActions
           selecting={isSelecting}
@@ -173,6 +194,50 @@ export default function HabitsScreen() {
           logs.refetch();
         }}
       />
+
+      {weeklyStats ? (
+        <Card>
+          <View style={styles.summaryHeader}>
+            <ThemedText type="smallBold">최근 7일 달성률</ThemedText>
+            <ThemedText type="smallBold" themeColor="tint">
+              {weeklyStats.rate}% ({weeklyStats.totalChecks}/{weeklyStats.totalPossible})
+            </ThemedText>
+          </View>
+          <View style={[styles.rateTrack, { backgroundColor: theme.backgroundSelected }]}>
+            <View
+              style={[
+                styles.rateFill,
+                {
+                  backgroundColor: theme.tint,
+                  width: `${Math.min(100, Math.max(0, weeklyStats.rate))}%`,
+                },
+              ]}
+            />
+          </View>
+          <View style={styles.weekBars}>
+            {weeklyStats.perDay.map((entry) => (
+              <View key={entry.day} style={styles.weekBarCol}>
+                <View style={[styles.weekBarTrack, { backgroundColor: theme.backgroundSelected }]}>
+                  <View
+                    style={[
+                      styles.weekBarFill,
+                      {
+                        backgroundColor: entry.day === today ? theme.tint : theme.success,
+                        height: `${Math.round(entry.ratio * 100)}%`,
+                      },
+                    ]}
+                  />
+                </View>
+                <ThemedText
+                  type="small"
+                  themeColor={entry.day === today ? 'tint' : 'textSecondary'}>
+                  {entry.label}
+                </ThemedText>
+              </View>
+            ))}
+          </View>
+        </Card>
+      ) : null}
 
       {logs.data
         ? habitItems.map((habit) => {
@@ -395,5 +460,40 @@ const styles = StyleSheet.create({
     borderWidth: 1.5,
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  summaryHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  rateTrack: {
+    height: 8,
+    borderRadius: Radius.full,
+    overflow: 'hidden',
+  },
+  rateFill: {
+    height: 8,
+    borderRadius: Radius.full,
+  },
+  weekBars: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    paddingTop: Spacing.one,
+  },
+  weekBarCol: {
+    alignItems: 'center',
+    gap: Spacing.one,
+    flex: 1,
+  },
+  weekBarTrack: {
+    width: 14,
+    height: 44,
+    borderRadius: Radius.full,
+    overflow: 'hidden',
+    justifyContent: 'flex-end',
+  },
+  weekBarFill: {
+    width: '100%',
+    borderRadius: Radius.full,
   },
 });
