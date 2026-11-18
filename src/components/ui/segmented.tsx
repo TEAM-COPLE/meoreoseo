@@ -37,6 +37,8 @@ export function Segmented<T extends string | number>({ options, value, onChange,
                 styles.chip,
                 {
                   backgroundColor: selected ? theme.tint : theme.backgroundElement,
+                  borderColor: selected ? theme.tint : theme.border,
+                  borderWidth: 1,
                   opacity: pressed ? 0.75 : 1,
                 },
               ]}>

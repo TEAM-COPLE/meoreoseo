@@ -1,5 +1,5 @@
 import { router, useLocalSearchParams } from 'expo-router';
-import { useState } from 'react';
+import { useDeferredValue, useRef, useState } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 
 import { RepeatPicker } from '@/components/repeat-picker';
@@ -12,10 +12,11 @@ import { FormModal } from '@/components/ui/form-modal';
 import { Card, ListStatus, Screen } from '@/components/ui/screen';
 import { Segmented } from '@/components/ui/segmented';
 import { SelectionBar, SelectionHeaderActions, SelectionIndicator } from '@/components/ui/selection-bar';
-import { TextField } from '@/components/ui/text-field';
+import { TextField, type TextFieldRef } from '@/components/ui/text-field';
 import { Spacing } from '@/constants/theme';
 import { hasSelectionModifier, useMultiSelect } from '@/hooks/use-multi-select';
 import { useTagColorOf, useTagMap, useTags } from '@/hooks/use-tags';
+import { useWebSearchShortcut } from '@/hooks/use-web-shortcut';
 import {
   useDeleteTodo,
   useDeleteTodos,
@@ -27,7 +28,6 @@ import {
 import { formatDate, todayISO } from '@/lib/dates';
 import { confirm, errorMessage } from '@/lib/format';
 import { isRepeat, isWaitingRepeat, repeatLabel, todoPeriodLabel, todoStartOf } from '@/lib/repeat';
-import { clearWidgetOpenRequest, useWidgetOpenRequest } from '@/lib/widget-sync';
 
 /** 할 일의 단계: 예정(아직 시작 전) · 진행 중 · 완료 */
 type Filter = 'upcoming' | 'open' | 'done';
@@ -44,9 +44,15 @@ const PRIORITIES = [
   { value: 2, label: '매우 중요' },
 ] as const;
 
+const PRIORITY_FILTERS = [
+  { value: -1, label: '전체' },
+  { value: 0, label: '보통' },
+  { value: 1, label: '중요' },
+  { value: 2, label: '매우 중요' },
+] as const;
+
 export default function TodosScreen() {
   const { add, editId } = useLocalSearchParams<{ add?: string; editId?: string }>();
-  const widgetReq = useWidgetOpenRequest('todos');
   const todos = useTodos();
   const toggle = useToggleTodo();
   const removeMany = useDeleteTodos();
@@ -57,22 +63,26 @@ export default function TodosScreen() {
   const [filter, setFilter] = useState<Filter>('open');
   // 'all': 모든 할 일, 그 밖에는 고른 태그의 id
   const [tagFilter, setTagFilter] = useState<string>('all');
+  const [priorityFilter, setPriorityFilter] = useState<number>(-1);
+  const [query, setQuery] = useState('');
+  const deferredQuery = useDeferredValue(query);
+  const searchRef = useRef<TextFieldRef | null>(null);
   const [bulkError, setBulkError] = useState<string | null>(null);
   // null: 양식 닫힘, 'new': 새로 추가, Todo: 그 할 일을 수정
   const [editing, setEditing] = useState<Todo | 'new' | null>(null);
 
-  const targetEditId = widgetReq?.mode === 'edit' ? widgetReq.editId : editId;
+  useWebSearchShortcut(() => searchRef.current?.focus());
+
   const activeEditing: Todo | 'new' | null =
     editing ??
-    (widgetReq?.mode === 'add' || add
+    (add
       ? 'new'
-      : targetEditId
-        ? ((todos.data ?? []).find((t) => t.id === targetEditId) ?? null)
+      : editId
+        ? ((todos.data ?? []).find((t) => t.id === editId) ?? null)
         : null);
 
   function closeForm() {
     setEditing(null);
-    clearWidgetOpenRequest('todos');
     if (add || editId) {
       router.setParams({ add: undefined, editId: undefined });
     }
@@ -97,11 +107,17 @@ export default function TodosScreen() {
     { value: 'all', label: '전체' },
     ...(tags.data ?? []).map((tag) => ({ value: tag.id, label: tag.name })),
   ];
-  const visible = (todos.data ?? []).filter(
-    (todo) =>
-      stageOf(todo, today) === filter &&
-      (activeTagFilter === 'all' || todo.tag_id === activeTagFilter),
-  );
+  const keyword = deferredQuery.trim().toLowerCase();
+  const visible = (todos.data ?? []).filter((todo) => {
+    if (stageOf(todo, today) !== filter) return false;
+    if (activeTagFilter !== 'all' && todo.tag_id !== activeTagFilter) return false;
+    if (priorityFilter !== -1 && todo.priority !== priorityFilter) return false;
+    if (keyword) {
+      const hay = `${todo.title} ${todo.notes ?? ''}`.toLowerCase();
+      if (!hay.includes(keyword)) return false;
+    }
+    return true;
+  });
   // 예정 탭은 시작하는 날이 빠른 순서로 보여준다.
   if (filter === 'upcoming') {
     visible.sort((a, b) => (todoStartOf(a) ?? '').localeCompare(todoStartOf(b) ?? ''));
@@ -231,6 +247,7 @@ export default function TodosScreen() {
   return (
     <Screen
       title="할 일"
+      onRefresh={() => todos.refetch()}
       action={
         <SelectionHeaderActions
           selecting={isSelecting}
@@ -266,6 +283,22 @@ export default function TodosScreen() {
         ) : undefined
       }>
       <Segmented options={FILTERS} value={filter} onChange={changeFilter} />
+      <Segmented
+        options={PRIORITY_FILTERS}
+        value={priorityFilter}
+        onChange={(next) => {
+          setPriorityFilter(next);
+          multi.clear();
+        }}
+      />
+      <TextField
+        inputRef={searchRef}
+        label="검색"
+        placeholder="할 일 제목 또는 메모로 검색…"
+        value={query}
+        onChangeText={setQuery}
+        returnKeyType="search"
+      />
       {tagFilterOptions.length > 1 ? (
         <Segmented
           label="태그로 보기"
@@ -285,7 +318,11 @@ export default function TodosScreen() {
         loading={todos.isPending}
         error={todos.error}
         empty={visible.length === 0}
-        emptyText={EMPTY_TEXT[filter]}
+        emptyText={
+          keyword || priorityFilter !== -1 || activeTagFilter !== 'all'
+            ? '조건에 맞는 할 일이 없습니다.'
+            : EMPTY_TEXT[filter]
+        }
         onRetry={todos.refetch}
       />
 

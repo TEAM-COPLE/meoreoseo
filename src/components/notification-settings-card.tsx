@@ -1,29 +1,43 @@
 import { useState } from 'react';
-import { Linking, StyleSheet, Switch, View } from 'react-native';
+import { Linking, Modal, Pressable, StyleSheet, Switch, View } from 'react-native';
 
 import { ThemedText } from '@/components/themed-text';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/screen';
-import { Spacing } from '@/constants/theme';
+import { Segmented } from '@/components/ui/segmented';
+import { Radius, Spacing } from '@/constants/theme';
 import {
   useNotificationSettings,
   useSaveNotificationSettings,
 } from '@/hooks/use-notification-settings';
 import { useTheme } from '@/hooks/use-theme';
 import { notificationsSupported, requestNotificationPermission } from '@/lib/notifications';
-import {
-  BRIEFING_HOUR,
-  EVENT_LEAD_MINUTES,
-  HABIT_HOUR,
-  MORNING_HOUR,
-  type NotificationSettings,
-} from '@/lib/reminders';
+import { type NotificationSettings } from '@/lib/reminders';
 
-/** 9 → '오전 9시', 21 → '오후 9시' */
-function hourLabel(hour: number): string {
-  if (hour === 0) return '오전 12시';
-  if (hour === 12) return '오후 12시';
-  return hour < 12 ? `오전 ${hour}시` : `오후 ${hour - 12}시`;
+type EditingTarget = 'briefing' | 'todos' | 'events' | 'habits' | null;
+
+const MINUTE_OPTIONS = [0, 10, 15, 20, 30, 40, 45, 50] as const;
+const LEAD_OPTIONS = [
+  { value: 0, label: '정각' },
+  { value: 5, label: '5분 전' },
+  { value: 10, label: '10분 전' },
+  { value: 15, label: '15분 전' },
+  { value: 30, label: '30분 전' },
+  { value: 60, label: '1시간 전' },
+] as const;
+
+/** (7, 30) → '오전 7:30', (21, 0) → '오후 9:00' */
+function timeLabel(hour: number, minute: number): string {
+  const period = hour < 12 ? '오전' : '오후';
+  const h12 = hour === 0 ? 12 : hour > 12 ? hour - 12 : hour;
+  const mm = String(minute).padStart(2, '0');
+  return `${period} ${h12}:${mm}`;
+}
+
+function leadLabel(minutes: number): string {
+  if (minutes === 0) return '시작 정각';
+  if (minutes === 60) return '시작 1시간 전';
+  return `시작 ${minutes}분 전`;
 }
 
 /** 계정 화면에 놓이는 알림 설정 상자. 실제 예약은 notification-sync.tsx 가 한다. */
@@ -32,6 +46,7 @@ export function NotificationSettingsCard() {
   const save = useSaveNotificationSettings();
   // 알림을 켜려 했지만 휴대폰에서 권한을 거절한 경우 true
   const [denied, setDenied] = useState(false);
+  const [editing, setEditing] = useState<EditingTarget>(null);
 
   if (!notificationsSupported) {
     return (
@@ -72,7 +87,7 @@ export function NotificationSettingsCard() {
 
       <Row
         label="알림 받기"
-        description="아침 브리핑, 할 일, 일정, 습관을 정해진 시각에 알려줍니다."
+        description="아침 브리핑, 할 일, 일정, 습관을 원하는 시각에 알려줍니다."
         value={settings.enabled}
         onChange={setEnabled}
       />
@@ -95,27 +110,35 @@ export function NotificationSettingsCard() {
         <>
           <Row
             label="아침 브리핑"
-            description={`매일 ${hourLabel(BRIEFING_HOUR)} 날씨·할 일·일정을 한 번에 요약`}
+            description={`매일 ${timeLabel(settings.briefingHour, settings.briefingMinute)} 날씨·할 일·일정을 한 번에 요약`}
             value={settings.briefing}
             onChange={(briefing) => update({ briefing })}
+            timeText={timeLabel(settings.briefingHour, settings.briefingMinute)}
+            onEditTime={() => setEditing('briefing')}
           />
           <Row
             label="할 일"
-            description={`마감일 ${hourLabel(MORNING_HOUR)}`}
+            description={`마감일 ${timeLabel(settings.todoHour, settings.todoMinute)}`}
             value={settings.todos}
             onChange={(todos) => update({ todos })}
+            timeText={timeLabel(settings.todoHour, settings.todoMinute)}
+            onEditTime={() => setEditing('todos')}
           />
           <Row
             label="일정"
-            description={`시작 ${EVENT_LEAD_MINUTES}분 전 (하루 종일 일정은 ${hourLabel(MORNING_HOUR)})`}
+            description={`${leadLabel(settings.eventLeadMinutes)} (하루 종일 일정은 ${timeLabel(settings.allDayEventHour, settings.allDayEventMinute)})`}
             value={settings.events}
             onChange={(events) => update({ events })}
+            timeText={`${settings.eventLeadMinutes === 0 ? '정각' : `${settings.eventLeadMinutes}분 전`} · 종일 ${timeLabel(settings.allDayEventHour, settings.allDayEventMinute)}`}
+            onEditTime={() => setEditing('events')}
           />
           <Row
             label="습관"
-            description={`매일 ${hourLabel(HABIT_HOUR)} (그날 다 체크했으면 알리지 않음)`}
+            description={`매일 ${timeLabel(settings.habitHour, settings.habitMinute)} (그날 다 체크했으면 알리지 않음)`}
             value={settings.habits}
             onChange={(habits) => update({ habits })}
+            timeText={timeLabel(settings.habitHour, settings.habitMinute)}
+            onEditTime={() => setEditing('habits')}
           />
           <ThemedText type="small" themeColor="textSecondary">
             휴대폰이 절전 중이면 알림이 몇 분 늦게 올 수 있습니다.
@@ -130,6 +153,18 @@ export function NotificationSettingsCard() {
         value={settings.errors}
         onChange={(errors) => update({ errors })}
       />
+
+      {editing ? (
+        <NotificationTimeModal
+          target={editing}
+          settings={settings}
+          onSave={(changes) => {
+            update(changes);
+            setEditing(null);
+          }}
+          onClose={() => setEditing(null)}
+        />
+      ) : null}
     </Card>
   );
 }
@@ -139,35 +174,212 @@ function Row({
   description,
   value,
   onChange,
+  timeText,
+  onEditTime,
 }: {
   label: string;
   description: string;
   value: boolean;
   onChange: (value: boolean) => void;
+  timeText?: string;
+  onEditTime?: () => void;
 }) {
   const theme = useTheme();
 
   return (
-    <View style={styles.row}>
-      <View style={styles.rowText}>
-        <ThemedText type="default">{label}</ThemedText>
-        <ThemedText type="small" themeColor="textSecondary">
-          {description}
-        </ThemedText>
+    <View style={styles.rowWrap}>
+      <View style={styles.row}>
+        <View style={styles.rowText}>
+          <ThemedText type="default">{label}</ThemedText>
+          <ThemedText type="small" themeColor="textSecondary">
+            {description}
+          </ThemedText>
+        </View>
+        <Switch
+          accessibilityLabel={label}
+          value={value}
+          onValueChange={onChange}
+          trackColor={{ true: theme.tint, false: theme.border }}
+        />
       </View>
-      <Switch
-        accessibilityLabel={label}
-        value={value}
-        onValueChange={onChange}
-        trackColor={{ true: theme.tint, false: theme.border }}
-      />
+      {value && timeText && onEditTime ? (
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={`${label} 시간 변경`}
+          onPress={onEditTime}
+          style={({ pressed }) => [
+            styles.timeChip,
+            {
+              backgroundColor: theme.tintSoft,
+              borderColor: theme.border,
+              opacity: pressed ? 0.75 : 1,
+            },
+          ]}>
+          <ThemedText type="smallBold" themeColor="tint">
+            {timeText} · 시간 변경 ›
+          </ThemedText>
+        </Pressable>
+      ) : null}
     </View>
+  );
+}
+
+const TARGET_TITLES: Record<Exclude<EditingTarget, null>, string> = {
+  briefing: '아침 브리핑 알림 시각',
+  todos: '할 일 알림 시각',
+  events: '일정 알림 설정',
+  habits: '습관 알림 시각',
+};
+
+function NotificationTimeModal({
+  target,
+  settings,
+  onSave,
+  onClose,
+}: {
+  target: Exclude<EditingTarget, null>;
+  settings: NotificationSettings;
+  onSave: (changes: Partial<NotificationSettings>) => void;
+  onClose: () => void;
+}) {
+  const theme = useTheme();
+  const initialHour =
+    target === 'briefing'
+      ? settings.briefingHour
+      : target === 'todos'
+        ? settings.todoHour
+        : target === 'habits'
+          ? settings.habitHour
+          : settings.allDayEventHour;
+  const initialMinute =
+    target === 'briefing'
+      ? settings.briefingMinute
+      : target === 'todos'
+        ? settings.todoMinute
+        : target === 'habits'
+          ? settings.habitMinute
+          : settings.allDayEventMinute;
+
+  const [hour, setHour] = useState(initialHour);
+  const [minute, setMinute] = useState(initialMinute);
+  const [leadMinutes, setLeadMinutes] = useState(settings.eventLeadMinutes);
+
+  function stepHour(delta: number) {
+    setHour((prev) => (prev + delta + 24) % 24);
+  }
+
+  function handleSave() {
+    if (target === 'briefing') {
+      onSave({ briefingHour: hour, briefingMinute: minute });
+    } else if (target === 'todos') {
+      onSave({ todoHour: hour, todoMinute: minute });
+    } else if (target === 'habits') {
+      onSave({ habitHour: hour, habitMinute: minute });
+    } else {
+      onSave({
+        eventLeadMinutes: leadMinutes,
+        allDayEventHour: hour,
+        allDayEventMinute: minute,
+      });
+    }
+  }
+
+  return (
+    <Modal visible transparent animationType="fade" onRequestClose={onClose}>
+      <Pressable onPress={onClose} style={styles.modalBackdrop}>
+        <Pressable
+          onPress={(e) => e.stopPropagation()}
+          style={[
+            styles.modalCard,
+            { backgroundColor: theme.backgroundElement, borderColor: theme.border },
+          ]}>
+          <ThemedText type="default" style={styles.modalTitle}>
+            {TARGET_TITLES[target]}
+          </ThemedText>
+
+          {target === 'events' ? (
+            <Segmented
+              label="시간 지정 일정 알림"
+              options={LEAD_OPTIONS}
+              value={leadMinutes}
+              onChange={setLeadMinutes}
+            />
+          ) : null}
+
+          <View style={styles.pickerSection}>
+            <ThemedText type="small" themeColor="textSecondary">
+              {target === 'events' ? '하루 종일 일정 알림 시각' : '알림 시각'}
+            </ThemedText>
+            <View
+              style={[
+                styles.hourStepper,
+                { backgroundColor: theme.background, borderColor: theme.border },
+              ]}>
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="1시간 이전"
+                onPress={() => stepHour(-1)}
+                style={[styles.stepBtn, { backgroundColor: theme.backgroundElement }]}>
+                <ThemedText type="default">-</ThemedText>
+              </Pressable>
+              <ThemedText type="default" style={styles.timeReadout}>
+                {timeLabel(hour, minute)}
+              </ThemedText>
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="1시간 이후"
+                onPress={() => stepHour(1)}
+                style={[styles.stepBtn, { backgroundColor: theme.backgroundElement }]}>
+                <ThemedText type="default">+</ThemedText>
+              </Pressable>
+            </View>
+          </View>
+
+          <View style={styles.pickerSection}>
+            <ThemedText type="small" themeColor="textSecondary">
+              분 선택
+            </ThemedText>
+            <View style={styles.minuteGrid}>
+              {MINUTE_OPTIONS.map((m) => {
+                const selected = minute === m;
+                return (
+                  <Pressable
+                    key={m}
+                    onPress={() => setMinute(m)}
+                    style={[
+                      styles.minuteChip,
+                      {
+                        backgroundColor: selected ? theme.tint : theme.background,
+                        borderColor: selected ? theme.tint : theme.border,
+                      },
+                    ]}>
+                    <ThemedText
+                      type="small"
+                      style={{ color: selected ? theme.onTint : theme.text }}>
+                      {String(m).padStart(2, '0')}분
+                    </ThemedText>
+                  </Pressable>
+                );
+              })}
+            </View>
+          </View>
+
+          <View style={styles.modalActions}>
+            <Button label="취소" variant="secondary" size="small" onPress={onClose} />
+            <Button label="저장" size="small" onPress={handleSave} />
+          </View>
+        </Pressable>
+      </Pressable>
+    </Modal>
   );
 }
 
 const styles = StyleSheet.create({
   title: {
     fontWeight: 700,
+  },
+  rowWrap: {
+    gap: Spacing.two,
   },
   row: {
     flexDirection: 'row',
@@ -178,8 +390,72 @@ const styles = StyleSheet.create({
     flex: 1,
     gap: Spacing.half,
   },
+  timeChip: {
+    alignSelf: 'flex-start',
+    paddingHorizontal: Spacing.three - 4,
+    paddingVertical: Spacing.one + 2,
+    borderRadius: Radius.full,
+    borderWidth: 1,
+  },
   denied: {
     alignItems: 'flex-start',
+    gap: Spacing.two,
+  },
+  modalBackdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(10, 10, 18, 0.56)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: Spacing.three,
+  },
+  modalCard: {
+    width: '100%',
+    maxWidth: 380,
+    borderRadius: Radius.large,
+    borderWidth: 1,
+    padding: Spacing.three,
+    gap: Spacing.three,
+  },
+  modalTitle: {
+    fontWeight: 700,
+    fontSize: 18,
+  },
+  pickerSection: {
+    gap: Spacing.two,
+  },
+  hourStepper: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    borderRadius: Radius.medium,
+    borderWidth: 1,
+    padding: Spacing.two,
+  },
+  stepBtn: {
+    width: 38,
+    height: 38,
+    borderRadius: Radius.full,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  timeReadout: {
+    fontWeight: 700,
+    fontSize: 17,
+  },
+  minuteGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: Spacing.two,
+  },
+  minuteChip: {
+    paddingHorizontal: Spacing.three - 4,
+    paddingVertical: Spacing.one + 2,
+    borderRadius: Radius.full,
+    borderWidth: 1,
+  },
+  modalActions: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
     gap: Spacing.two,
   },
 });

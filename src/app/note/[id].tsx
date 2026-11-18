@@ -1,7 +1,6 @@
 import { router, useLocalSearchParams } from 'expo-router';
 import { useEffect, useState } from 'react';
 import {
-  ActivityIndicator,
   AppState,
   KeyboardAvoidingView,
   Pressable,
@@ -13,6 +12,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { ThemedText } from '@/components/themed-text';
 import { Button } from '@/components/ui/button';
+import { NoteSkeleton } from '@/components/ui/loading-animation';
 import { MaxContentWidth, Spacing } from '@/constants/theme';
 import { useNote, type Note } from '@/hooks/use-notes';
 import { useTheme } from '@/hooks/use-theme';
@@ -48,11 +48,7 @@ export default function NoteScreen() {
   if (isNew) return <NoteEditor key={`new-${t ?? ''}`} initial={null} />;
 
   if (note.isPending) {
-    return (
-      <Message>
-        <ActivityIndicator />
-      </Message>
-    );
+    return <NoteSkeleton />;
   }
   if (note.error) {
     return (

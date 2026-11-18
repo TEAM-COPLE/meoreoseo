@@ -40,11 +40,9 @@ import {
 } from '@/lib/dates';
 import { confirm, errorMessage } from '@/lib/format';
 import { isRepeat, isWaitingRepeat, repeatLabel, todoPeriodLabel, todoStartOf } from '@/lib/repeat';
-import { clearWidgetOpenRequest, useWidgetOpenRequest } from '@/lib/widget-sync';
 
 export default function CalendarScreen() {
   const { add, editId } = useLocalSearchParams<{ add?: string; editId?: string }>();
-  const widgetReq = useWidgetOpenRequest('calendar');
   const [selected, setSelected] = useState(todayISO);
   const [month, setMonth] = useState(() => yearMonthOf(selected));
   const [editing, setEditing] = useState<CalendarEvent | 'new' | null>(null);
@@ -59,18 +57,16 @@ export default function CalendarScreen() {
   const tagMap = useTagMap();
   const tagColorOf = useTagColorOf();
 
-  const targetEditId = widgetReq?.mode === 'edit' ? widgetReq.editId : editId;
   const activeEditing: CalendarEvent | 'new' | null =
     editing ??
-    (widgetReq?.mode === 'add' || add
+    (add
       ? 'new'
-      : targetEditId
-        ? ((events.data ?? []).find((e) => e.id === targetEditId) ?? null)
+      : editId
+        ? ((events.data ?? []).find((e) => e.id === editId) ?? null)
         : null);
 
   function closeForm() {
     setEditing(null);
-    clearWidgetOpenRequest('calendar');
     if (add || editId) {
       router.setParams({ add: undefined, editId: undefined });
     }
@@ -156,6 +152,7 @@ export default function CalendarScreen() {
   return (
     <Screen
       title="일정"
+      onRefresh={() => events.refetch()}
       action={
         <SelectionHeaderActions
           selecting={isSelecting}

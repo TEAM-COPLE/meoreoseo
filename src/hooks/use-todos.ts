@@ -67,7 +67,12 @@ export function useTodos(enabled = true) {
         .order('due_date', { ascending: true, nullsFirst: false })
         .order('created_at', { ascending: false });
       check(error);
-      return data ?? [];
+      const rows = data ?? [];
+      if (!userId) return rows;
+      // 서버 재요청 중 방금 누른 낙관적 완료/취소 상태가 덮어씌워지지 않도록 유지한다.
+      return sortTodos(
+        rows.map((row) => optimisticTodoMap.get(`${userId}:${row.id}`) ?? row),
+      );
     },
   });
 }
@@ -211,6 +216,10 @@ function flushTodoEntry(key: string): Promise<void> {
         confirmedTodoMap.set(key, result.todo);
         if (!pendingTodoToggles.has(key)) {
           optimisticTodoMap.set(key, result.todo);
+          updateTodosCache(entry.scope, (items) =>
+            items.map((item) => (item.id === result.todo.id ? result.todo : item)),
+          );
+          queryClient.invalidateQueries({ queryKey: KEY });
         }
         entry.onCommitted?.(result);
         for (const waiter of entry.waiters) waiter.resolve();

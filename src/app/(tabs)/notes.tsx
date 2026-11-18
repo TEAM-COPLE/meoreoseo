@@ -1,14 +1,15 @@
 import { router } from 'expo-router';
-import { useDeferredValue, useMemo, useState } from 'react';
+import { useDeferredValue, useMemo, useRef, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 
 import { ThemedText } from '@/components/themed-text';
 import { Card, ListStatus, Screen } from '@/components/ui/screen';
 import { SelectionBar, SelectionHeaderActions, SelectionIndicator } from '@/components/ui/selection-bar';
-import { TextField } from '@/components/ui/text-field';
+import { TextField, type TextFieldRef } from '@/components/ui/text-field';
 import { Spacing } from '@/constants/theme';
 import { hasSelectionModifier, useMultiSelect } from '@/hooks/use-multi-select';
 import { useDeleteNotes, useNotes } from '@/hooks/use-notes';
+import { useWebSearchShortcut } from '@/hooks/use-web-shortcut';
 import { formatDate, toISODate } from '@/lib/dates';
 import { confirm, errorMessage } from '@/lib/format';
 
@@ -22,6 +23,8 @@ export default function NotesScreen() {
   const [query, setQuery] = useState('');
   const [bulkError, setBulkError] = useState<string | null>(null);
   const deferredQuery = useDeferredValue(query);
+  const searchRef = useRef<TextFieldRef | null>(null);
+  useWebSearchShortcut(() => searchRef.current?.focus());
 
   const all = notes.data ?? [];
   // 검색어가 있으면 제목이나 내용에 그 말이 들어 있는 메모만 보여준다(대소문자 구분 없음).
@@ -60,6 +63,7 @@ export default function NotesScreen() {
   return (
     <Screen
       title="메모"
+      onRefresh={() => notes.refetch()}
       action={
         <SelectionHeaderActions
           selecting={isSelecting}
@@ -97,6 +101,7 @@ export default function NotesScreen() {
       }>
       {all.length > 0 ? (
         <TextField
+          inputRef={searchRef}
           label="검색"
           value={query}
           onChangeText={setQuery}

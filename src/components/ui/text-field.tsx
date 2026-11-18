@@ -1,17 +1,21 @@
+import type { ComponentRef, RefObject } from 'react';
 import { StyleSheet, TextInput, View, type TextInputProps } from 'react-native';
 
 import { ThemedText } from '@/components/themed-text';
 import { Radius, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 
+export type TextFieldRef = ComponentRef<typeof TextInput>;
+
 type Props = TextInputProps & {
   label: string;
   /** 여러 줄 입력일 때의 최소 높이 */
   minHeight?: number;
+  inputRef?: RefObject<TextFieldRef | null>;
 };
 
 /** 이름표(label)가 붙은 입력 칸. */
-export function TextField({ label, style, multiline, minHeight, ...rest }: Props) {
+export function TextField({ label, style, multiline, minHeight, inputRef, ...rest }: Props) {
   const theme = useTheme();
 
   return (
@@ -20,6 +24,7 @@ export function TextField({ label, style, multiline, minHeight, ...rest }: Props
         {label}
       </ThemedText>
       <TextInput
+        ref={inputRef}
         accessibilityLabel={label}
         multiline={multiline}
         placeholderTextColor={theme.textSecondary}

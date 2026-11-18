@@ -25,7 +25,34 @@ export type NotificationSettings = {
   errors: boolean;
   /** 아침 브리핑: 매일 아침 날씨·할 일·일정을 한 번에 요약해서 알림 */
   briefing: boolean;
+  /** 아침 브리핑 시각 (시: 0~23, 분: 0~59) */
+  briefingHour: number;
+  briefingMinute: number;
+  /** 할 일 마감일 알림 시각 */
+  todoHour: number;
+  todoMinute: number;
+  /** 습관 알림 시각 */
+  habitHour: number;
+  habitMinute: number;
+  /** 일정 시작 몇 분 전에 알릴지 */
+  eventLeadMinutes: number;
+  /** 하루 종일 일정 알림 시각 */
+  allDayEventHour: number;
+  allDayEventMinute: number;
 };
+
+/** 아침 브리핑을 보내는 기본 시각(오전 7시) */
+export const BRIEFING_HOUR = 7;
+/** 아침 브리핑을 며칠 치 미리 예약해 둘지. 날씨 예보가 3일치라 3일로 맞춘다. */
+const BRIEFING_DAYS_AHEAD = 3;
+/** 비 올 확률이 이 값 이상이면 우산을 챙기라고 알려준다. */
+const UMBRELLA_CHANCE = 50;
+/** 할 일 마감일과 하루 종일 일정을 알리는 기본 시각(오전 9시) */
+export const MORNING_HOUR = 9;
+/** 습관을 알리는 기본 시각(오후 9시) */
+export const HABIT_HOUR = 21;
+/** 일정 시작 몇 분 전에 알릴지(기본 10분 전) */
+export const EVENT_LEAD_MINUTES = 10;
 
 export const DEFAULT_SETTINGS: NotificationSettings = {
   enabled: false,
@@ -34,20 +61,16 @@ export const DEFAULT_SETTINGS: NotificationSettings = {
   habits: true,
   errors: true,
   briefing: true,
+  briefingHour: BRIEFING_HOUR,
+  briefingMinute: 0,
+  todoHour: MORNING_HOUR,
+  todoMinute: 0,
+  habitHour: HABIT_HOUR,
+  habitMinute: 0,
+  eventLeadMinutes: EVENT_LEAD_MINUTES,
+  allDayEventHour: MORNING_HOUR,
+  allDayEventMinute: 0,
 };
-
-/** 아침 브리핑을 보내는 시각(오전 7시) */
-export const BRIEFING_HOUR = 7;
-/** 아침 브리핑을 며칠 치 미리 예약해 둘지. 날씨 예보가 3일치라 3일로 맞춘다. */
-const BRIEFING_DAYS_AHEAD = 3;
-/** 비 올 확률이 이 값 이상이면 우산을 챙기라고 알려준다. */
-const UMBRELLA_CHANCE = 50;
-/** 할 일 마감일과 하루 종일 일정을 알리는 시각(오전 9시) */
-export const MORNING_HOUR = 9;
-/** 습관을 알리는 시각(오후 9시) */
-export const HABIT_HOUR = 21;
-/** 일정 시작 몇 분 전에 알릴지 */
-export const EVENT_LEAD_MINUTES = 10;
 /** 일정을 며칠 뒤까지 미리 예약해 둘지 */
 export const EVENT_DAYS_AHEAD = 30;
 /** 습관 알림을 며칠 치 미리 예약해 둘지. 앱을 열 때마다 다시 채워진다. */
@@ -83,7 +106,7 @@ function weatherLine(city: string, day: DayForecast): string {
 }
 
 /** 그날 아침 브리핑 알림의 내용을 만든다. */
-function briefingFor(date: string, data: ReminderData): Reminder {
+function briefingFor(date: string, data: ReminderData, hour: number, minute: number): Reminder {
   const lines: string[] = [];
 
   const day = data.forecast?.days.find((item) => item.date === date);
@@ -113,7 +136,7 @@ function briefingFor(date: string, data: ReminderData): Reminder {
   if (todos.length === 0 && events.length === 0) lines.push('오늘은 예정된 할 일과 일정이 없어요.');
 
   return {
-    at: at(date, BRIEFING_HOUR),
+    at: at(date, hour, minute),
     title: `좋은 아침이에요 · ${formatDate(date)}`,
     body: lines.join('\n'),
   };
@@ -137,6 +160,16 @@ export function buildReminders(
 ): Reminder[] {
   if (!settings.enabled) return [];
 
+  const briefingHour = settings.briefingHour ?? BRIEFING_HOUR;
+  const briefingMinute = settings.briefingMinute ?? 0;
+  const todoHour = settings.todoHour ?? MORNING_HOUR;
+  const todoMinute = settings.todoMinute ?? 0;
+  const habitHour = settings.habitHour ?? HABIT_HOUR;
+  const habitMinute = settings.habitMinute ?? 0;
+  const leadMinutes = settings.eventLeadMinutes ?? EVENT_LEAD_MINUTES;
+  const allDayHour = settings.allDayEventHour ?? MORNING_HOUR;
+  const allDayMinute = settings.allDayEventMinute ?? 0;
+
   const reminders: Reminder[] = [];
   const today = toISODate(now);
 
@@ -144,7 +177,7 @@ export function buildReminders(
     for (const todo of data.todos) {
       if (todo.done || !todo.due_date) continue;
       reminders.push({
-        at: at(todo.due_date, MORNING_HOUR),
+        at: at(todo.due_date, todoHour, todoMinute),
         title: '오늘 마감인 할 일',
         body: todo.title,
       });
@@ -157,13 +190,13 @@ export function buildReminders(
         const [hour, minute] = event.start_time.split(':').map(Number);
         const start = at(event.event_date, hour, minute);
         reminders.push({
-          at: new Date(start.getTime() - EVENT_LEAD_MINUTES * 60_000),
+          at: new Date(start.getTime() - leadMinutes * 60_000),
           title: event.title,
           body: `${formatTime(event.start_time)}에 시작합니다.`,
         });
       } else {
         reminders.push({
-          at: at(event.event_date, MORNING_HOUR),
+          at: at(event.event_date, allDayHour, allDayMinute),
           title: event.title,
           body: '오늘 하루 종일 일정입니다.',
         });
@@ -173,7 +206,7 @@ export function buildReminders(
 
   if (settings.briefing) {
     for (let offset = 0; offset < BRIEFING_DAYS_AHEAD; offset++) {
-      reminders.push(briefingFor(addDays(today, offset), data));
+      reminders.push(briefingFor(addDays(today, offset), data, briefingHour, briefingMinute));
     }
   }
 
@@ -183,7 +216,7 @@ export function buildReminders(
       // 오늘 습관을 이미 다 체크했다면 오늘 저녁에는 알리지 않는다.
       if (offset === 0 && remaining <= 0) continue;
       reminders.push({
-        at: at(addDays(today, offset), HABIT_HOUR),
+        at: at(addDays(today, offset), habitHour, habitMinute),
         title: '오늘의 습관',
         body:
           offset === 0
