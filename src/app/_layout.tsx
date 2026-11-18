@@ -3,6 +3,7 @@ import { DarkTheme, DefaultTheme, Stack, ThemeProvider } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
 import { useEffect } from 'react';
+import { GestureHandlerRootView } from 'react-native-gesture-handler';
 
 import { ThemeModeProvider, useColorScheme } from '@/hooks/use-theme';
 import { NotificationSync } from '@/components/notification-sync';
@@ -27,13 +28,15 @@ installGlobalErrorHandler();
  */
 export default function RootLayout() {
   return (
-    <QueryClientProvider client={queryClient}>
-      <ThemeModeProvider>
-        <AuthProvider>
-          <ThemedRootNavigator />
-        </AuthProvider>
-      </ThemeModeProvider>
-    </QueryClientProvider>
+    <GestureHandlerRootView style={{ flex: 1 }}>
+      <QueryClientProvider client={queryClient}>
+        <ThemeModeProvider>
+          <AuthProvider>
+            <ThemedRootNavigator />
+          </AuthProvider>
+        </ThemeModeProvider>
+      </QueryClientProvider>
+    </GestureHandlerRootView>
   );
 }
 

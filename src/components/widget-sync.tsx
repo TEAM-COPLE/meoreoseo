@@ -1,7 +1,7 @@
+import { requireOptionalNativeModule } from 'expo-modules-core';
 import { router, type Href } from 'expo-router';
-import { addUserInteractionListener } from 'expo-widgets';
 import { useEffect, useRef } from 'react';
-import { AppState } from 'react-native';
+import { AppState, Platform } from 'react-native';
 
 import { useMonthlyBudget } from '@/hooks/use-budget';
 import { useEvents } from '@/hooks/use-events';
@@ -11,7 +11,19 @@ import { useColorScheme } from '@/hooks/use-theme';
 import { useTodos, useToggleTodo } from '@/hooks/use-todos';
 import { useTransactions } from '@/hooks/use-transactions';
 import { todayISO, yearMonthOf } from '@/lib/dates';
-import { syncAllWidgets } from '@/widgets/sync';
+
+/** Expo Go 등 네이티브 위젯 모듈이 없는 환경에서는 false 다. */
+const widgetsSupported = Platform.OS !== 'web' && requireOptionalNativeModule('ExpoWidgets') !== null;
+
+function loadWidgetsSync() {
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  return (require('@/widgets/sync') as typeof import('@/widgets/sync')).syncAllWidgets;
+}
+
+function loadAddUserInteractionListener() {
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  return (require('expo-widgets') as typeof import('expo-widgets')).addUserInteractionListener;
+}
 
 /**
  * 앱 데이터(할 일, 일정, 메모, 습관, 가계부)와 테마를 모든 홈 화면 위젯에 동기화하고,
@@ -47,7 +59,8 @@ export function WidgetSync() {
   }, [todosQuery.data, habitLogsQuery.data]);
 
   useEffect(() => {
-    syncAllWidgets({
+    if (!widgetsSupported) return;
+    loadWidgetsSync()({
       colorScheme,
       todos: todosQuery.data ?? [],
       events: eventsQuery.data ?? [],
@@ -69,9 +82,10 @@ export function WidgetSync() {
   ]);
 
   useEffect(() => {
+    if (!widgetsSupported) return;
     const appStateSub = AppState.addEventListener('change', (state) => {
       if (state !== 'active') return;
-      syncAllWidgets({
+      loadWidgetsSync()({
         colorScheme,
         todos: todosQuery.data ?? [],
         events: eventsQuery.data ?? [],
@@ -95,9 +109,10 @@ export function WidgetSync() {
   ]);
 
   useEffect(() => {
+    if (!widgetsSupported) return;
     let sub: { remove: () => void } | null = null;
     try {
-      sub = addUserInteractionListener((event) => {
+      sub = loadAddUserInteractionListener()((event) => {
         const target = event.target;
         if (!target) return;
 
