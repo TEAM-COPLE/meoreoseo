@@ -7,7 +7,7 @@ import { ThemedText } from '@/components/themed-text';
 import { Button } from '@/components/ui/button';
 import { Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
-import { useAuth } from '@/lib/auth';
+import { enterDevMode, useAuth } from '@/lib/auth';
 import { errorMessage } from '@/lib/format';
 import { signInWith, type SocialProvider } from '@/lib/social-auth';
 
@@ -20,18 +20,30 @@ const SITE = 'https://meoreoseo.vercel.app';
 export default function SignInScreen() {
   const theme = useTheme();
   const insets = useSafeAreaInsets();
-  const { session } = useAuth();
+  const { session, isDevMode } = useAuth();
   // 지금 로그인을 진행 중인 서비스. 아무것도 안 하고 있으면 null.
-  const [busy, setBusy] = useState<SocialProvider | null>(null);
+  const [busy, setBusy] = useState<SocialProvider | 'dev' | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  if (session) return <Redirect href="/" />;
+  if (session || isDevMode) return <Redirect href="/" />;
 
   async function signIn(provider: SocialProvider) {
     setBusy(provider);
     setError(null);
     try {
       setError(await signInWith(provider));
+    } catch (e) {
+      setError(errorMessage(e));
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  async function startDevMode() {
+    setBusy('dev');
+    setError(null);
+    try {
+      await enterDevMode();
     } catch (e) {
       setError(errorMessage(e));
     } finally {
@@ -75,6 +87,13 @@ export default function SignInScreen() {
             colors={KAKAO_COLORS}
             onPress={() => signIn('kakao')}
             loading={busy === 'kakao'}
+            disabled={busy !== null}
+          />
+          <Button
+            label="개발 모드 (로그인 없이 기기에만 저장)"
+            variant="secondary"
+            onPress={startDevMode}
+            loading={busy === 'dev'}
             disabled={busy !== null}
           />
           {error ? (

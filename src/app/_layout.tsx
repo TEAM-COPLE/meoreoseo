@@ -38,8 +38,8 @@ export default function RootLayout() {
 
 function ThemedRootNavigator() {
   const colorScheme = useColorScheme();
-  const { session, loading } = useAuth();
-  const signedIn = session !== null;
+  const { session, isDevMode, loading } = useAuth();
+  const signedIn = session !== null || isDevMode;
   useAutoUpdateOnAppActive();
 
   useEffect(() => {

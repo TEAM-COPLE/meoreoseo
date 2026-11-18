@@ -1,5 +1,6 @@
-import { activeUserId, hasActiveSession } from './auth';
+import { activeUserId, hasActiveSession, isDevMode } from './auth';
 import type { Tables } from './database.types';
+import { localDeleteNote, localSaveNote } from './local-db';
 import { queryClient } from './query';
 import { supabase } from './supabase';
 
@@ -79,6 +80,12 @@ export function createNoteAutosaver(
 
   async function save(draft: NoteDraft): Promise<NoteRow | null> {
     if (!hasActiveSession()) return null;
+
+    if (isDevMode()) {
+      const saved = await localSaveNote(noteId, draft);
+      if (saved && !noteId) noteId = saved.id;
+      return saved;
+    }
 
     if (noteId) {
       const { data, error } = await supabase
@@ -179,6 +186,12 @@ export function createNoteAutosaver(
       if (!hasActiveSession()) {
         stopped = false;
         return '로그인이 필요합니다.';
+      }
+
+      if (isDevMode()) {
+        await localDeleteNote(noteId);
+        removeFromNotesCache(noteId);
+        return null;
       }
 
       const { error } = await supabase.from('notes').delete().eq('id', noteId);

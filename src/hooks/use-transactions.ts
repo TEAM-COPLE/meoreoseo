@@ -1,8 +1,14 @@
 import { useQuery } from '@tanstack/react-query';
 
-import { requireUserId, useAuth } from '@/lib/auth';
+import { isDevMode, requireUserId, useAuth } from '@/lib/auth';
 import type { Tables } from '@/lib/database.types';
 import { monthRange, type YearMonth } from '@/lib/dates';
+import {
+  localDeleteTransaction,
+  localDeleteTransactions,
+  localListTransactions,
+  localSaveTransaction,
+} from '@/lib/local-db';
 import { check, useInvalidatingMutation } from '@/lib/query';
 import { supabase } from '@/lib/supabase';
 
@@ -28,14 +34,16 @@ const KEY = ['transactions'];
 
 /** 한 달 동안의 수입·지출 내역. 최근 날짜가 먼저 온다. */
 export function useTransactions(month: YearMonth) {
-  const { session } = useAuth();
-  const userId = session?.user.id ?? null;
+  const { userId } = useAuth();
   const { start, end } = monthRange(month);
 
   return useQuery({
     queryKey: [...KEY, userId, start, end],
     enabled: userId !== null,
     queryFn: async () => {
+      if (isDevMode()) {
+        return localListTransactions(start, end);
+      }
       const { data, error } = await supabase
         .from('transactions')
         .select('*')
@@ -52,6 +60,10 @@ export function useTransactions(month: YearMonth) {
 export function useSaveTransaction() {
   return useInvalidatingMutation(KEY, async ({ id, ...values }: TransactionInput) => {
     requireUserId();
+    if (isDevMode()) {
+      await localSaveTransaction(id, values);
+      return;
+    }
     const { error } = id
       ? await supabase.from('transactions').update(values).eq('id', id)
       : await supabase.from('transactions').insert(values);
@@ -62,6 +74,10 @@ export function useSaveTransaction() {
 export function useDeleteTransaction() {
   return useInvalidatingMutation(KEY, async (id: string) => {
     requireUserId();
+    if (isDevMode()) {
+      await localDeleteTransaction(id);
+      return;
+    }
     const { error } = await supabase.from('transactions').delete().eq('id', id);
     check(error);
   });
@@ -71,6 +87,10 @@ export function useDeleteTransactions() {
   return useInvalidatingMutation(KEY, async (ids: string[]) => {
     if (ids.length === 0) return;
     requireUserId();
+    if (isDevMode()) {
+      await localDeleteTransactions(ids);
+      return;
+    }
     const { error } = await supabase.from('transactions').delete().in('id', ids);
     check(error);
   });

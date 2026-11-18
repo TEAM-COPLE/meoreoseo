@@ -1,8 +1,18 @@
 import { useMutation, useQuery } from '@tanstack/react-query';
 
-import { activeUserId, requireUserId, useAuth } from '@/lib/auth';
+import { activeUserId, isDevMode, requireUserId, useAuth } from '@/lib/auth';
 import type { Tables } from '@/lib/database.types';
 import { todayISO } from '@/lib/dates';
+import {
+  localDeletePendingNextTodos,
+  localDeleteTodo,
+  localDeleteTodos,
+  localFindPendingNextTodo,
+  localInsertRepeatedTodo,
+  localListTodos,
+  localSaveTodo,
+  localUpdateTodoDone,
+} from '@/lib/local-db';
 import { check, queryClient, useInvalidatingMutation } from '@/lib/query';
 import { isRepeat, isWaitingRepeat, nextTodoDate, nextTodoStart } from '@/lib/repeat';
 import { supabase } from '@/lib/supabase';
@@ -53,21 +63,24 @@ function updateTodosCache(scope: string, updater: (items: Todo[]) => Todo[]): vo
 
 /** 내 할 일 전체. 진행 중인 것이 먼저, 마감일이 빠른 것이 먼저 온다. */
 export function useTodos(enabled = true) {
-  const { session } = useAuth();
-  const userId = session?.user.id ?? null;
+  const { userId } = useAuth();
 
   return useQuery({
     queryKey: [...KEY, userId],
     enabled: enabled && userId !== null,
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from('todos')
-        .select('*')
-        .order('done')
-        .order('due_date', { ascending: true, nullsFirst: false })
-        .order('created_at', { ascending: false });
-      check(error);
-      const rows = data ?? [];
+      const rows = isDevMode()
+        ? await localListTodos()
+        : await (async () => {
+            const { data, error } = await supabase
+              .from('todos')
+              .select('*')
+              .order('done')
+              .order('due_date', { ascending: true, nullsFirst: false })
+              .order('created_at', { ascending: false });
+            check(error);
+            return data ?? [];
+          })();
       if (!userId) return rows;
       // 서버 재요청 중 방금 누른 낙관적 완료/취소 상태가 덮어씌워지지 않도록 유지한다.
       return sortTodos(
@@ -89,6 +102,10 @@ export function useSaveTodo() {
       repeat: isRepeat(values.repeat) ? values.repeat : null,
       repeat_start: values.repeat ? (values.repeat_start ?? values.due_date) : null,
     };
+    if (isDevMode()) {
+      await localSaveTodo(id, row);
+      return;
+    }
     const { error } = id
       ? await supabase.from('todos').update(row).eq('id', id)
       : await supabase.from('todos').insert(row);
@@ -125,11 +142,15 @@ async function commitTodoDone(
 ): Promise<TodoToggleResult> {
   requireUserId();
   const doneAt = done ? new Date().toISOString() : null;
-  const { error } = await supabase
-    .from('todos')
-    .update({ done, done_at: doneAt })
-    .eq('id', todo.id);
-  check(error);
+  if (isDevMode()) {
+    await localUpdateTodoDone(todo.id, done, doneAt);
+  } else {
+    const { error } = await supabase
+      .from('todos')
+      .update({ done, done_at: doneAt })
+      .eq('id', todo.id);
+    check(error);
+  }
 
   const updated: Todo = { ...todo, done, done_at: doneAt };
   let createdNext: Todo | null = null;
@@ -137,33 +158,46 @@ async function commitTodoDone(
 
   if (done && isRepeat(todo.repeat) && todo.due_date) {
     // 여러 번 눌러도 다음 할 일이 두 개 생기지 않게 먼저 확인한다.
-    const existing = await supabase
-      .from('todos')
-      .select('id')
-      .eq('previous_id', todo.id)
-      .eq('done', false)
-      .limit(1);
-    check(existing.error);
-    if ((existing.data ?? []).length === 0) {
+    const hasExisting = isDevMode()
+      ? (await localFindPendingNextTodo(todo.id)) !== null
+      : await (async () => {
+          const existing = await supabase
+            .from('todos')
+            .select('id')
+            .eq('previous_id', todo.id)
+            .eq('done', false)
+            .limit(1);
+          check(existing.error);
+          return (existing.data ?? []).length > 0;
+        })();
+
+    if (!hasExisting) {
       const anchor = todo.repeat_start ?? todo.due_date;
       const nextDue = nextTodoDate(anchor, todo.repeat, todo.due_date, todayISO());
-      const { data: inserted, error: insertError } = await supabase
-        .from('todos')
-        .insert({
-          title: todo.title,
-          notes: todo.notes,
-          priority: todo.priority,
-          due_date: nextDue,
-          // 시작일이 있으면 "시작일 ~ 마감일" 길이를 그대로 옮긴다.
-          start_date: nextTodoStart({ start_date: todo.start_date, due_date: todo.due_date }, nextDue),
-          repeat: todo.repeat,
-          repeat_start: anchor,
-          previous_id: todo.id,
-          tag_id: todo.tag_id,
-        })
-        .select('*')
-        .single();
-      check(insertError);
+      const nextPayload = {
+        title: todo.title,
+        notes: todo.notes,
+        priority: todo.priority,
+        due_date: nextDue,
+        // 시작일이 있으면 "시작일 ~ 마감일" 길이를 그대로 옮긴다.
+        start_date: nextTodoStart({ start_date: todo.start_date, due_date: todo.due_date }, nextDue),
+        repeat: todo.repeat,
+        repeat_start: anchor,
+        previous_id: todo.id,
+        tag_id: todo.tag_id,
+      };
+      let inserted: Todo | null = null;
+      if (isDevMode()) {
+        inserted = await localInsertRepeatedTodo(nextPayload);
+      } else {
+        const { data, error: insertError } = await supabase
+          .from('todos')
+          .insert(nextPayload)
+          .select('*')
+          .single();
+        check(insertError);
+        inserted = data;
+      }
       if (inserted) {
         createdNext = inserted;
         updateTodosCache(scope, (items) =>
@@ -172,14 +206,18 @@ async function commitTodoDone(
       }
     }
   } else if (!done) {
-    const { data: deleted, error: deleteError } = await supabase
-      .from('todos')
-      .delete()
-      .eq('previous_id', todo.id)
-      .eq('done', false)
-      .select('id');
-    check(deleteError);
-    deletedNextIds = (deleted ?? []).map((row) => row.id);
+    if (isDevMode()) {
+      deletedNextIds = await localDeletePendingNextTodos(todo.id);
+    } else {
+      const { data: deleted, error: deleteError } = await supabase
+        .from('todos')
+        .delete()
+        .eq('previous_id', todo.id)
+        .eq('done', false)
+        .select('id');
+      check(deleteError);
+      deletedNextIds = (deleted ?? []).map((row) => row.id);
+    }
     if (deletedNextIds.length > 0) {
       const removedSet = new Set(deletedNextIds);
       updateTodosCache(scope, (items) => items.filter((item) => !removedSet.has(item.id)));
@@ -362,6 +400,10 @@ export function useToggleTodo() {
 export function useDeleteTodo() {
   return useInvalidatingMutation(KEY, async (id: string) => {
     requireUserId();
+    if (isDevMode()) {
+      await localDeleteTodo(id);
+      return;
+    }
     const { error } = await supabase.from('todos').delete().eq('id', id);
     check(error);
   });
@@ -371,6 +413,10 @@ export function useDeleteTodos() {
   return useInvalidatingMutation(KEY, async (ids: string[]) => {
     if (ids.length === 0) return;
     requireUserId();
+    if (isDevMode()) {
+      await localDeleteTodos(ids);
+      return;
+    }
     const { error } = await supabase.from('todos').delete().in('id', ids);
     check(error);
   });

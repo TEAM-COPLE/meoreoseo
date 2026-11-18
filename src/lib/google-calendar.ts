@@ -3,6 +3,7 @@ import * as Linking from 'expo-linking';
 import * as WebBrowser from 'expo-web-browser';
 import { Platform } from 'react-native';
 
+import { isDevMode } from './auth';
 import { queryClient } from './query';
 import { hasSupabaseConfig, supabase } from './supabase';
 
@@ -167,7 +168,7 @@ async function runSync(): Promise<void> {
  * 일정을 저장·삭제한 뒤, 그리고 캘린더 화면을 열 때 부른다.
  */
 export function requestGoogleSync(delayMs = 1500): void {
-  if (!hasSupabaseConfig) return;
+  if (!hasSupabaseConfig || isDevMode()) return;
   if (timer) clearTimeout(timer);
   timer = setTimeout(() => {
     timer = null;
