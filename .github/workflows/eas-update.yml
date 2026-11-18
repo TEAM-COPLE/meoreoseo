@@ -1,0 +1,20 @@
+name: EAS Update Preview
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - run: npm ci
+      - name: Run EAS Update
+        env:
+          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+        run: npx eas-cli@latest update --channel preview --environment preview --message "${{ github.event.head_commit.message || 'Manual preview update' }}" --non-interactive
