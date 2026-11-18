@@ -4,7 +4,7 @@ import { activeUserId, requireUserId, useAuth } from '@/lib/auth';
 import type { Tables } from '@/lib/database.types';
 import { todayISO } from '@/lib/dates';
 import { check, queryClient, useInvalidatingMutation } from '@/lib/query';
-import { isRepeat, isWaitingRepeat, nextTodoDate } from '@/lib/repeat';
+import { isRepeat, isWaitingRepeat, nextTodoDate, nextTodoStart } from '@/lib/repeat';
 import { supabase } from '@/lib/supabase';
 
 export type Todo = Tables<'todos'>;
@@ -15,11 +15,15 @@ export type TodoInput = {
   title: string;
   notes: string | null;
   due_date: string | null;
+  /** 시작일 (없으면 null). 마감일이 있으면 마감일보다 늦을 수 없다. */
+  start_date: string | null;
   priority: number;
   /** 반복 방법 (반복 안 하면 null). 반복하려면 마감일이 있어야 한다. */
   repeat: string | null;
   /** 반복의 기준 날짜. 반복을 새로 정하거나 마감일을 바꾸면 마감일과 같게 한다. */
   repeat_start: string | null;
+  /** 붙인 태그의 id (없으면 null) */
+  tag_id: string | null;
 };
 
 const KEY = ['todos'];
@@ -72,6 +76,9 @@ export function useSaveTodo() {
   return useInvalidatingMutation(KEY, async ({ id, ...values }: TodoInput) => {
     requireUserId();
     if (values.repeat && !values.due_date) throw new Error('반복하려면 마감일을 정해 주세요.');
+    if (values.start_date && values.due_date && values.start_date > values.due_date) {
+      throw new Error('시작일은 마감일보다 늦을 수 없어요.');
+    }
     const row = {
       ...values,
       repeat: isRepeat(values.repeat) ? values.repeat : null,
@@ -134,16 +141,20 @@ async function commitTodoDone(
     check(existing.error);
     if ((existing.data ?? []).length === 0) {
       const anchor = todo.repeat_start ?? todo.due_date;
+      const nextDue = nextTodoDate(anchor, todo.repeat, todo.due_date, todayISO());
       const { data: inserted, error: insertError } = await supabase
         .from('todos')
         .insert({
           title: todo.title,
           notes: todo.notes,
           priority: todo.priority,
-          due_date: nextTodoDate(anchor, todo.repeat, todo.due_date, todayISO()),
+          due_date: nextDue,
+          // 시작일이 있으면 "시작일 ~ 마감일" 길이를 그대로 옮긴다.
+          start_date: nextTodoStart({ start_date: todo.start_date, due_date: todo.due_date }, nextDue),
           repeat: todo.repeat,
           repeat_start: anchor,
           previous_id: todo.id,
+          tag_id: todo.tag_id,
         })
         .select('*')
         .single();

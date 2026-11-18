@@ -2,13 +2,16 @@ import { router, useLocalSearchParams } from 'expo-router';
 import { useMemo, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 
+import { RepeatPicker } from '@/components/repeat-picker';
+import { TagBadge } from '@/components/tag-badge';
+import { TagPicker } from '@/components/tag-picker';
 import { ThemedText } from '@/components/themed-text';
 import { Button } from '@/components/ui/button';
+import { Checkbox } from '@/components/ui/checkbox';
 import { DateField } from '@/components/ui/date-field';
 import { FormModal } from '@/components/ui/form-modal';
 import { MonthCalendar } from '@/components/ui/month-calendar';
 import { Card, ListStatus, Screen } from '@/components/ui/screen';
-import { Segmented } from '@/components/ui/segmented';
 import { SelectionBar, SelectionHeaderActions, SelectionIndicator } from '@/components/ui/selection-bar';
 import { TextField } from '@/components/ui/text-field';
 import { Spacing } from '@/constants/theme';
@@ -22,7 +25,11 @@ import {
   type CalendarEvent,
 } from '@/hooks/use-events';
 import { hasSelectionModifier, useMultiSelect } from '@/hooks/use-multi-select';
+import { useTagColorOf, useTagMap } from '@/hooks/use-tags';
+import { useTheme } from '@/hooks/use-theme';
+import { useTodos, useToggleTodo, type Todo } from '@/hooks/use-todos';
 import {
+  addDays,
   formatDate,
   formatTime,
   isValidTime,
@@ -32,7 +39,7 @@ import {
   type YearMonth,
 } from '@/lib/dates';
 import { confirm, errorMessage } from '@/lib/format';
-import { isRepeat, REPEAT_OPTIONS, repeatLabel, type RepeatChoice } from '@/lib/repeat';
+import { isRepeat, isWaitingRepeat, repeatLabel, todoPeriodLabel, todoStartOf } from '@/lib/repeat';
 import { clearWidgetOpenRequest, useWidgetOpenRequest } from '@/lib/widget-sync';
 
 export default function CalendarScreen() {
@@ -44,8 +51,13 @@ export default function CalendarScreen() {
   const [bulkError, setBulkError] = useState<string | null>(null);
 
   const events = useEvents(month);
+  const todos = useTodos();
+  const toggleTodo = useToggleTodo();
   const removeMany = useDeleteEvents();
   const multi = useMultiSelect();
+  const theme = useTheme();
+  const tagMap = useTagMap();
+  const tagColorOf = useTagColorOf();
 
   const targetEditId = widgetReq?.mode === 'edit' ? widgetReq.editId : editId;
   const activeEditing: CalendarEvent | 'new' | null =
@@ -63,11 +75,9 @@ export default function CalendarScreen() {
       router.setParams({ add: undefined, editId: undefined });
     }
   }
-  const { marks, eventsByDate } = useMemo(() => {
-    const dateMarks = new Set<string>();
+  const eventsByDate = useMemo(() => {
     const byDate = new Map<string, CalendarEvent[]>();
     for (const event of events.data ?? []) {
-      dateMarks.add(event.event_date);
       const list = byDate.get(event.event_date);
       if (list) {
         list.push(event);
@@ -75,9 +85,31 @@ export default function CalendarScreen() {
         byDate.set(event.event_date, [event]);
       }
     }
-    return { marks: dateMarks, eventsByDate: byDate };
+    return byDate;
   }, [events.data]);
+  const todosByDate = useMemo(
+    () => groupTodosByDate(todos.data ?? [], monthRange(month)),
+    [todos.data, month],
+  );
+  // 날짜마다 점의 색. 태그가 있으면 태그 색, 없으면 기본 색.
+  const markColors = useMemo(() => {
+    const colors = new Map<string, string[]>();
+    const add = (date: string, color: string) => {
+      const list = colors.get(date);
+      if (!list) colors.set(date, [color]);
+      else if (!list.includes(color)) list.push(color);
+    };
+    for (const [date, list] of eventsByDate) {
+      for (const event of list) add(date, tagColorOf(event.tag_id) ?? theme.tint);
+    }
+    for (const [date, list] of todosByDate) {
+      for (const todo of list) add(date, tagColorOf(todo.tag_id) ?? theme.tint);
+    }
+    return colors;
+  }, [eventsByDate, todosByDate, tagColorOf, theme.tint]);
   const dayEvents = eventsByDate.get(selected) ?? [];
+  const dayTodos = todosByDate.get(selected) ?? [];
+  const today = todayISO();
   const dayEventIds = dayEvents.map((event) => event.id);
   const selectedDayIds = dayEventIds.filter((id) => multi.isSelected(id));
   const isSelecting = dayEventIds.length > 0 && (multi.active || selectedDayIds.length > 0);
@@ -164,7 +196,7 @@ export default function CalendarScreen() {
           onChangeMonth={changeMonth}
           selected={selected}
           onSelect={selectDate}
-          marks={marks}
+          markColors={markColors}
         />
       </Card>
 
@@ -181,18 +213,22 @@ export default function CalendarScreen() {
       <ListStatus
         loading={events.isPending}
         error={events.error}
-        empty={dayEvents.length === 0}
-        emptyText="이 날에는 일정이 없습니다."
+        empty={dayEvents.length === 0 && dayTodos.length === 0}
+        emptyText="이 날에는 일정과 할 일이 없습니다."
         onRetry={events.refetch}
       />
 
       {dayEvents.map((event) => {
         const isItemSelected = multi.isSelected(event.id);
+        const tag = event.tag_id ? tagMap.get(event.tag_id) : undefined;
+        const tagColor = tagColorOf(event.tag_id);
         return (
           <Card
             key={event.key}
             selected={isItemSelected}
             selecting={isSelecting}
+            // 태그가 있으면 카드 왼쪽에 태그 색 띠를 둘러 한눈에 구분되게 한다.
+            style={tagColor ? [styles.tagged, { borderLeftColor: tagColor }] : undefined}
             onPress={(e) => {
               if (isSelecting) {
                 multi.handlePress(event.id, dayEventIds, e);
@@ -214,6 +250,7 @@ export default function CalendarScreen() {
               </ThemedText>
               <View style={styles.eventBody}>
                 <ThemedText type="default">{event.title}</ThemedText>
+                {tag ? <TagBadge tag={tag} /> : null}
                 {isRepeat(event.repeat) ? (
                   <ThemedText type="small" themeColor="textSecondary">
                     {`🔁 ${repeatLabel(event.repeat, event.series_date)}`}
@@ -224,6 +261,55 @@ export default function CalendarScreen() {
                     {event.memo}
                   </ThemedText>
                 ) : null}
+              </View>
+            </View>
+          </Card>
+        );
+      })}
+
+      {dayTodos.length > 0 ? (
+        <ThemedText type="small" themeColor="textSecondary" style={styles.sectionTitle}>
+          할 일
+        </ThemedText>
+      ) : null}
+      {dayTodos.map((todo) => {
+        // 아직 차례가 오지 않은 반복 할 일은 할 일 화면처럼 체크하지 못하게 한다.
+        const locked = isWaitingRepeat(todo, today);
+        const overdue = !todo.done && todo.due_date !== null && todo.due_date < today;
+        const tag = todo.tag_id ? tagMap.get(todo.tag_id) : undefined;
+        const tagColor = tagColorOf(todo.tag_id);
+        return (
+          <Card
+            key={`todo:${todo.id}`}
+            style={tagColor ? [styles.tagged, { borderLeftColor: tagColor }] : undefined}
+            onPress={
+              isSelecting
+                ? undefined
+                : () => router.navigate({ pathname: '/todos', params: { editId: todo.id } })
+            }>
+            <View style={[styles.eventRow, locked && styles.locked]}>
+              <Checkbox
+                checked={todo.done}
+                label={
+                  locked
+                    ? `${todo.title} (${formatDate(todoStartOf(todo) ?? selected)}부터 체크 가능)`
+                    : `${todo.title} 완료 표시`
+                }
+                disabled={locked || isSelecting}
+                onPress={() => toggleTodo.mutate(todo)}
+              />
+              <View style={styles.eventBody}>
+                <ThemedText
+                  type="default"
+                  themeColor={todo.done ? 'textSecondary' : 'text'}
+                  style={todo.done && styles.doneTitle}>
+                  {todo.title}
+                </ThemedText>
+                {tag ? <TagBadge tag={tag} /> : null}
+                <ThemedText type="small" themeColor={overdue ? 'danger' : 'textSecondary'}>
+                  {todoPeriodLabel(todo)}
+                  {overdue ? ' · 기한 지남' : ''}
+                </ThemedText>
               </View>
             </View>
           </Card>
@@ -263,19 +349,19 @@ function EventForm({
   const [start, setStart] = useState(formatTime(event?.start_time ?? null));
   const [end, setEnd] = useState(formatTime(event?.end_time ?? null));
   const [memo, setMemo] = useState(event?.memo ?? '');
-  const [repeat, setRepeat] = useState<RepeatChoice>(
-    wasRepeating ? (event?.repeat as RepeatChoice) : 'none',
-  );
+  // 반복 방법 (반복 안 하면 null)
+  const [repeat, setRepeat] = useState<string | null>(wasRepeating ? event.repeat : null);
+  const [tagId, setTagId] = useState<string | null>(event?.tag_id ?? null);
   const [until, setUntil] = useState<string | null>(event?.repeat_until ?? null);
   const [error, setError] = useState<string | null>(null);
 
   function validate(): string | null {
-    if (!title.trim()) return '제목을 입력해 주세요.';
+    if (!title.trim()) return '제목은 꼭 입력해 주세요.';
     if (start && !isValidTime(start)) return '시작 시간은 14:30 처럼 입력해 주세요.';
     if (end && !isValidTime(end)) return '종료 시간은 15:30 처럼 입력해 주세요.';
     if (end && !start) return '종료 시간을 쓰려면 시작 시간도 입력해 주세요.';
     if (start && end && end <= start) return '종료 시간은 시작 시간보다 늦어야 합니다.';
-    if (repeat !== 'none' && until && until < date) return '반복 종료일은 시작 날짜보다 늦어야 합니다.';
+    if (repeat && until && until < date) return '반복 종료일은 시작 날짜보다 늦어야 합니다.';
     return null;
   }
 
@@ -293,8 +379,9 @@ function EventForm({
         start_time: start || null,
         end_time: end || null,
         memo: memo.trim() || null,
-        repeat: repeat === 'none' ? null : repeat,
-        repeat_until: repeat === 'none' ? null : until,
+        repeat,
+        repeat_until: repeat ? until : null,
+        tag_id: tagId,
       });
       onClose();
     } catch (e) {
@@ -353,7 +440,7 @@ function EventForm({
       onDelete={event ? deleteEvent : undefined}
       error={error}>
       <TextField
-        label="제목"
+        label="제목 (필수)"
         value={title}
         onChangeText={setTitle}
         placeholder="어떤 일정인가요?"
@@ -366,12 +453,12 @@ function EventForm({
         </ThemedText>
       ) : null}
       <DateField
-        label={repeat === 'none' ? '날짜' : '시작 날짜'}
+        label={repeat ? '시작 날짜' : '날짜'}
         value={date}
         onChange={(value) => value && setDate(value)}
       />
-      <Segmented label="반복" options={REPEAT_OPTIONS} value={repeat} onChange={setRepeat} />
-      {repeat !== 'none' ? (
+      <RepeatPicker value={repeat} onChange={setRepeat} anchor={date} />
+      {repeat ? (
         <>
           <ThemedText type="small" themeColor="textSecondary">
             {`${repeatLabel(repeat, date)} 반복합니다.`}
@@ -401,6 +488,7 @@ function EventForm({
           />
         </View>
       </View>
+      <TagPicker value={tagId} onChange={setTagId} />
       <TextField label="메모" value={memo} onChangeText={setMemo} multiline />
       {wasRepeating && event ? (
         <Button
@@ -414,9 +502,46 @@ function EventForm({
   );
 }
 
+/**
+ * 날짜가 있는 할 일을 날짜별로 나눈다. 시작일 ~ 마감일의 모든 날짜에 들어간다.
+ * 마감일만 있으면 마감일 하루, 시작일만 있으면 시작일 하루에 들어간다.
+ * 보고 있는 달(range) 안의 날짜만 만든다.
+ */
+function groupTodosByDate(todos: Todo[], range: { start: string; end: string }): Map<string, Todo[]> {
+  const byDate = new Map<string, Todo[]>();
+  for (const todo of todos) {
+    const first = todoStartOf(todo);
+    if (!first) continue;
+    const last = todo.due_date ?? first;
+    const from = first > range.start ? first : range.start;
+    const to = last < range.end ? last : range.end;
+    for (let date = from; date <= to; date = addDays(date, 1)) {
+      const list = byDate.get(date);
+      if (list) list.push(todo);
+      else byDate.set(date, [todo]);
+    }
+  }
+  return byDate;
+}
+
 const styles = StyleSheet.create({
+  // 태그 색 띠
+  tagged: {
+    borderLeftWidth: 6,
+  },
   dayTitle: {
     fontWeight: 700,
+  },
+  sectionTitle: {
+    fontWeight: 700,
+    marginTop: Spacing.two,
+  },
+  doneTitle: {
+    textDecorationLine: 'line-through',
+  },
+  // 아직 차례가 오지 않은 반복 할 일은 흐리게 보여준다.
+  locked: {
+    opacity: 0.6,
   },
   eventRow: {
     flexDirection: 'row',

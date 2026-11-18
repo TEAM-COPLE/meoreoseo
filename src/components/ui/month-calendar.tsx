@@ -16,10 +16,14 @@ type Props = {
   onSelect: (iso: string) => void;
   /** 점으로 표시할 날짜들 (예: 일정이 있는 날) */
   marks?: ReadonlySet<string>;
+  /** 날짜마다 찍을 점의 색들 (예: 그날 일정·할 일의 태그 색). 최대 3개까지 보인다. */
+  markColors?: ReadonlyMap<string, readonly string[]>;
 };
 
+const MAX_DOTS = 3;
+
 /** 한 달짜리 달력. 일정 화면과 날짜 고르기에서 함께 쓴다. */
-export function MonthCalendar({ month, onChangeMonth, selected, onSelect, marks }: Props) {
+export function MonthCalendar({ month, onChangeMonth, selected, onSelect, marks, markColors }: Props) {
   const theme = useTheme();
   const today = todayISO();
   const weeks = monthGrid(month);
@@ -63,14 +67,30 @@ export function MonthCalendar({ month, onChangeMonth, selected, onSelect, marks 
                     style={{ color: isSelected ? theme.onTint : theme.text }}>
                     {dayOf(iso)}
                   </ThemedText>
-                  <View
-                    style={[
-                      styles.mark,
-                      marks?.has(iso) && {
-                        backgroundColor: isSelected ? theme.onTint : theme.tint,
-                      },
-                    ]}
-                  />
+                  {markColors ? (
+                    <View style={styles.dots}>
+                      {(markColors.get(iso) ?? []).slice(0, MAX_DOTS).map((color) => (
+                        <View
+                          key={color}
+                          style={[
+                            styles.mark,
+                            styles.colorMark,
+                            // 선택된 날(파란 동그라미) 위에서도 점이 보이도록 흰 테두리를 두른다.
+                            { backgroundColor: color, borderColor: isSelected ? theme.onTint : 'transparent' },
+                          ]}
+                        />
+                      ))}
+                    </View>
+                  ) : (
+                    <View
+                      style={[
+                        styles.mark,
+                        marks?.has(iso) && {
+                          backgroundColor: isSelected ? theme.onTint : theme.tint,
+                        },
+                      ]}
+                    />
+                  )}
                 </Pressable>
               </View>
             );
@@ -110,5 +130,18 @@ const styles = StyleSheet.create({
     height: 4,
     borderRadius: 2,
     marginTop: 1,
+  },
+  dots: {
+    flexDirection: 'row',
+    gap: 2,
+    height: 7,
+    marginTop: 1,
+  },
+  colorMark: {
+    width: 7,
+    height: 7,
+    borderRadius: 3.5,
+    marginTop: 0,
+    borderWidth: 1,
   },
 });

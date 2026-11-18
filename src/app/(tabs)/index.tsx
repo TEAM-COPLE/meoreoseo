@@ -16,6 +16,7 @@ import { useTransactions } from '@/hooks/use-transactions';
 import { useSaveWeatherCity, useWeather, useWeatherCity } from '@/hooks/use-weather';
 import { formatDate, toISODate, todayISO, yearMonthOf } from '@/lib/dates';
 import { confirm, errorMessage, formatWon } from '@/lib/format';
+import { todoStartOf } from '@/lib/repeat';
 import { describeWeather, formatTemperature } from '@/lib/weather';
 
 /**
@@ -108,9 +109,13 @@ function WeatherSection() {
   );
 }
 
-/** 오늘 챙길 할 일인지 판단한다: 마감이 오늘이거나 지났고, 아직 안 했거나 오늘 끝낸 것. */
+/**
+ * 오늘 챙길 할 일인지 판단한다: 시작일(없으면 마감일)이 오늘이거나 지났고, 아직 안 했거나 오늘 끝낸 것.
+ * 시작일 ~ 마감일 기간 중인 할 일도 여기에 들어간다.
+ */
 function isForToday(todo: Todo, today: string): boolean {
-  if (todo.due_date === null || todo.due_date > today) return false;
+  const start = todoStartOf(todo);
+  if (start === null || start > today) return false;
   if (!todo.done) return true;
   // 오늘 완료한 것은 체크된 채로 남겨 둔다. 누르자마자 사라지면 잘못 눌렀을 때 되돌리기 어렵다.
   return todo.done_at !== null && toISODate(new Date(todo.done_at)) === today;
