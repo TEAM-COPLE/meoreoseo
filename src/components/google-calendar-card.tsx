@@ -312,9 +312,8 @@ function CalendarPicker({
                   style={styles.row}
                   onPress={() => toggle(choice.id)}
                   disabled={saving}
-                  accessibilityRole="checkbox"
-                  accessibilityLabel={choice.name}
-                  accessibilityState={{ checked, disabled: saving }}>
+                  // 화면 낭독기에는 안쪽 체크 상자 하나만 읽히게 한다(두 번 읽지 않게).
+                  accessible={false}>
                   <Checkbox checked={checked} onPress={() => toggle(choice.id)} label={choice.name} disabled={saving} />
                   <View style={[styles.dot, { backgroundColor: choice.color ?? '#9e9e9e' }]} />
                   <View style={styles.rowText}>

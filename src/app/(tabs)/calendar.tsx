@@ -44,7 +44,7 @@ import { isRepeat, isWaitingRepeat, repeatLabel, todoPeriodLabel, todoStartOf } 
 
 /** 구글에서 가져온 일정 중 앱에서 고칠 수 없는 것을 눌렀을 때 보여줄 안내 */
 const READONLY_NOTICE =
-  '남이 만든 회의 초대처럼 구글 캘린더에서만 고칠 수 있는 일정이에요. 구글 캘린더에서 고쳐 주세요.';
+  '구글 캘린더에서만 고칠 수 있는 일정이에요. (남이 보낸 초대, 공휴일처럼 보기만 되는 캘린더, 생일 등)';
 
 export default function CalendarScreen() {
   const { add, editId } = useLocalSearchParams<{ add?: string; editId?: string }>();
