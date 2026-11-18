@@ -1,6 +1,7 @@
 import { useState, type ReactNode } from 'react';
 import { ScrollView, StyleSheet, View } from 'react-native';
 
+import { GoogleCalendarCard } from '@/components/google-calendar-card';
 import { NotificationSettingsCard } from '@/components/notification-settings-card';
 import { ThemedText } from '@/components/themed-text';
 import { VersionInfoCard } from '@/components/version-info-card';
@@ -109,6 +110,10 @@ export default function SettingsScreen() {
 
       <Section title="알림">
         <NotificationSettingsCard />
+      </Section>
+
+      <Section title="연동">
+        <GoogleCalendarCard />
       </Section>
 
       <Section title="앱 정보">

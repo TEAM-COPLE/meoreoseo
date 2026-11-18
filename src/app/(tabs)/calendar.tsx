@@ -1,5 +1,5 @@
-import { router, useLocalSearchParams } from 'expo-router';
-import { useMemo, useState } from 'react';
+import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
+import { useCallback, useMemo, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 
 import { RepeatPicker } from '@/components/repeat-picker';
@@ -39,7 +39,12 @@ import {
   type YearMonth,
 } from '@/lib/dates';
 import { confirm, errorMessage } from '@/lib/format';
+import { requestGoogleSync } from '@/lib/google-calendar';
 import { isRepeat, isWaitingRepeat, repeatLabel, todoPeriodLabel, todoStartOf } from '@/lib/repeat';
+
+/** 구글에서 가져온 일정 중 앱에서 고칠 수 없는 것을 눌렀을 때 보여줄 안내 */
+const READONLY_NOTICE =
+  '구글 캘린더에서만 고칠 수 있는 일정이에요. (남이 보낸 초대, 공휴일처럼 보기만 되는 캘린더, 생일 등)';
 
 export default function CalendarScreen() {
   const { add, editId } = useLocalSearchParams<{ add?: string; editId?: string }>();
@@ -57,12 +62,15 @@ export default function CalendarScreen() {
   const tagMap = useTagMap();
   const tagColorOf = useTagColorOf();
 
+  // 캘린더 화면을 열 때마다 구글 캘린더에서 바뀐 일정을 받아 온다(연결된 경우에만).
+  useFocusEffect(useCallback(() => requestGoogleSync(300), []));
+
   const activeEditing: CalendarEvent | 'new' | null =
     editing ??
     (add
       ? 'new'
       : editId
-        ? ((events.data ?? []).find((e) => e.id === editId) ?? null)
+        ? ((events.data ?? []).find((e) => e.id === editId && !e.google_readonly) ?? null)
         : null);
 
   function closeForm() {
@@ -106,7 +114,8 @@ export default function CalendarScreen() {
   const dayEvents = eventsByDate.get(selected) ?? [];
   const dayTodos = todosByDate.get(selected) ?? [];
   const today = todayISO();
-  const dayEventIds = dayEvents.map((event) => event.id);
+  // 남이 만든 회의 초대처럼 구글에서만 고칠 수 있는 일정은 고르거나 지울 수 없다.
+  const dayEventIds = dayEvents.filter((event) => !event.google_readonly).map((event) => event.id);
   const selectedDayIds = dayEventIds.filter((id) => multi.isSelected(id));
   const isSelecting = dayEventIds.length > 0 && (multi.active || selectedDayIds.length > 0);
 
@@ -227,7 +236,9 @@ export default function CalendarScreen() {
             // 태그가 있으면 카드 왼쪽에 태그 색 띠를 둘러 한눈에 구분되게 한다.
             style={tagColor ? [styles.tagged, { borderLeftColor: tagColor }] : undefined}
             onPress={(e) => {
-              if (isSelecting) {
+              if (event.google_readonly) {
+                if (!isSelecting) setBulkError(READONLY_NOTICE);
+              } else if (isSelecting) {
                 multi.handlePress(event.id, dayEventIds, e);
               } else if (hasSelectionModifier(e)) {
                 setBulkError(null);
@@ -237,6 +248,7 @@ export default function CalendarScreen() {
               }
             }}
             onLongPress={() => {
+              if (event.google_readonly) return;
               setBulkError(null);
               multi.start(event.id);
             }}>
@@ -256,6 +268,11 @@ export default function CalendarScreen() {
                 {event.memo ? (
                   <ThemedText type="small" themeColor="textSecondary" numberOfLines={2}>
                     {event.memo}
+                  </ThemedText>
+                ) : null}
+                {event.google_readonly ? (
+                  <ThemedText type="small" themeColor="textSecondary">
+                    🔒 구글 캘린더에서만 고칠 수 있어요
                   </ThemedText>
                 ) : null}
               </View>

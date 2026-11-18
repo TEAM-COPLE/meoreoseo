@@ -3,6 +3,7 @@ import { useQuery } from '@tanstack/react-query';
 import { requireUserId, useAuth } from '@/lib/auth';
 import type { Tables } from '@/lib/database.types';
 import { addDays, formatTime, monthRange, todayISO, type YearMonth } from '@/lib/dates';
+import { requestGoogleSync } from '@/lib/google-calendar';
 import { check, useInvalidatingMutation } from '@/lib/query';
 import { isRepeat, occurrencesBetween } from '@/lib/repeat';
 import { supabase } from '@/lib/supabase';
@@ -50,7 +51,10 @@ export function expandEvents(rows: EventRow[], start: string, end: string): Cale
   for (const row of rows) {
     const repeat = row.repeat ?? null;
     if (isRepeat(repeat)) {
+      // 반복 중 빠진 날짜 (구글 캘린더에서 그날만 지웠거나 따로 고친 날)
+      const skipped = new Set(row.excluded_dates ?? []);
       for (const date of occurrencesBetween(row.event_date, repeat, start, end, row.repeat_until)) {
+        if (skipped.has(date)) continue;
         result.push({ ...row, event_date: date, series_date: row.event_date, key: `${row.id}:${date}` });
       }
     } else if (row.event_date >= start && row.event_date <= end) {
@@ -111,6 +115,11 @@ export function useUpcomingEvents(days: number, enabled = true) {
   });
 }
 
+/** 일정을 바꾼 뒤 부른다. 구글 캘린더가 연결되어 있으면 곧 구글에도 반영된다. */
+function afterChange() {
+  requestGoogleSync();
+}
+
 export function useSaveEvent() {
   return useInvalidatingMutation(KEY, async ({ id, ...values }: EventInput) => {
     requireUserId();
@@ -123,6 +132,7 @@ export function useSaveEvent() {
       ? await supabase.from('events').update(row).eq('id', id)
       : await supabase.from('events').insert(row);
     check(error);
+    afterChange();
   });
 }
 
@@ -132,6 +142,7 @@ export function useDeleteEvent() {
     requireUserId();
     const { error } = await supabase.from('events').delete().eq('id', id);
     check(error);
+    afterChange();
   });
 }
 
@@ -142,6 +153,7 @@ export function useDeleteEvents() {
     requireUserId();
     const { error } = await supabase.from('events').delete().in('id', ids);
     check(error);
+    afterChange();
   });
 }
 
@@ -156,6 +168,7 @@ export function useEndEventRepeat() {
       requireUserId();
       if (from <= event.series_date) {
         check((await supabase.from('events').delete().eq('id', event.id)).error);
+        afterChange();
         return;
       }
       const until = addDays(from, -1);
@@ -164,6 +177,7 @@ export function useEndEventRepeat() {
         .update({ repeat_until: until })
         .eq('id', event.id);
       check(error);
+      afterChange();
     },
   );
 }
