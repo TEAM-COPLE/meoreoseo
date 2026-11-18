@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
-import { requireUserId, useAuth } from '@/lib/auth';
+import { isDevMode, requireUserId, useAuth } from '@/lib/auth';
+import { localGetWeatherCity, localSaveWeatherCity } from '@/lib/local-db';
 import { check } from '@/lib/query';
 import { supabase } from '@/lib/supabase';
 import { DEFAULT_CITY, fetchWeather, searchPlaces, type City } from '@/lib/weather';
@@ -55,13 +56,17 @@ async function readAccountCity(userId: string): Promise<City> {
  * 날씨를 볼 지역. 기본은 서울이며 로그인된 계정의 DB(user_settings)에 저장한다.
  */
 export function useWeatherCity(enabled = true) {
-  const { session } = useAuth();
-  const userId = session?.user.id ?? null;
+  const { userId } = useAuth();
 
   return useQuery({
     queryKey: [CITY_KEY, userId],
     enabled: enabled && userId !== null,
-    queryFn: () => readAccountCity(userId as string),
+    queryFn: async () => {
+      if (isDevMode()) {
+        return (await localGetWeatherCity()) ?? DEFAULT_CITY;
+      }
+      return readAccountCity(userId as string);
+    },
     staleTime: Infinity,
   });
 }
@@ -69,13 +74,16 @@ export function useWeatherCity(enabled = true) {
 /** 지역을 바꾸고, 날씨 상자에 바로 반영한다. */
 export function useSaveWeatherCity() {
   const client = useQueryClient();
-  const { session } = useAuth();
-  const userId = session?.user.id ?? null;
+  const { userId } = useAuth();
 
   return useMutation({
     mutationKey: [CITY_KEY],
     mutationFn: async (city: City) => {
       const uid = requireUserId();
+      if (isDevMode()) {
+        await localSaveWeatherCity(city);
+        return city;
+      }
       await writeAccountCity(uid, city);
       return city;
     },

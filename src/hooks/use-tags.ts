@@ -2,8 +2,9 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useCallback, useMemo } from 'react';
 
 import { useColorScheme } from '@/hooks/use-theme';
-import { requireUserId, useAuth } from '@/lib/auth';
+import { isDevMode, requireUserId, useAuth } from '@/lib/auth';
 import type { Tables } from '@/lib/database.types';
+import { localDeleteTag, localListTags, localSaveTag } from '@/lib/local-db';
 import { check } from '@/lib/query';
 import { supabase } from '@/lib/supabase';
 import { MAX_TAG_NAME, tagColorValue, type TagColor } from '@/lib/tags';
@@ -21,13 +22,13 @@ const KEY = ['tags'];
 
 /** 내 태그 전체 (만든 순서대로) */
 export function useTags() {
-  const { session } = useAuth();
-  const userId = session?.user.id ?? null;
+  const { userId } = useAuth();
 
   return useQuery({
     queryKey: [...KEY, userId],
     enabled: userId !== null,
     queryFn: async () => {
+      if (isDevMode()) return localListTags();
       const { data, error } = await supabase
         .from('tags')
         .select('*')
@@ -71,6 +72,9 @@ export function useSaveTag() {
       if (!trimmed) throw new Error('태그 이름을 입력해 주세요.');
       if (trimmed.length > MAX_TAG_NAME) throw new Error(`태그 이름은 ${MAX_TAG_NAME}자까지 쓸 수 있어요.`);
       const row = { name: trimmed, color };
+      if (isDevMode()) {
+        return localSaveTag(id, trimmed, color);
+      }
       const { data, error } = id
         ? await supabase.from('tags').update(row).eq('id', id).select('*').single()
         : await supabase.from('tags').insert(row).select('*').single();
@@ -89,6 +93,10 @@ export function useDeleteTag() {
     mutationKey: KEY,
     mutationFn: async (id: string) => {
       requireUserId();
+      if (isDevMode()) {
+        await localDeleteTag(id);
+        return;
+      }
       const { error } = await supabase.from('tags').delete().eq('id', id);
       check(error);
     },

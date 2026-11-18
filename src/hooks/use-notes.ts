@@ -1,7 +1,8 @@
 import { useQuery } from '@tanstack/react-query';
 
-import { requireUserId, useAuth } from '@/lib/auth';
+import { isDevMode, requireUserId, useAuth } from '@/lib/auth';
 import type { Tables } from '@/lib/database.types';
+import { localDeleteNotes, localGetNote, localListNotes } from '@/lib/local-db';
 import { check, useInvalidatingMutation } from '@/lib/query';
 import { supabase } from '@/lib/supabase';
 
@@ -11,13 +12,13 @@ const KEY = ['notes'];
 
 /** 내 메모 전체. 고정한 메모가 먼저, 그다음은 최근에 고친 순서다. */
 export function useNotes() {
-  const { session } = useAuth();
-  const userId = session?.user.id ?? null;
+  const { userId } = useAuth();
 
   return useQuery({
     queryKey: [...KEY, userId],
     enabled: userId !== null,
     queryFn: async () => {
+      if (isDevMode()) return localListNotes();
       const { data, error } = await supabase
         .from('notes')
         .select('*')
@@ -35,8 +36,7 @@ export function useNotes() {
  * 메모가 없으면 null 을 돌려준다.
  */
 export function useNote(id: string | null) {
-  const { session } = useAuth();
-  const userId = session?.user.id ?? null;
+  const { userId } = useAuth();
 
   return useQuery({
     queryKey: ['note', userId, id],
@@ -45,6 +45,7 @@ export function useNote(id: string | null) {
     staleTime: Infinity,
     queryFn: async () => {
       if (id === null) return null;
+      if (isDevMode()) return localGetNote(id);
       const { data, error } = await supabase.from('notes').select('*').eq('id', id).maybeSingle();
       check(error);
       return data;
@@ -57,6 +58,10 @@ export function useDeleteNotes() {
   return useInvalidatingMutation(KEY, async (ids: string[]) => {
     if (ids.length === 0) return;
     requireUserId();
+    if (isDevMode()) {
+      await localDeleteNotes(ids);
+      return;
+    }
     const { error } = await supabase.from('notes').delete().in('id', ids);
     check(error);
   });

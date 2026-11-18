@@ -1,9 +1,10 @@
-import Constants from 'expo-constants';
-import { Platform } from 'react-native';
+import Constants from "expo-constants";
+import { Platform } from "react-native";
 
-import { loadNotificationSettings } from './notification-settings';
-import { showErrorNotification } from './notifications';
-import { supabase } from './supabase';
+import { isDevMode } from "./auth";
+import { loadNotificationSettings } from "./notification-settings";
+import { showErrorNotification } from "./notifications";
+import { hasSupabaseConfig, supabase } from "./supabase";
 
 /**
  * 오류 알림과 오류 기록.
@@ -20,18 +21,18 @@ const REPEAT_WAIT_MS = 5 * 60 * 1000;
 
 /** 오류가 난 곳을 사람이 읽기 쉬운 이름으로 (데이터 요청의 첫 번째 이름 기준) */
 const SOURCE_LABELS: Record<string, string> = {
-  todos: '할 일',
-  events: '일정',
-  habits: '습관',
-  'habit-logs': '습관 기록',
-  notes: '메모',
-  note: '메모',
-  transactions: '가계부',
-  weather: '날씨',
-  'weather-city': '날씨 지역',
-  'weather-search': '지역 검색',
-  'notification-settings': '알림 설정',
-  app: '앱',
+  todos: "할 일",
+  events: "일정",
+  habits: "습관",
+  "habit-logs": "습관 기록",
+  notes: "메모",
+  note: "메모",
+  transactions: "가계부",
+  weather: "날씨",
+  "weather-city": "날씨 지역",
+  "weather-search": "지역 검색",
+  "notification-settings": "알림 설정",
+  app: "앱",
 };
 
 /** 오류마다 마지막으로 알린 시각 (키: 출처 + 문장) */
@@ -39,25 +40,30 @@ const lastReported = new Map<string, number>();
 
 function toMessage(error: unknown): { message: string; detail: string | null } {
   if (error instanceof Error) {
-    const name = error.name && error.name !== 'Error' ? `${error.name}: ` : '';
+    const name = error.name && error.name !== "Error" ? `${error.name}: ` : "";
     return {
-      message: `${name}${error.message || '알 수 없는 오류'}`,
+      message: `${name}${error.message || "알 수 없는 오류"}`,
       detail: error.stack ?? null,
     };
   }
   return { message: String(error), detail: null };
 }
 
-function platformName(): 'android' | 'ios' | 'web' | 'other' {
+function platformName(): "android" | "ios" | "web" | "other" {
   const os = Platform.OS;
-  return os === 'android' || os === 'ios' || os === 'web' ? os : 'other';
+  return os === "android" || os === "ios" || os === "web" ? os : "other";
 }
 
-async function saveToDatabase(source: string, message: string, detail: string | null) {
+async function saveToDatabase(
+  source: string,
+  message: string,
+  detail: string | null,
+) {
+  if (isDevMode() || !hasSupabaseConfig) return;
   const { data } = await supabase.auth.getSession();
   // 로그인하지 않았으면 DB 에 쓸 수 없다(접근 규칙). 알림만 띄운다.
   if (!data.session) return;
-  await supabase.from('error_logs').insert({
+  await supabase.from("error_logs").insert({
     source: source.slice(0, 50),
     message: message.slice(0, 1000),
     detail: detail ? detail.slice(0, 4000) : null,
@@ -106,7 +112,7 @@ export function installGlobalErrorHandler(): void {
   if (!utils) return; // 웹에는 없다.
   const previous = utils.getGlobalHandler();
   utils.setGlobalHandler((error, isFatal) => {
-    reportError('app', error);
+    reportError("app", error);
     previous(error, isFatal);
   });
 }

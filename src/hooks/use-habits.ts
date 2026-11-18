@@ -1,33 +1,41 @@
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
-import { activeUserId, requireUserId, useAuth } from '@/lib/auth';
-import type { Tables } from '@/lib/database.types';
-import { addDays, todayISO } from '@/lib/dates';
-import { check, queryClient, useInvalidatingMutation } from '@/lib/query';
-import { supabase } from '@/lib/supabase';
+import { activeUserId, isDevMode, requireUserId, useAuth } from "@/lib/auth";
+import type { Tables } from "@/lib/database.types";
+import { addDays, todayISO } from "@/lib/dates";
+import {
+  localDeleteHabit,
+  localDeleteHabits,
+  localListHabitLogs,
+  localListHabits,
+  localSaveHabit,
+  localSetHabitLogDone,
+} from "@/lib/local-db";
+import { check, queryClient, useInvalidatingMutation } from "@/lib/query";
+import { supabase } from "@/lib/supabase";
 
-export type Habit = Tables<'habits'>;
+export type Habit = Tables<"habits">;
 
-const KEY = ['habits'];
-const LOGS_KEY = ['habit-logs'];
+const KEY = ["habits"];
+const LOGS_KEY = ["habit-logs"];
 const TOGGLE_DEBOUNCE_MS = 550;
 
 /** 연속 기록을 계산하려고 불러오는 기간(일). */
 const HISTORY_DAYS = 400;
 
 export function useHabits(enabled = true) {
-  const { session } = useAuth();
-  const userId = session?.user.id ?? null;
+  const { userId } = useAuth();
 
   return useQuery({
     queryKey: [...KEY, userId],
     enabled: enabled && userId !== null,
     queryFn: async () => {
+      if (isDevMode()) return localListHabits();
       const { data, error } = await supabase
-        .from('habits')
-        .select('*')
-        .eq('archived', false)
-        .order('created_at');
+        .from("habits")
+        .select("*")
+        .eq("archived", false)
+        .order("created_at");
       check(error);
       return data ?? [];
     },
@@ -39,22 +47,26 @@ export function useHabits(enabled = true) {
  * 예: logs.get(habitId)?.has('2026-11-15')
  */
 export function useHabitLogs(enabled = true) {
-  const { session } = useAuth();
-  const userId = session?.user.id ?? null;
+  const { userId } = useAuth();
 
   return useQuery({
     queryKey: [...LOGS_KEY, userId],
     enabled: enabled && userId !== null,
     queryFn: async () => {
       const sinceDate = addDays(todayISO(), -HISTORY_DAYS);
-      const { data, error } = await supabase
-        .from('habit_logs')
-        .select('habit_id, log_date')
-        .gte('log_date', sinceDate);
-      check(error);
+      const rows = isDevMode()
+        ? await localListHabitLogs(sinceDate)
+        : await (async () => {
+            const { data, error } = await supabase
+              .from("habit_logs")
+              .select("habit_id, log_date")
+              .gte("log_date", sinceDate);
+            check(error);
+            return data ?? [];
+          })();
 
       const byHabit = new Map<string, Set<string>>();
-      for (const log of data ?? []) {
+      for (const log of rows) {
         const dates = byHabit.get(log.habit_id) ?? new Set<string>();
         dates.add(log.log_date);
         byHabit.set(log.habit_id, dates);
@@ -83,9 +95,13 @@ export function useSaveHabit() {
     KEY,
     async ({ id, name }: { id?: string; name: string }) => {
       requireUserId();
+      if (isDevMode()) {
+        await localSaveHabit(id, name);
+        return;
+      }
       const { error } = id
-        ? await supabase.from('habits').update({ name }).eq('id', id)
-        : await supabase.from('habits').insert({ name });
+        ? await supabase.from("habits").update({ name }).eq("id", id)
+        : await supabase.from("habits").insert({ name });
       check(error);
     },
   );
@@ -98,7 +114,11 @@ export function useDeleteHabit() {
     mutationKey: KEY,
     mutationFn: async (id: string) => {
       requireUserId();
-      const { error } = await supabase.from('habits').delete().eq('id', id);
+      if (isDevMode()) {
+        await localDeleteHabit(id);
+        return;
+      }
+      const { error } = await supabase.from("habits").delete().eq("id", id);
       check(error);
     },
     onSuccess: () => {
@@ -116,7 +136,11 @@ export function useDeleteHabits() {
     mutationFn: async (ids: string[]) => {
       if (ids.length === 0) return;
       requireUserId();
-      const { error } = await supabase.from('habits').delete().in('id', ids);
+      if (isDevMode()) {
+        await localDeleteHabits(ids);
+        return;
+      }
+      const { error } = await supabase.from("habits").delete().in("id", ids);
       check(error);
     },
     onSuccess: () => {
@@ -153,7 +177,8 @@ function updateHabitLogsCache(
   targetDone: boolean,
 ): void {
   const key = [...LOGS_KEY, scope];
-  if (queryClient.getQueryData<Map<string, Set<string>>>(key) === undefined) return;
+  if (queryClient.getQueryData<Map<string, Set<string>>>(key) === undefined)
+    return;
   queryClient.setQueryData<Map<string, Set<string>>>(key, (old) => {
     if (!old) return old;
     const nextMap = new Map(old);
@@ -171,20 +196,24 @@ async function commitHabitLogDone(
   targetDone: boolean,
 ): Promise<void> {
   requireUserId();
+  if (isDevMode()) {
+    await localSetHabitLogDone(habitId, date, targetDone);
+    return;
+  }
   if (targetDone) {
     const { error } = await supabase
-      .from('habit_logs')
+      .from("habit_logs")
       .upsert(
         { habit_id: habitId, log_date: date },
-        { onConflict: 'habit_id,log_date', ignoreDuplicates: true },
+        { onConflict: "habit_id,log_date", ignoreDuplicates: true },
       );
     check(error);
   } else {
     const { error } = await supabase
-      .from('habit_logs')
+      .from("habit_logs")
       .delete()
-      .eq('habit_id', habitId)
-      .eq('log_date', date);
+      .eq("habit_id", habitId)
+      .eq("log_date", date);
     check(error);
   }
 }
@@ -253,7 +282,7 @@ export function toggleHabitLogCoalesced(
   options?: { delayMs?: number; onRollback?: (confirmedDone: boolean) => void },
 ): Promise<void> {
   const scope = currentScope();
-  if (!scope) return Promise.reject(new Error('로그인이 필요합니다.'));
+  if (!scope) return Promise.reject(new Error("로그인이 필요합니다."));
   const key = `${scope}:${habitId}:${date}`;
   const delayMs = options?.delayMs ?? TOGGLE_DEBOUNCE_MS;
 

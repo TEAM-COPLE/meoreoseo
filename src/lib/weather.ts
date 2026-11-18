@@ -1,7 +1,8 @@
 import { FunctionsHttpError } from '@supabase/supabase-js';
 import { Platform } from 'react-native';
 
-import { supabase } from './supabase';
+import { isDevMode } from './auth';
+import { hasSupabaseConfig, supabase } from './supabase';
 
 /**
  * 날씨 정보.
@@ -199,7 +200,7 @@ export async function fetchWeather(city: City): Promise<Weather> {
   if (existing) return existing;
 
   const task = (async () => {
-    if (!isInKorea(city)) return fetchOpenMeteoWeather(city);
+    if (!isInKorea(city) || isDevMode() || !hasSupabaseConfig) return fetchOpenMeteoWeather(city);
     try {
       return await fetchKmaWeather(city);
     } catch (kmaError) {

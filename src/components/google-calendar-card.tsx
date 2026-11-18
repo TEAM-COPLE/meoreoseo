@@ -1,35 +1,35 @@
-import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { router, useLocalSearchParams } from 'expo-router';
-import { useEffect, useState } from 'react';
-import { Pressable, StyleSheet, View } from 'react-native';
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { router, useLocalSearchParams } from "expo-router";
+import { useEffect, useState } from "react";
+import { Pressable, StyleSheet, View } from "react-native";
 
-import { ThemedText } from '@/components/themed-text';
-import { Button } from '@/components/ui/button';
-import { Checkbox } from '@/components/ui/checkbox';
-import { Card } from '@/components/ui/screen';
-import { Radius, Spacing } from '@/constants/theme';
-import { useAuth } from '@/lib/auth';
-import { errorMessage } from '@/lib/format';
+import { ThemedText } from "@/components/themed-text";
+import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Card } from "@/components/ui/screen";
+import { Radius, Spacing } from "@/constants/theme";
+import { useAuth } from "@/lib/auth";
+import { errorMessage } from "@/lib/format";
 import {
-  connectGoogleCalendar,
-  describeGoogleResult,
-  disconnectGoogleCalendar,
-  fetchGoogleCalendars,
-  fetchGoogleStatus,
-  googleStatusKey,
-  requestGoogleSync,
-  selectGoogleCalendars,
-  type GoogleCalendarStatus,
-} from '@/lib/google-calendar';
+    connectGoogleCalendar,
+    describeGoogleResult,
+    disconnectGoogleCalendar,
+    fetchGoogleCalendars,
+    fetchGoogleStatus,
+    googleStatusKey,
+    requestGoogleSync,
+    selectGoogleCalendars,
+    type GoogleCalendarStatus,
+} from "@/lib/google-calendar";
 
 /** '2026-11-18T05:00:00Z' → '11월 18일 오후 2:00' */
 function formatSynced(iso: string): string {
   const date = new Date(iso);
-  return date.toLocaleString('ko-KR', {
-    month: 'long',
-    day: 'numeric',
-    hour: 'numeric',
-    minute: '2-digit',
+  return date.toLocaleString("ko-KR", {
+    month: "long",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
   });
 }
 
@@ -38,16 +38,18 @@ let rememberedResult: string | null = null;
 
 /** 계정 화면의 "구글 캘린더 연동" 카드 */
 export function GoogleCalendarCard() {
-  const { session } = useAuth();
+  const { session, isDevMode } = useAuth();
   const userId = session?.user.id ?? null;
   const client = useQueryClient();
   const key = googleStatusKey(userId);
   const status = useQuery({
     queryKey: key,
-    enabled: userId !== null,
+    enabled: userId !== null && !isDevMode,
     queryFn: fetchGoogleStatus,
   });
-  const [busy, setBusy] = useState<'connect' | 'disconnect' | 'sync' | null>(null);
+  const [busy, setBusy] = useState<"connect" | "disconnect" | "sync" | null>(
+    null,
+  );
 
   // 웹: 구글 로그인을 마치고 /account?google=connected 로 돌아왔을 때 안내를 띄운다.
   // 화면이 처음 열릴 때의 값만 기억해 두고, 주소에서는 바로 지운다.
@@ -59,10 +61,10 @@ export function GoogleCalendarCard() {
     return value;
   });
   const [message, setMessage] = useState<string | null>(() =>
-    arrival === 'connected' ? describeGoogleResult(arrival) : null,
+    arrival === "connected" ? describeGoogleResult(arrival) : null,
   );
   const [error, setError] = useState<string | null>(() =>
-    arrival !== 'connected' ? describeGoogleResult(arrival) : null,
+    arrival !== "connected" ? describeGoogleResult(arrival) : null,
   );
   useEffect(() => {
     if (!describeGoogleResult(google)) return;
@@ -70,9 +72,9 @@ export function GoogleCalendarCard() {
     router.setParams({ google: undefined });
     client.invalidateQueries({ queryKey: key });
     // 첫 동기화가 서버에서 도는 동안 잠시 뒤에 일정을 다시 불러온다.
-    if (google === 'connected') {
+    if (google === "connected") {
       setTimeout(() => {
-        client.invalidateQueries({ queryKey: ['events'] });
+        client.invalidateQueries({ queryKey: ["events"] });
         client.invalidateQueries({ queryKey: key });
       }, 8000);
     }
@@ -80,17 +82,17 @@ export function GoogleCalendarCard() {
   }, [google]);
 
   async function connect() {
-    setBusy('connect');
+    setBusy("connect");
     setError(null);
     setMessage(null);
     try {
       const result = await connectGoogleCalendar();
       // 휴대폰에서는 여기로 결과가 돌아온다. (웹은 페이지가 이동하므로 오지 않는다)
       const text = describeGoogleResult(result);
-      if (result === 'connected') setMessage(text);
+      if (result === "connected") setMessage(text);
       else if (text) setError(text);
       await client.invalidateQueries({ queryKey: key });
-      if (result === 'connected') requestGoogleSync(8000);
+      if (result === "connected") requestGoogleSync(8000);
     } catch (e) {
       setError(errorMessage(e));
     } finally {
@@ -99,7 +101,7 @@ export function GoogleCalendarCard() {
   }
 
   async function syncNow() {
-    setBusy('sync');
+    setBusy("sync");
     setError(null);
     setMessage(null);
     requestGoogleSync(0);
@@ -108,12 +110,14 @@ export function GoogleCalendarCard() {
   }
 
   async function disconnect() {
-    setBusy('disconnect');
+    setBusy("disconnect");
     setError(null);
     setMessage(null);
     try {
       await disconnectGoogleCalendar();
-      setMessage('연결을 끊었어요. 구글 캘린더의 "멀어서" 캘린더는 남아 있으니 필요 없으면 구글에서 지워 주세요.');
+      setMessage(
+        '연결을 끊었어요. 구글 캘린더의 "멀어서" 캘린더는 남아 있으니 필요 없으면 구글에서 지워 주세요.',
+      );
       await client.invalidateQueries({ queryKey: key });
     } catch (e) {
       setError(errorMessage(e));
@@ -124,14 +128,26 @@ export function GoogleCalendarCard() {
 
   const data = status.data;
   const connected = data?.connected === true;
-  const needsReauth = connected && data?.status === 'reauth';
+  const needsReauth = connected && data?.status === "reauth";
+
+  if (isDevMode) {
+    return (
+      <Card>
+        <ThemedText type="smallBold">구글 캘린더 연동</ThemedText>
+        <ThemedText type="small" themeColor="textSecondary">
+          개발 모드(기기 내 저장)에서는 구글 캘린더 연동을 사용할 수 없어요.
+        </ThemedText>
+      </Card>
+    );
+  }
 
   return (
     <Card>
       <ThemedText type="smallBold">구글 캘린더 연동</ThemedText>
       <ThemedText type="small" themeColor="textSecondary">
-        멀어서 일정이 구글 캘린더의 &quot;멀어서&quot; 캘린더(그리고 아래에서 고른 캘린더)와 서로 맞춰져요. 휴대폰 캘린더, 노션 캘린더에서도
-        보고 고칠 수 있어요. (자동으로 5분마다, 그리고 일정을 고칠 때마다)
+        멀어서 일정이 구글 캘린더의 &quot;멀어서&quot; 캘린더(그리고 아래에서
+        고른 캘린더)와 서로 맞춰져요. 휴대폰 캘린더, 노션 캘린더에서도 보고 고칠
+        수 있어요. (자동으로 5분마다, 그리고 일정을 고칠 때마다)
       </ThemedText>
 
       {status.isLoading ? (
@@ -148,13 +164,16 @@ export function GoogleCalendarCard() {
         </ThemedText>
       ) : connected ? (
         <View style={styles.info}>
-          <ThemedText type="default">{data?.email ?? '구글 계정'}</ThemedText>
-          <ThemedText type="small" themeColor={needsReauth ? 'danger' : 'textSecondary'}>
+          <ThemedText type="default">{data?.email ?? "구글 계정"}</ThemedText>
+          <ThemedText
+            type="small"
+            themeColor={needsReauth ? "danger" : "textSecondary"}
+          >
             {needsReauth
-              ? '구글 연결이 끊어졌어요. 다시 연결해 주세요.'
+              ? "구글 연결이 끊어졌어요. 다시 연결해 주세요."
               : data?.lastSyncedAt
                 ? `마지막으로 맞춘 때: ${formatSynced(data.lastSyncedAt)}`
-                : '처음 맞추는 중이에요…'}
+                : "처음 맞추는 중이에요…"}
           </ThemedText>
           {!needsReauth && data?.lastError ? (
             <ThemedText type="small" themeColor="danger">
@@ -165,7 +184,11 @@ export function GoogleCalendarCard() {
       ) : null}
 
       {connected && !needsReauth && data ? (
-        <CalendarPicker status={data} onReconnect={connect} busy={busy !== null} />
+        <CalendarPicker
+          status={data}
+          onReconnect={connect}
+          busy={busy !== null}
+        />
       ) : null}
 
       {message ? <ThemedText type="small">{message}</ThemedText> : null}
@@ -179,9 +202,9 @@ export function GoogleCalendarCard() {
         <View style={styles.buttons}>
           {!connected || needsReauth ? (
             <Button
-              label={needsReauth ? '다시 연결하기' : '구글 캘린더 연결하기'}
+              label={needsReauth ? "다시 연결하기" : "구글 캘린더 연결하기"}
               onPress={connect}
-              loading={busy === 'connect'}
+              loading={busy === "connect"}
               disabled={busy !== null}
             />
           ) : (
@@ -189,7 +212,7 @@ export function GoogleCalendarCard() {
               label="지금 맞추기"
               variant="secondary"
               onPress={syncNow}
-              loading={busy === 'sync'}
+              loading={busy === "sync"}
               disabled={busy !== null}
             />
           )}
@@ -198,7 +221,7 @@ export function GoogleCalendarCard() {
               label="연결 끊기"
               variant="danger"
               onPress={disconnect}
-              loading={busy === 'disconnect'}
+              loading={busy === "disconnect"}
               disabled={busy !== null}
             />
           ) : null}
@@ -227,7 +250,7 @@ function CalendarPicker({
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const choices = useQuery({
-    queryKey: ['google-calendar-choices'],
+    queryKey: ["google-calendar-choices"],
     enabled: open && status.canPickCalendars,
     queryFn: fetchGoogleCalendars,
     staleTime: 0,
@@ -237,7 +260,8 @@ function CalendarPicker({
     return (
       <View style={styles.picker}>
         <ThemedText type="small" themeColor="textSecondary">
-          기본 캘린더처럼 구글에 원래 있던 일정도 가져오려면, 다시 연결해서 캘린더 권한을 모두 허용해 주세요.
+          기본 캘린더처럼 구글에 원래 있던 일정도 가져오려면, 다시 연결해서
+          캘린더 권한을 모두 허용해 주세요.
         </ThemedText>
         <Button
           label="다른 캘린더도 가져오기 (다시 연결)"
@@ -252,7 +276,12 @@ function CalendarPicker({
 
   // 아직 아무것도 누르지 않았으면 서버에 저장된 선택을 그대로 보여준다.
   const selected =
-    picked ?? new Set((choices.data ?? []).filter((choice) => choice.selected).map((choice) => choice.id));
+    picked ??
+    new Set(
+      (choices.data ?? [])
+        .filter((choice) => choice.selected)
+        .map((choice) => choice.id),
+    );
 
   function toggle(id: string) {
     const next = new Set(selected);
@@ -268,7 +297,11 @@ function CalendarPicker({
     setMessage(null);
     try {
       await selectGoogleCalendars([...selected]);
-      setMessage(selected.size > 0 ? '고른 캘린더의 일정을 가져왔어요.' : '함께 맞추는 캘린더를 모두 뺐어요.');
+      setMessage(
+        selected.size > 0
+          ? "고른 캘린더의 일정을 가져왔어요."
+          : "함께 맞추는 캘린더를 모두 뺐어요.",
+      );
       setPicked(null);
       setOpen(false);
     } catch (e) {
@@ -284,8 +317,8 @@ function CalendarPicker({
     <View style={styles.picker}>
       <ThemedText type="small" themeColor="textSecondary">
         {names.length > 0
-          ? `함께 맞추는 캘린더: ${names.join(', ')}`
-          : '구글에 원래 있던 캘린더(기본 캘린더 등)도 골라서 가져올 수 있어요.'}
+          ? `함께 맞추는 캘린더: ${names.join(", ")}`
+          : "구글에 원래 있던 캘린더(기본 캘린더 등)도 골라서 가져올 수 있어요."}
       </ThemedText>
 
       {open ? (
@@ -304,7 +337,8 @@ function CalendarPicker({
             </ThemedText>
           ) : (
             (choices.data ?? []).map((choice) => {
-              const readOnly = choice.accessRole !== 'owner' && choice.accessRole !== 'writer';
+              const readOnly =
+                choice.accessRole !== "owner" && choice.accessRole !== "writer";
               const checked = selected.has(choice.id);
               return (
                 <Pressable
@@ -313,18 +347,32 @@ function CalendarPicker({
                   onPress={() => toggle(choice.id)}
                   disabled={saving}
                   // 화면 낭독기에는 안쪽 체크 상자 하나만 읽히게 한다(두 번 읽지 않게).
-                  accessible={false}>
-                  <Checkbox checked={checked} onPress={() => toggle(choice.id)} label={choice.name} disabled={saving} />
-                  <View style={[styles.dot, { backgroundColor: choice.color ?? '#9e9e9e' }]} />
+                  accessible={false}
+                >
+                  <Checkbox
+                    checked={checked}
+                    onPress={() => toggle(choice.id)}
+                    label={choice.name}
+                    disabled={saving}
+                  />
+                  <View
+                    style={[
+                      styles.dot,
+                      { backgroundColor: choice.color ?? "#9e9e9e" },
+                    ]}
+                  />
                   <View style={styles.rowText}>
                     <ThemedText type="default" numberOfLines={1}>
                       {choice.name}
                     </ThemedText>
                     {choice.primary || readOnly ? (
                       <ThemedText type="small" themeColor="textSecondary">
-                        {[choice.primary ? '기본 캘린더' : null, readOnly ? '보기만 할 수 있어요' : null]
+                        {[
+                          choice.primary ? "기본 캘린더" : null,
+                          readOnly ? "보기만 할 수 있어요" : null,
+                        ]
                           .filter(Boolean)
-                          .join(' · ')}
+                          .join(" · ")}
                       </ThemedText>
                     ) : null}
                   </View>
@@ -333,11 +381,18 @@ function CalendarPicker({
             })
           )}
           <ThemedText type="small" themeColor="textSecondary">
-            새로 만드는 일정은 &quot;멀어서&quot; 캘린더에 들어가요. 남이 보낸 회의 초대는 앱에서 보기만 할 수 있어요.
-            빼 버린 캘린더의 일정은 앱에서만 사라지고 구글에는 그대로 있어요.
+            새로 만드는 일정은 &quot;멀어서&quot; 캘린더에 들어가요. 남이 보낸
+            회의 초대는 앱에서 보기만 할 수 있어요. 빼 버린 캘린더의 일정은
+            앱에서만 사라지고 구글에는 그대로 있어요.
           </ThemedText>
           <View style={styles.buttons}>
-            <Button label="저장" size="small" onPress={save} loading={saving} disabled={saving || !choices.data} />
+            <Button
+              label="저장"
+              size="small"
+              onPress={save}
+              loading={saving}
+              disabled={saving || !choices.data}
+            />
             <Button
               label="닫기"
               variant="secondary"
@@ -385,8 +440,8 @@ const styles = StyleSheet.create({
     gap: Spacing.two,
   },
   row: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
     gap: Spacing.two,
     paddingVertical: Spacing.one,
   },
