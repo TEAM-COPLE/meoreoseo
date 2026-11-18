@@ -1,9 +1,10 @@
 import { useQueryClient } from '@tanstack/react-query';
 import { router } from 'expo-router';
 import { useState, type PropsWithChildren } from 'react';
-import { Modal, Platform, Pressable, StyleSheet, useWindowDimensions, View, type StyleProp, type ViewStyle } from 'react-native';
+import { Platform, Pressable, StyleSheet, useWindowDimensions, View, type StyleProp, type ViewStyle } from 'react-native';
 
 import { ThemedText } from '@/components/themed-text';
+import { TodayLayoutEditor } from '@/components/today-layout-editor';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import {
@@ -19,11 +20,7 @@ import { useMonthlyBudget } from '@/hooks/use-budget';
 import { timeLabel, useEvents } from '@/hooks/use-events';
 import { streakOf, useDeleteHabit, useHabitLogs, useHabits, useToggleHabitLog } from '@/hooks/use-habits';
 import { useTheme, useThemeMode } from '@/hooks/use-theme';
-import {
-  TODAY_SECTION_LABELS,
-  useTodayLayout,
-  type TodaySectionId,
-} from '@/hooks/use-today-layout';
+import { useTodayLayout, type TodaySectionId } from '@/hooks/use-today-layout';
 import { useTodos, useToggleTodo, type Todo } from '@/hooks/use-todos';
 import { useTransactions } from '@/hooks/use-transactions';
 import { useSaveWeatherCity, useWeather, useWeatherCity } from '@/hooks/use-weather';
@@ -43,9 +40,19 @@ export default function TodayScreen() {
   const queryClient = useQueryClient();
   const { width } = useWindowDimensions();
   const isWideWeb = Platform.OS === 'web' && width >= 960;
-  const { order, hidden, collapsed, moveSection, toggleHidden, toggleCollapsed, resetLayout } =
-    useTodayLayout();
+  const {
+    order,
+    hidden,
+    collapsed,
+    moveSection,
+    setOrder,
+    toggleHidden,
+    toggleCollapsed,
+    resetLayout,
+  } = useTodayLayout();
+  // "편집"을 누르면 상자들이 끌어서 옮길 수 있는 모양으로 바뀐다. "완료"를 누르면 원래 화면으로 돌아온다.
   const [editingLayout, setEditingLayout] = useState(false);
+  const [draggingBox, setDraggingBox] = useState(false);
 
   const visibleOrder = order.filter((id) => !hidden.includes(id));
   const showWeatherTop = visibleOrder.includes('weather');
@@ -111,13 +118,14 @@ export default function TodayScreen() {
     <Screen
       title="오늘"
       wide
+      scrollEnabled={!draggingBox}
       onRefresh={() => queryClient.refetchQueries({ type: 'active' })}
       action={
         <Button
-          label="편집"
-          variant="secondary"
+          label={editingLayout ? '완료' : '편집'}
+          variant={editingLayout ? 'primary' : 'secondary'}
           size="small"
-          onPress={() => setEditingLayout(true)}
+          onPress={() => setEditingLayout((prev) => !prev)}
         />
       }>
       <View style={styles.topMetaRow}>
@@ -173,7 +181,17 @@ export default function TodayScreen() {
         </View>
       </View>
 
-      {isWideWeb ? (
+      {editingLayout ? (
+        <TodayLayoutEditor
+          order={order}
+          hidden={hidden}
+          onReorder={setOrder}
+          onMove={moveSection}
+          onToggleHidden={toggleHidden}
+          onReset={resetLayout}
+          onDraggingChange={setDraggingBox}
+        />
+      ) : isWideWeb ? (
         <>
           {showWeatherTop ? renderSection('weather', 0) : null}
           <View style={styles.webGrid}>
@@ -188,23 +206,13 @@ export default function TodayScreen() {
         visibleOrder.map((id, idx) => renderSection(id, idx))
       )}
 
-      {visibleOrder.length === 0 ? (
+      {!editingLayout && visibleOrder.length === 0 ? (
         <Card>
           <ThemedText type="small" themeColor="textSecondary">
-            표시할 카드가 없습니다. 오른쪽 위 &quot;편집&quot;을 눌러 카드를 다시 켜 보세요.
+            표시할 상자가 없습니다. 오른쪽 위 &quot;편집&quot;을 눌러 상자를 다시 켜 보세요.
           </ThemedText>
         </Card>
       ) : null}
-
-      <TodayLayoutModal
-        visible={editingLayout}
-        order={order}
-        hidden={hidden}
-        onMove={moveSection}
-        onToggleHidden={toggleHidden}
-        onReset={resetLayout}
-        onClose={() => setEditingLayout(false)}
-      />
     </Screen>
   );
 }
@@ -693,100 +701,6 @@ function Section({
   );
 }
 
-function TodayLayoutModal({
-  visible,
-  order,
-  hidden,
-  onMove,
-  onToggleHidden,
-  onReset,
-  onClose,
-}: {
-  visible: boolean;
-  order: TodaySectionId[];
-  hidden: TodaySectionId[];
-  onMove: (id: TodaySectionId, dir: -1 | 1) => void;
-  onToggleHidden: (id: TodaySectionId) => void;
-  onReset: () => void;
-  onClose: () => void;
-}) {
-  const theme = useTheme();
-
-  return (
-    <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
-      <Pressable onPress={onClose} style={styles.modalBackdrop}>
-        <Pressable
-          onPress={(e) => e.stopPropagation()}
-          style={[
-            styles.modalCard,
-            { backgroundColor: theme.backgroundElement, borderColor: theme.border },
-          ]}>
-          <ThemedText type="default" style={styles.modalTitle}>
-            오늘 화면 구성
-          </ThemedText>
-          <ThemedText type="small" themeColor="textSecondary">
-            카드 순서를 바꾸거나 필요 없는 카드를 숨길 수 있습니다.
-          </ThemedText>
-
-          <View style={styles.layoutList}>
-            {order.map((id, idx) => {
-              const isHidden = hidden.includes(id);
-              return (
-                <View
-                  key={id}
-                  style={[
-                    styles.layoutRow,
-                    { backgroundColor: theme.background, borderColor: theme.border },
-                  ]}>
-                  <ThemedText
-                    type="smallBold"
-                    themeColor={isHidden ? 'textSecondary' : 'text'}
-                    style={styles.layoutName}>
-                    {TODAY_SECTION_LABELS[id]}
-                  </ThemedText>
-                  <View style={styles.layoutControls}>
-                    <Pressable
-                      disabled={idx === 0}
-                      onPress={() => onMove(id, -1)}
-                      style={[styles.iconBtn, { opacity: idx === 0 ? 0.3 : 1 }]}>
-                      <ThemedText type="small">▲</ThemedText>
-                    </Pressable>
-                    <Pressable
-                      disabled={idx === order.length - 1}
-                      onPress={() => onMove(id, 1)}
-                      style={[styles.iconBtn, { opacity: idx === order.length - 1 ? 0.3 : 1 }]}>
-                      <ThemedText type="small">▼</ThemedText>
-                    </Pressable>
-                    <Pressable
-                      onPress={() => onToggleHidden(id)}
-                      style={[
-                        styles.visPill,
-                        {
-                          backgroundColor: isHidden ? theme.backgroundSelected : theme.tintSoft,
-                        },
-                      ]}>
-                      <ThemedText
-                        type="smallBold"
-                        style={{ color: isHidden ? theme.textSecondary : theme.tint }}>
-                        {isHidden ? '숨김' : '표시'}
-                      </ThemedText>
-                    </Pressable>
-                  </View>
-                </View>
-              );
-            })}
-          </View>
-
-          <View style={styles.modalFooter}>
-            <Button label="기본값 복원" variant="secondary" size="small" onPress={onReset} />
-            <Button label="완료" size="small" onPress={onClose} />
-          </View>
-        </Pressable>
-      </Pressable>
-    </Modal>
-  );
-}
-
 /** 상자 안에서 "불러오는 중"이나 "불러오지 못함"을 작게 보여준다. 정상일 때는 아무것도 그리지 않는다. */
 function SectionStatus({
   loading,
@@ -943,58 +857,5 @@ const styles = StyleSheet.create({
   budgetFill: {
     height: 7,
     borderRadius: Radius.full,
-  },
-  modalBackdrop: {
-    flex: 1,
-    backgroundColor: 'rgba(10, 10, 18, 0.56)',
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: Spacing.three,
-  },
-  modalCard: {
-    width: '100%',
-    maxWidth: 400,
-    borderRadius: Radius.large,
-    borderWidth: 1,
-    padding: Spacing.three,
-    gap: Spacing.three,
-  },
-  modalTitle: {
-    fontWeight: 700,
-    fontSize: 18,
-  },
-  layoutList: {
-    gap: Spacing.two,
-  },
-  layoutRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: Spacing.three - 4,
-    paddingVertical: Spacing.two,
-    borderRadius: Radius.medium,
-    borderWidth: 1,
-  },
-  layoutName: {
-    flex: 1,
-  },
-  layoutControls: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: Spacing.one,
-  },
-  iconBtn: {
-    paddingHorizontal: Spacing.two,
-    paddingVertical: Spacing.one,
-  },
-  visPill: {
-    paddingHorizontal: Spacing.two + 2,
-    paddingVertical: Spacing.one,
-    borderRadius: Radius.full,
-  },
-  modalFooter: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
   },
 });
