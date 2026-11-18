@@ -1,5 +1,6 @@
 import type { Tables } from './database.types';
 import { addDays, formatDate, formatTime, parseISODate, toISODate } from './dates';
+import { todoStartOf } from './repeat';
 import type { DayForecast } from './weather';
 import { describeWeather, formatTemperature } from './weather-format';
 
@@ -85,7 +86,7 @@ export type Reminder = {
 };
 
 export type ReminderData = {
-  todos: Pick<Tables<'todos'>, 'title' | 'due_date' | 'done'>[];
+  todos: Pick<Tables<'todos'>, 'title' | 'due_date' | 'start_date' | 'done'>[];
   events: Pick<Tables<'events'>, 'title' | 'event_date' | 'start_time'>[];
   /** 습관의 개수 */
   habitCount: number;
@@ -111,10 +112,13 @@ function briefingFor(date: string, data: ReminderData, hour: number, minute: num
   const day = data.forecast?.days.find((item) => item.date === date);
   if (data.forecast && day) lines.push(weatherLine(data.forecast.city, day));
 
-  // 마감이 그날이거나 이미 지난(밀린) 할 일
-  const todos = data.todos.filter((todo) => !todo.done && todo.due_date && todo.due_date <= date);
+  // 그날 하고 있어야 할 할 일: 시작일(없으면 마감일)이 그날이거나 지난 것. 마감이 지났으면 밀린 일이다.
+  const todos = data.todos.filter((todo) => {
+    const start = todoStartOf(todo);
+    return !todo.done && start !== null && start <= date;
+  });
   if (todos.length > 0) {
-    const overdue = todos.filter((todo) => (todo.due_date as string) < date).length;
+    const overdue = todos.filter((todo) => todo.due_date !== null && todo.due_date < date).length;
     lines.push(`✅ 할 일 ${todos.length}개${overdue > 0 ? ` (밀린 일 ${overdue}개)` : ''}`);
   }
 

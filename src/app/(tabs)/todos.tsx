@@ -2,6 +2,9 @@ import { router, useLocalSearchParams } from 'expo-router';
 import { useDeferredValue, useRef, useState } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 
+import { RepeatPicker } from '@/components/repeat-picker';
+import { TagBadge } from '@/components/tag-badge';
+import { TagPicker } from '@/components/tag-picker';
 import { ThemedText } from '@/components/themed-text';
 import { Checkbox } from '@/components/ui/checkbox';
 import { DateField } from '@/components/ui/date-field';
@@ -12,6 +15,7 @@ import { SelectionBar, SelectionHeaderActions, SelectionIndicator } from '@/comp
 import { TextField, type TextFieldRef } from '@/components/ui/text-field';
 import { Spacing } from '@/constants/theme';
 import { hasSelectionModifier, useMultiSelect } from '@/hooks/use-multi-select';
+import { useTagColorOf, useTagMap, useTags } from '@/hooks/use-tags';
 import { useWebSearchShortcut } from '@/hooks/use-web-shortcut';
 import {
   useDeleteTodo,
@@ -23,17 +27,13 @@ import {
 } from '@/hooks/use-todos';
 import { formatDate, todayISO } from '@/lib/dates';
 import { confirm, errorMessage } from '@/lib/format';
-import {
-  isRepeat,
-  isWaitingRepeat,
-  REPEAT_OPTIONS,
-  repeatLabel,
-  type RepeatChoice,
-} from '@/lib/repeat';
+import { isRepeat, isWaitingRepeat, repeatLabel, todoPeriodLabel, todoStartOf } from '@/lib/repeat';
 
-type Filter = 'open' | 'done';
+/** 할 일의 단계: 예정(아직 시작 전) · 진행 중 · 완료 */
+type Filter = 'upcoming' | 'open' | 'done';
 
 const FILTERS = [
+  { value: 'upcoming', label: '예정' },
   { value: 'open', label: '진행 중' },
   { value: 'done', label: '완료' },
 ] as const;
@@ -57,7 +57,12 @@ export default function TodosScreen() {
   const toggle = useToggleTodo();
   const removeMany = useDeleteTodos();
   const multi = useMultiSelect();
+  const tags = useTags();
+  const tagMap = useTagMap();
+  const tagColorOf = useTagColorOf();
   const [filter, setFilter] = useState<Filter>('open');
+  // 'all': 모든 할 일, 그 밖에는 고른 태그의 id
+  const [tagFilter, setTagFilter] = useState<string>('all');
   const [priorityFilter, setPriorityFilter] = useState<number>(-1);
   const [query, setQuery] = useState('');
   const deferredQuery = useDeferredValue(query);
@@ -89,10 +94,23 @@ export default function TodosScreen() {
     setBulkError(null);
   }
 
+  function changeTagFilter(next: string) {
+    setTagFilter(next);
+    multi.clear();
+    setBulkError(null);
+  }
+
   const today = todayISO();
+  // 고른 태그가 지워졌으면 다시 "전체"로 본다.
+  const activeTagFilter = tagFilter !== 'all' && tagMap.has(tagFilter) ? tagFilter : 'all';
+  const tagFilterOptions = [
+    { value: 'all', label: '전체' },
+    ...(tags.data ?? []).map((tag) => ({ value: tag.id, label: tag.name })),
+  ];
   const keyword = deferredQuery.trim().toLowerCase();
   const visible = (todos.data ?? []).filter((todo) => {
-    if (todo.done !== (filter === 'done')) return false;
+    if (stageOf(todo, today) !== filter) return false;
+    if (activeTagFilter !== 'all' && todo.tag_id !== activeTagFilter) return false;
     if (priorityFilter !== -1 && todo.priority !== priorityFilter) return false;
     if (keyword) {
       const hay = `${todo.title} ${todo.notes ?? ''}`.toLowerCase();
@@ -100,10 +118,11 @@ export default function TodosScreen() {
     }
     return true;
   });
-  // 아직 차례가 오지 않은 반복 할 일은 아래 "다음 반복"에 따로 모아, 그날이 되기 전에는 체크하지 못하게 한다.
-  const ready = visible.filter((todo) => !isWaitingRepeat(todo, today));
-  const waiting = visible.filter((todo) => isWaitingRepeat(todo, today));
-  const visibleIds = [...ready, ...waiting].map((todo) => todo.id);
+  // 예정 탭은 시작하는 날이 빠른 순서로 보여준다.
+  if (filter === 'upcoming') {
+    visible.sort((a, b) => (todoStartOf(a) ?? '').localeCompare(todoStartOf(b) ?? ''));
+  }
+  const visibleIds = visible.map((todo) => todo.id);
   const selectedVisibleIds = visibleIds.filter((id) => multi.isSelected(id));
   const isSelecting = visibleIds.length > 0 && (multi.active || selectedVisibleIds.length > 0);
 
@@ -129,6 +148,9 @@ export default function TodosScreen() {
     const overdue = !todo.done && todo.due_date !== null && todo.due_date < today;
     const repeat = isRepeat(todo.repeat) && todo.due_date ? todo.repeat : null;
     const selected = multi.isSelected(todo.id);
+    const tag = todo.tag_id ? tagMap.get(todo.tag_id) : undefined;
+    const tagColor = tagColorOf(todo.tag_id);
+    const dateLabel = todoPeriodLabel(todo);
 
     const bodyContent = (
       <>
@@ -138,13 +160,14 @@ export default function TodosScreen() {
           style={todo.done && styles.doneTitle}>
           {todo.title}
         </ThemedText>
-        {todo.due_date || todo.priority > 0 ? (
+        {dateLabel || todo.priority > 0 || tag ? (
           <View style={styles.meta}>
-            {todo.due_date ? (
+            {tag ? <TagBadge tag={tag} /> : null}
+            {dateLabel ? (
               <ThemedText type="small" themeColor={overdue ? 'danger' : 'textSecondary'}>
-                {formatDate(todo.due_date)}
+                {dateLabel}
                 {overdue ? ' · 기한 지남' : ''}
-                {locked ? '부터 체크할 수 있어요' : ''}
+                {locked ? ` · ${formatDate(todoStartOf(todo) ?? today)}부터 체크할 수 있어요` : ''}
               </ThemedText>
             ) : null}
             {todo.priority > 0 ? (
@@ -167,6 +190,8 @@ export default function TodosScreen() {
         key={todo.id}
         selected={selected}
         selecting={isSelecting}
+        // 태그가 있으면 카드 왼쪽에 태그 색 띠를 둘러 한눈에 구분되게 한다.
+        style={tagColor ? [styles.tagged, { borderLeftColor: tagColor }] : undefined}
         onPress={isSelecting ? (e) => multi.handlePress(todo.id, visibleIds, e) : undefined}
         onLongPress={() => {
           setBulkError(null);
@@ -180,7 +205,7 @@ export default function TodosScreen() {
               checked={todo.done}
               label={
                 locked && todo.due_date
-                  ? `${todo.title} (${formatDate(todo.due_date)}부터 체크 가능)`
+                  ? `${todo.title} (${formatDate(todoStartOf(todo) ?? todo.due_date)}부터 체크 가능)`
                   : `${todo.title} 완료 표시`
               }
               disabled={locked}
@@ -274,6 +299,14 @@ export default function TodosScreen() {
         onChangeText={setQuery}
         returnKeyType="search"
       />
+      {tagFilterOptions.length > 1 ? (
+        <Segmented
+          label="태그로 보기"
+          options={tagFilterOptions}
+          value={activeTagFilter}
+          onChange={changeTagFilter}
+        />
+      ) : null}
 
       {bulkError ? (
         <ThemedText type="small" themeColor="danger">
@@ -284,27 +317,17 @@ export default function TodosScreen() {
       <ListStatus
         loading={todos.isPending}
         error={todos.error}
-        empty={ready.length === 0 && waiting.length === 0}
+        empty={visible.length === 0}
         emptyText={
-          keyword || priorityFilter !== -1
+          keyword || priorityFilter !== -1 || activeTagFilter !== 'all'
             ? '조건에 맞는 할 일이 없습니다.'
-            : filter === 'open'
-              ? '진행 중인 할 일이 없습니다. "추가"를 눌러 시작해 보세요.'
-              : '완료한 할 일이 아직 없습니다.'
+            : EMPTY_TEXT[filter]
         }
         onRetry={todos.refetch}
       />
 
-      {ready.map((todo) => renderTodo(todo, false))}
-
-      {waiting.length > 0 ? (
-        <>
-          <ThemedText type="small" themeColor="textSecondary" style={styles.sectionTitle}>
-            다음 반복
-          </ThemedText>
-          {waiting.map((todo) => renderTodo(todo, true))}
-        </>
-      ) : null}
+      {/* 아직 차례가 오지 않은 반복 할 일은 그날이 되기 전에는 체크하지 못하게 잠가 둔다. */}
+      {visible.map((todo) => renderTodo(todo, isWaitingRepeat(todo, today)))}
 
       {activeEditing ? (
         <TodoForm
@@ -322,27 +345,34 @@ function TodoForm({ todo, onClose }: { todo: Todo | null; onClose: () => void })
 
   const [title, setTitle] = useState(todo?.title ?? '');
   const [notes, setNotes] = useState(todo?.notes ?? '');
+  const [startDate, setStartDate] = useState<string | null>(todo?.start_date ?? null);
   const [dueDate, setDueDate] = useState<string | null>(todo?.due_date ?? null);
   const [priority, setPriority] = useState<number>(todo?.priority ?? 0);
-  const [repeat, setRepeat] = useState<RepeatChoice>(
-    isRepeat(todo?.repeat) ? (todo?.repeat as RepeatChoice) : 'none',
+  // 반복 방법 (반복 안 하면 null)
+  const [repeat, setRepeat] = useState<string | null>(
+    todo && isRepeat(todo.repeat) ? todo.repeat : null,
   );
+  const [tagId, setTagId] = useState<string | null>(todo?.tag_id ?? null);
   const [error, setError] = useState<string | null>(null);
 
-  // 반복을 고르면서 마감일이 비어 있으면 오늘로 채운다(반복의 기준 날짜가 필요하다).
-  function changeRepeat(value: RepeatChoice) {
+  // 반복을 고르면서 마감일이 비어 있으면 시작일(없으면 오늘)로 채운다(반복의 기준 날짜가 필요하다).
+  function changeRepeat(value: string | null) {
     setRepeat(value);
-    if (value !== 'none' && !dueDate) setDueDate(todayISO());
+    if (value && !dueDate) setDueDate(startDate ?? todayISO());
   }
 
   async function submit() {
     if (!title.trim()) {
-      setError('제목을 입력해 주세요.');
+      setError('제목은 꼭 입력해 주세요.');
       return;
     }
-    const repeatValue = repeat === 'none' ? null : repeat;
+    const repeatValue = repeat;
     if (repeatValue && !dueDate) {
       setError('반복하려면 마감일을 정해 주세요.');
+      return;
+    }
+    if (startDate && dueDate && startDate > dueDate) {
+      setError('시작일은 마감일보다 늦을 수 없어요.');
       return;
     }
     // 반복 방법과 마감일이 그대로면 기준 날짜를 유지한다(매월 31일 같은 반복이 짧은 달 뒤에도 31일로 돌아오게).
@@ -353,9 +383,12 @@ function TodoForm({ todo, onClose }: { todo: Todo | null; onClose: () => void })
         title: title.trim(),
         notes: notes.trim() || null,
         due_date: dueDate,
+        // 시작일이 마감일과 같으면 하루짜리이므로 따로 저장하지 않는다.
+        start_date: startDate && startDate !== dueDate ? startDate : null,
         priority,
         repeat: repeatValue,
         repeat_start: repeatValue ? (keepStart ? (todo.repeat_start ?? dueDate) : dueDate) : null,
+        tag_id: tagId,
       });
       onClose();
     } catch (e) {
@@ -391,7 +424,7 @@ function TodoForm({ todo, onClose }: { todo: Todo | null; onClose: () => void })
       onDelete={todo ? deleteTodo : undefined}
       error={error}>
       <TextField
-        label="제목"
+        label="제목 (필수)"
         value={title}
         onChangeText={setTitle}
         placeholder="무엇을 해야 하나요?"
@@ -399,28 +432,74 @@ function TodoForm({ todo, onClose }: { todo: Todo | null; onClose: () => void })
         autoFocus={!todo}
       />
       <DateField
-        label="마감일"
-        value={dueDate}
+        label="시작일 (선택)"
+        value={startDate}
         onChange={(value) => {
-          setDueDate(value);
-          // 마감일을 지우면 반복도 끈다.
-          if (!value) setRepeat('none');
+          setStartDate(value);
+          // 마감일이 시작일보다 이르면 마감일을 시작일로 맞춘다.
+          if (value && dueDate && dueDate < value) setDueDate(value);
         }}
         clearable
       />
-      <Segmented label="반복" options={REPEAT_OPTIONS} value={repeat} onChange={changeRepeat} />
-      {repeat !== 'none' && dueDate ? (
+      <DateField
+        label="마감일 (선택)"
+        value={dueDate}
+        onChange={(value) => {
+          setDueDate(value);
+          // 마감일을 지우면 반복도 끈다(반복은 마감일을 기준으로 계산한다).
+          if (!value) setRepeat(null);
+          // 마감일을 시작일보다 앞으로 옮기면 시작일을 마감일로 맞춘다.
+          if (value && startDate && value < startDate) setStartDate(value);
+        }}
+        clearable
+      />
+      <ThemedText type="small" themeColor="textSecondary">
+        {periodHint(startDate, dueDate)}
+      </ThemedText>
+      <RepeatPicker value={repeat} onChange={changeRepeat} anchor={dueDate ?? startDate ?? todayISO()} />
+      {repeat && dueDate ? (
         <ThemedText type="small" themeColor="textSecondary">
           {`${repeatLabel(repeat, dueDate)} 반복합니다. 완료하면 다음 날짜의 할 일이 생기고, 그날부터 체크할 수 있어요.`}
         </ThemedText>
       ) : null}
+      <TagPicker value={tagId} onChange={setTagId} />
       <Segmented label="중요도" options={PRIORITIES} value={priority} onChange={setPriority} />
       <TextField label="메모" value={notes} onChangeText={setNotes} multiline />
     </FormModal>
   );
 }
 
+const EMPTY_TEXT: Record<Filter, string> = {
+  upcoming: '예정된 할 일이 없습니다. 시작일(없으면 마감일)이 내일 이후인 할 일이 여기에 모여요.',
+  open: '진행 중인 할 일이 없습니다. "추가"를 눌러 시작해 보세요.',
+  done: '완료한 할 일이 아직 없습니다.',
+};
+
+/**
+ * 할 일이 어느 단계인지.
+ * 완료 표시한 것은 '완료', 시작일(없으면 마감일)이 내일 이후면 '예정', 나머지(날짜가 없는 것 포함)는 '진행 중'.
+ */
+function stageOf(todo: Todo, today: string): Filter {
+  if (todo.done) return 'done';
+  const start = todoStartOf(todo);
+  return start !== null && start > today ? 'upcoming' : 'open';
+}
+
+/** 시작일·마감일을 어떻게 정했는지에 따라 달력에 어떻게 보이는지 알려준다. */
+function periodHint(startDate: string | null, dueDate: string | null): string {
+  if (startDate && dueDate && startDate < dueDate) {
+    return `${formatDate(startDate)}부터 ${formatDate(dueDate)}까지 일정 달력에 보여요.`;
+  }
+  if (dueDate) return `${formatDate(dueDate)}에 일정 달력에 보여요.`;
+  if (startDate) return `마감 없이 ${formatDate(startDate)}부터 할 일이에요. 일정 달력에는 시작일에 보여요.`;
+  return '날짜를 비워 두면 언제든 할 일로 남아요. (일정 달력에는 보이지 않아요)';
+}
+
 const styles = StyleSheet.create({
+  // 태그 색 띠
+  tagged: {
+    borderLeftWidth: 6,
+  },
   row: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -436,10 +515,6 @@ const styles = StyleSheet.create({
   // 아직 차례가 오지 않은 반복 할 일은 흐리게 보여준다.
   locked: {
     opacity: 0.6,
-  },
-  sectionTitle: {
-    fontWeight: 700,
-    marginTop: Spacing.two,
   },
   meta: {
     flexDirection: 'row',

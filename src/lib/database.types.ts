@@ -17,6 +17,8 @@ type TodoRow = {
   title: string;
   notes: string | null;
   due_date: string | null;
+  /** 시작일. 시작일 ~ 마감일 기간이 달력에 보인다 (없으면 마감일 하루) */
+  start_date: string | null;
   priority: number;
   done: boolean;
   done_at: string | null;
@@ -27,6 +29,8 @@ type TodoRow = {
   repeat_start: string | null;
   /** 이 할 일을 자동으로 만든 이전 할 일의 id */
   previous_id: string | null;
+  /** 붙인 태그의 id (없으면 null) */
+  tag_id: string | null;
 };
 
 type EventRow = {
@@ -42,6 +46,18 @@ type EventRow = {
   repeat: string | null;
   /** 반복이 끝나는 날 (없으면 계속) */
   repeat_until: string | null;
+  /** 붙인 태그의 id (없으면 null) */
+  tag_id: string | null;
+};
+
+/** 할 일·일정에 붙이는 색상 태그 */
+type TagRow = {
+  id: string;
+  user_id: string;
+  name: string;
+  /** 색 이름 (예: 'red', 'blue'). 실제 색은 src/lib/tags.ts 에 있다. */
+  color: string;
+  created_at: string;
 };
 
 type HabitRow = {
@@ -115,6 +131,7 @@ export type Database = {
         | 'user_id'
         | 'notes'
         | 'due_date'
+        | 'start_date'
         | 'priority'
         | 'done'
         | 'done_at'
@@ -122,11 +139,21 @@ export type Database = {
         | 'repeat'
         | 'repeat_start'
         | 'previous_id'
+        | 'tag_id'
       >;
       events: Table<
         EventRow,
-        'id' | 'user_id' | 'start_time' | 'end_time' | 'memo' | 'created_at' | 'repeat' | 'repeat_until'
+        | 'id'
+        | 'user_id'
+        | 'start_time'
+        | 'end_time'
+        | 'memo'
+        | 'created_at'
+        | 'repeat'
+        | 'repeat_until'
+        | 'tag_id'
       >;
+      tags: Table<TagRow, 'id' | 'user_id' | 'created_at'>;
       habits: Table<HabitRow, 'id' | 'user_id' | 'archived' | 'created_at'>;
       habit_logs: Table<HabitLogRow, 'id' | 'user_id' | 'created_at'>;
       notes: Table<

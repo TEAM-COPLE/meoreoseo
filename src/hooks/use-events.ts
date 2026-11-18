@@ -31,6 +31,8 @@ export type EventInput = {
   repeat: string | null;
   /** 반복이 끝나는 날 (없으면 계속) */
   repeat_until: string | null;
+  /** 붙인 태그의 id (없으면 null) */
+  tag_id: string | null;
 };
 
 const KEY = ['events'];
