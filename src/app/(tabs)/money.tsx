@@ -2,6 +2,7 @@ import { router, useLocalSearchParams } from 'expo-router';
 import { useDeferredValue, useMemo, useRef, useState } from 'react';
 import { Platform, Pressable, StyleSheet, View, type ViewStyle } from 'react-native';
 
+import { DuplicateReviewCard, MoneyAutoCard, SourceBadge } from '@/components/money-auto-panel';
 import { ThemedText } from '@/components/themed-text';
 import { Button } from '@/components/ui/button';
 import { DateField } from '@/components/ui/date-field';
@@ -255,6 +256,9 @@ export default function MoneyScreen() {
         </View>
       </Card>
 
+      <MoneyAutoCard />
+      <DuplicateReviewCard transactions={transactions.data ?? []} />
+
       <Segmented
         options={KIND_FILTERS}
         value={kindFilter}
@@ -357,7 +361,10 @@ export default function MoneyScreen() {
                   ]}>
                   {isSelecting ? <SelectionIndicator selected={selected} /> : null}
                   <View style={styles.itemBody}>
-                    <ThemedText type="default">{item.category}</ThemedText>
+                    <View style={styles.itemTitle}>
+                      <ThemedText type="default">{item.category}</ThemedText>
+                      <SourceBadge source={item.source} />
+                    </View>
                     {item.memo ? (
                       <ThemedText type="small" themeColor="textSecondary" numberOfLines={1}>
                         {item.memo}
@@ -630,6 +637,11 @@ const styles = StyleSheet.create({
   },
   itemBody: {
     flex: 1,
+  },
+  itemTitle: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.one,
   },
   // userSelect 는 웹 전용이라 RN ViewStyle 타입에 없어 캐스팅한다.
   noSelect: {

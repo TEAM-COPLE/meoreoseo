@@ -1,5 +1,5 @@
 import { router } from 'expo-router';
-import { useState, type PropsWithChildren, type ReactNode } from 'react';
+import { useState, type PropsWithChildren, type ReactNode, type Ref } from 'react';
 import {
   Modal,
   Platform,
@@ -10,6 +10,10 @@ import {
   useWindowDimensions,
   View,
   type GestureResponderEvent,
+  type LayoutChangeEvent,
+  type NativeScrollEvent,
+  type NativeSyntheticEvent,
+  type ScrollViewInstance,
   type StyleProp,
   type ViewStyle,
 } from 'react-native';
@@ -34,13 +38,34 @@ type Props = PropsWithChildren<{
   onRefresh?: () => Promise<unknown> | void;
   /** 웹 데스크톱 넓은 화면에서 최대 너비를 넓힐지 여부 */
   wide?: boolean;
+  /** false 면 잠시 스크롤을 멈춘다. 상자를 끌어서 옮기는 동안 화면이 같이 움직이지 않게 할 때 쓴다. */
+  scrollEnabled?: boolean;
+  /** 스크롤 위치를 직접 옮겨야 할 때(상자를 끌다가 화면 끝에 닿으면 자동 스크롤) 쓰는 ref */
+  scrollRef?: Ref<ScrollViewInstance>;
+  /** 스크롤 위치·내용 크기·화면 크기를 알아야 할 때 넘긴다. */
+  onScroll?: (event: NativeSyntheticEvent<NativeScrollEvent>) => void;
+  onContentSizeChange?: (width: number, height: number) => void;
+  onScrollLayout?: (event: LayoutChangeEvent) => void;
 }>;
 
 /**
  * 탭 화면의 공통 틀: 위쪽 제목 줄 + 스크롤되는 내용.
- * 제목 줄 오른쪽에서 테마를 바꾸거나 "계정" 화면으로 갈 수 있다.
+ * 제목 줄 오른쪽에서 테마를 바꾸거나 "설정" 화면으로 갈 수 있다.
  */
-export function Screen({ title, action, onBack, overlay, onRefresh, wide = false, children }: Props) {
+export function Screen({
+  title,
+  action,
+  onBack,
+  overlay,
+  onRefresh,
+  wide = false,
+  scrollEnabled = true,
+  scrollRef,
+  onScroll,
+  onContentSizeChange,
+  onScrollLayout,
+  children,
+}: Props) {
   const theme = useTheme();
   const { mode, resolvedScheme, setMode } = useThemeMode();
   const [themeOpen, setThemeOpen] = useState(false);
@@ -63,6 +88,12 @@ export function Screen({ title, action, onBack, overlay, onRefresh, wide = false
   return (
     <View style={[styles.root, { backgroundColor: theme.background }]}>
       <ScrollView
+        ref={scrollRef}
+        scrollEnabled={scrollEnabled}
+        onScroll={onScroll}
+        scrollEventThrottle={onScroll ? 16 : undefined}
+        onContentSizeChange={onContentSizeChange}
+        onLayout={onScrollLayout}
         keyboardShouldPersistTaps="handled"
         refreshControl={
           onRefresh ? (
@@ -117,9 +148,9 @@ export function Screen({ title, action, onBack, overlay, onRefresh, wide = false
           </Pressable>
           <Pressable
             accessibilityRole="button"
-            accessibilityLabel="계정 및 설정"
+            accessibilityLabel="설정"
             hitSlop={8}
-            onPress={() => router.push('/account')}
+            onPress={() => router.push('/settings')}
             style={({ pressed }) => [
               styles.account,
               {
@@ -128,7 +159,7 @@ export function Screen({ title, action, onBack, overlay, onRefresh, wide = false
                 opacity: pressed ? 0.7 : 1,
               },
             ]}>
-            <ThemedText type="small">계정</ThemedText>
+            <ThemedText type="small">설정</ThemedText>
           </Pressable>
         </View>
 

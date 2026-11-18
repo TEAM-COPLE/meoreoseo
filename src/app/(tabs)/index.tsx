@@ -1,9 +1,19 @@
 import { useQueryClient } from '@tanstack/react-query';
 import { router } from 'expo-router';
-import { useState, type PropsWithChildren } from 'react';
-import { Modal, Platform, Pressable, StyleSheet, useWindowDimensions, View, type StyleProp, type ViewStyle } from 'react-native';
+import { useLayoutEffect, useRef, useState, type PropsWithChildren } from 'react';
+import {
+  Platform,
+  Pressable,
+  StyleSheet,
+  useWindowDimensions,
+  View,
+  type ScrollViewInstance,
+  type StyleProp,
+  type ViewStyle,
+} from 'react-native';
 
 import { ThemedText } from '@/components/themed-text';
+import { BoardDragController, EditableBox } from '@/components/today-board-edit';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import {
@@ -19,11 +29,7 @@ import { useMonthlyBudget } from '@/hooks/use-budget';
 import { timeLabel, useEvents } from '@/hooks/use-events';
 import { streakOf, useDeleteHabit, useHabitLogs, useHabits, useToggleHabitLog } from '@/hooks/use-habits';
 import { useTheme, useThemeMode } from '@/hooks/use-theme';
-import {
-  TODAY_SECTION_LABELS,
-  useTodayLayout,
-  type TodaySectionId,
-} from '@/hooks/use-today-layout';
+import { useTodayLayout, type TodaySectionId } from '@/hooks/use-today-layout';
 import { useTodos, useToggleTodo, type Todo } from '@/hooks/use-todos';
 import { useTransactions } from '@/hooks/use-transactions';
 import { useSaveWeatherCity, useWeather, useWeatherCity } from '@/hooks/use-weather';
@@ -43,13 +49,39 @@ export default function TodayScreen() {
   const queryClient = useQueryClient();
   const { width } = useWindowDimensions();
   const isWideWeb = Platform.OS === 'web' && width >= 960;
-  const { order, hidden, collapsed, moveSection, toggleHidden, toggleCollapsed, resetLayout } =
-    useTodayLayout();
+  const {
+    order,
+    hidden,
+    collapsed,
+    moveSection,
+    setOrder,
+    toggleHidden,
+    toggleCollapsed,
+    resetLayout,
+  } = useTodayLayout();
+  // "편집"을 누르면 상자 모양은 그대로 두고, 각 상자에 "옮기기" 손잡이와 "숨기기" 버튼이 생긴다.
+  // 손잡이를 잡고 끌면 그 자리에서 상자를 옮길 수 있다. "완료"를 누르면 원래 화면으로 돌아온다.
   const [editingLayout, setEditingLayout] = useState(false);
+  const [draggingId, setDraggingId] = useState<TodaySectionId | null>(null);
+  const scrollRef = useRef<ScrollViewInstance>(null);
+  const [boardDrag] = useState(() => new BoardDragController());
+
+  // 끌기 처리기에게 항상 최신 순서를 알려 주고, 순서가 바뀌어 다시 그려진 직후 새 자리를 재게 한다.
+  useLayoutEffect(() => {
+    boardDrag.setCallbacks({
+      order,
+      onReorder: setOrder,
+      onDraggingChange: setDraggingId,
+      scrollTo: (y) => scrollRef.current?.scrollTo({ y, animated: false }),
+    });
+  }, [boardDrag, order, setOrder]);
+  useLayoutEffect(() => {
+    boardDrag.onOrderCommitted();
+  }, [order, boardDrag]);
 
   const visibleOrder = order.filter((id) => !hidden.includes(id));
-  const showWeatherTop = visibleOrder.includes('weather');
-  const gridSections = visibleOrder.filter((id) => id !== 'weather');
+  // 편집 중에는 숨긴 상자도 흐리게 보여 줘서 다시 켤 수 있게 한다.
+  const shownOrder = editingLayout ? order : visibleOrder;
 
   function renderSection(id: TodaySectionId, index: number) {
     const isCollapsed = collapsed.includes(id);
@@ -107,17 +139,48 @@ export default function TodayScreen() {
     }
   }
 
+  /** 상자 하나를 그린다. 편집 중이면 옮기기 손잡이가 달린 틀로 감싼다. */
+  function renderBox(id: TodaySectionId, index: number, style?: StyleProp<ViewStyle>) {
+    const section = renderSection(id, index);
+    if (editingLayout) {
+      return (
+        <EditableBox
+          key={id}
+          id={id}
+          controller={boardDrag}
+          isHidden={hidden.includes(id)}
+          isDragging={draggingId === id}
+          onToggleHidden={() => toggleHidden(id)}
+          onMove={(direction) => moveSection(id, direction)}
+          style={style}>
+          {section}
+        </EditableBox>
+      );
+    }
+    if (!style) return section;
+    return (
+      <View key={id} style={style}>
+        {section}
+      </View>
+    );
+  }
+
   return (
     <Screen
       title="오늘"
       wide
+      scrollEnabled={draggingId === null}
+      scrollRef={scrollRef}
+      onScroll={boardDrag.handleScroll}
+      onContentSizeChange={boardDrag.handleContentSize}
+      onScrollLayout={boardDrag.handleLayout}
       onRefresh={() => queryClient.refetchQueries({ type: 'active' })}
       action={
         <Button
-          label="편집"
-          variant="secondary"
+          label={editingLayout ? '완료' : '편집'}
+          variant={editingLayout ? 'primary' : 'secondary'}
           size="small"
-          onPress={() => setEditingLayout(true)}
+          onPress={() => setEditingLayout((prev) => !prev)}
         />
       }>
       <View style={styles.topMetaRow}>
@@ -173,38 +236,38 @@ export default function TodayScreen() {
         </View>
       </View>
 
+      {editingLayout ? (
+        <View style={[styles.editHint, { backgroundColor: theme.tintSoft }]}>
+          <ThemedText type="small" themeColor="tint">
+            상자의 &quot;≡ 옮기기&quot;를 잡고 원하는 자리로 끌어 놓으세요. 다 됐으면 오른쪽 위
+            &quot;완료&quot;를 누르세요.
+          </ThemedText>
+        </View>
+      ) : null}
+
       {isWideWeb ? (
-        <>
-          {showWeatherTop ? renderSection('weather', 0) : null}
-          <View style={styles.webGrid}>
-            {gridSections.map((id, idx) => (
-              <View key={id} style={styles.webGridItem}>
-                {renderSection(id, showWeatherTop ? idx + 1 : idx)}
-              </View>
-            ))}
-          </View>
-        </>
+        <View style={styles.webGrid}>
+          {shownOrder.map((id, idx) =>
+            renderBox(id, idx, [styles.webGridItem, id === 'weather' && styles.webGridFull]),
+          )}
+        </View>
       ) : (
-        visibleOrder.map((id, idx) => renderSection(id, idx))
+        shownOrder.map((id, idx) => renderBox(id, idx))
       )}
 
-      {visibleOrder.length === 0 ? (
+      {editingLayout ? (
+        <View style={styles.editFooter}>
+          <Button label="기본값으로 되돌리기" variant="secondary" size="small" onPress={resetLayout} />
+        </View>
+      ) : null}
+
+      {!editingLayout && visibleOrder.length === 0 ? (
         <Card>
           <ThemedText type="small" themeColor="textSecondary">
-            표시할 카드가 없습니다. 오른쪽 위 &quot;편집&quot;을 눌러 카드를 다시 켜 보세요.
+            표시할 상자가 없습니다. 오른쪽 위 &quot;편집&quot;을 눌러 상자를 다시 켜 보세요.
           </ThemedText>
         </Card>
       ) : null}
-
-      <TodayLayoutModal
-        visible={editingLayout}
-        order={order}
-        hidden={hidden}
-        onMove={moveSection}
-        onToggleHidden={toggleHidden}
-        onReset={resetLayout}
-        onClose={() => setEditingLayout(false)}
-      />
     </Screen>
   );
 }
@@ -693,100 +756,6 @@ function Section({
   );
 }
 
-function TodayLayoutModal({
-  visible,
-  order,
-  hidden,
-  onMove,
-  onToggleHidden,
-  onReset,
-  onClose,
-}: {
-  visible: boolean;
-  order: TodaySectionId[];
-  hidden: TodaySectionId[];
-  onMove: (id: TodaySectionId, dir: -1 | 1) => void;
-  onToggleHidden: (id: TodaySectionId) => void;
-  onReset: () => void;
-  onClose: () => void;
-}) {
-  const theme = useTheme();
-
-  return (
-    <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
-      <Pressable onPress={onClose} style={styles.modalBackdrop}>
-        <Pressable
-          onPress={(e) => e.stopPropagation()}
-          style={[
-            styles.modalCard,
-            { backgroundColor: theme.backgroundElement, borderColor: theme.border },
-          ]}>
-          <ThemedText type="default" style={styles.modalTitle}>
-            오늘 화면 구성
-          </ThemedText>
-          <ThemedText type="small" themeColor="textSecondary">
-            카드 순서를 바꾸거나 필요 없는 카드를 숨길 수 있습니다.
-          </ThemedText>
-
-          <View style={styles.layoutList}>
-            {order.map((id, idx) => {
-              const isHidden = hidden.includes(id);
-              return (
-                <View
-                  key={id}
-                  style={[
-                    styles.layoutRow,
-                    { backgroundColor: theme.background, borderColor: theme.border },
-                  ]}>
-                  <ThemedText
-                    type="smallBold"
-                    themeColor={isHidden ? 'textSecondary' : 'text'}
-                    style={styles.layoutName}>
-                    {TODAY_SECTION_LABELS[id]}
-                  </ThemedText>
-                  <View style={styles.layoutControls}>
-                    <Pressable
-                      disabled={idx === 0}
-                      onPress={() => onMove(id, -1)}
-                      style={[styles.iconBtn, { opacity: idx === 0 ? 0.3 : 1 }]}>
-                      <ThemedText type="small">▲</ThemedText>
-                    </Pressable>
-                    <Pressable
-                      disabled={idx === order.length - 1}
-                      onPress={() => onMove(id, 1)}
-                      style={[styles.iconBtn, { opacity: idx === order.length - 1 ? 0.3 : 1 }]}>
-                      <ThemedText type="small">▼</ThemedText>
-                    </Pressable>
-                    <Pressable
-                      onPress={() => onToggleHidden(id)}
-                      style={[
-                        styles.visPill,
-                        {
-                          backgroundColor: isHidden ? theme.backgroundSelected : theme.tintSoft,
-                        },
-                      ]}>
-                      <ThemedText
-                        type="smallBold"
-                        style={{ color: isHidden ? theme.textSecondary : theme.tint }}>
-                        {isHidden ? '숨김' : '표시'}
-                      </ThemedText>
-                    </Pressable>
-                  </View>
-                </View>
-              );
-            })}
-          </View>
-
-          <View style={styles.modalFooter}>
-            <Button label="기본값 복원" variant="secondary" size="small" onPress={onReset} />
-            <Button label="완료" size="small" onPress={onClose} />
-          </View>
-        </Pressable>
-      </Pressable>
-    </Modal>
-  );
-}
-
 /** 상자 안에서 "불러오는 중"이나 "불러오지 못함"을 작게 보여준다. 정상일 때는 아무것도 그리지 않는다. */
 function SectionStatus({
   loading,
@@ -919,6 +888,17 @@ const styles = StyleSheet.create({
     flexGrow: 1,
     minWidth: 320,
   },
+  webGridFull: {
+    flexBasis: '100%',
+  },
+  editHint: {
+    borderRadius: Radius.medium,
+    paddingHorizontal: Spacing.three,
+    paddingVertical: Spacing.two,
+  },
+  editFooter: {
+    alignItems: 'flex-start',
+  },
   sectionTitlePress: {
     flex: 1,
     flexDirection: 'row',
@@ -943,58 +923,5 @@ const styles = StyleSheet.create({
   budgetFill: {
     height: 7,
     borderRadius: Radius.full,
-  },
-  modalBackdrop: {
-    flex: 1,
-    backgroundColor: 'rgba(10, 10, 18, 0.56)',
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: Spacing.three,
-  },
-  modalCard: {
-    width: '100%',
-    maxWidth: 400,
-    borderRadius: Radius.large,
-    borderWidth: 1,
-    padding: Spacing.three,
-    gap: Spacing.three,
-  },
-  modalTitle: {
-    fontWeight: 700,
-    fontSize: 18,
-  },
-  layoutList: {
-    gap: Spacing.two,
-  },
-  layoutRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: Spacing.three - 4,
-    paddingVertical: Spacing.two,
-    borderRadius: Radius.medium,
-    borderWidth: 1,
-  },
-  layoutName: {
-    flex: 1,
-  },
-  layoutControls: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: Spacing.one,
-  },
-  iconBtn: {
-    paddingHorizontal: Spacing.two,
-    paddingVertical: Spacing.one,
-  },
-  visPill: {
-    paddingHorizontal: Spacing.two + 2,
-    paddingVertical: Spacing.one,
-    borderRadius: Radius.full,
-  },
-  modalFooter: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
   },
 });

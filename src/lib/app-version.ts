@@ -5,7 +5,7 @@ import { AppState, Platform } from 'react-native';
 
 /**
  * 지금 돌고 있는 앱이 어떤 코드인지 알려준다(휴대폰 앱용). 웹은 app-version.web.ts.
- * 팀원끼리 "같은 버전인가?"를 확인하려고 계정 화면의 "버전 정보" 칸에서 쓴다.
+ * 팀원끼리 "같은 버전인가?"를 확인하려고 설정 화면의 "버전 정보" 칸에서 쓴다.
  */
 
 export type VersionInfo = {

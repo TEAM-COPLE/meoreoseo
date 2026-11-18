@@ -53,10 +53,10 @@ export function fetchGoogleStatus(): Promise<GoogleCalendarStatus> {
   return call<GoogleCalendarStatus>({ action: 'status' });
 }
 
-/** 구글 로그인을 마치고 돌아올 주소 (계정 화면) */
+/** 구글 로그인을 마치고 돌아올 주소 (설정 화면) */
 function returnUrl(): string {
-  if (Platform.OS === 'web') return `${window.location.origin}/account`;
-  return Linking.createURL('account');
+  if (Platform.OS === 'web') return `${window.location.origin}/settings`;
+  return Linking.createURL('settings');
 }
 
 /**
