@@ -67,10 +67,17 @@ export default function AppTabs() {
   const initialRouteIndex = Math.max(0, indexOfSwipeRoute(pathname));
   const [prevPathname, setPrevPathname] = useState(pathname);
   const [activeIndex, setActiveIndex] = useState(initialRouteIndex);
+  const [allTabsMounted, setAllTabsMounted] = useState(false);
   const [dockWidth, setDockWidth] = useState(0);
   const activeIdxSV = useSharedValue(initialRouteIndex);
   const dragX = useSharedValue(0);
   const isAnimating = useSharedValue(false);
+
+  // 초기 구동 시 현재 탭과 양옆 탭(3개)을 먼저 그린 뒤, 나머지 2개 탭은 직후에 마운트해 첫 실행 속도를 높인다.
+  useEffect(() => {
+    const timer = setTimeout(() => setAllTabsMounted(true), 250);
+    return () => clearTimeout(timer);
+  }, []);
 
   if (pathname !== prevPathname) {
     setPrevPathname(pathname);
@@ -244,6 +251,10 @@ export default function AppTabs() {
         <View style={styles.pager}>
           {TABS.map((tab, index) => {
             const ScreenComponent = tab.Component;
+            const prevIdx = (activeIndex - 1 + TAB_COUNT) % TAB_COUNT;
+            const nextIdx = (activeIndex + 1) % TAB_COUNT;
+            const shouldMount =
+              allTabsMounted || index === activeIndex || index === prevIdx || index === nextIdx;
             return (
               <PagerPage
                 key={tab.path}
@@ -251,7 +262,7 @@ export default function AppTabs() {
                 activeIdxSV={activeIdxSV}
                 dragX={dragX}
                 width={width}>
-                <ScreenComponent />
+                {shouldMount ? <ScreenComponent /> : null}
               </PagerPage>
             );
           })}
