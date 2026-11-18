@@ -42,6 +42,10 @@ import { confirm, errorMessage } from '@/lib/format';
 import { requestGoogleSync } from '@/lib/google-calendar';
 import { isRepeat, isWaitingRepeat, repeatLabel, todoPeriodLabel, todoStartOf } from '@/lib/repeat';
 
+/** 구글에서 가져온 일정 중 앱에서 고칠 수 없는 것을 눌렀을 때 보여줄 안내 */
+const READONLY_NOTICE =
+  '남이 만든 회의 초대처럼 구글 캘린더에서만 고칠 수 있는 일정이에요. 구글 캘린더에서 고쳐 주세요.';
+
 export default function CalendarScreen() {
   const { add, editId } = useLocalSearchParams<{ add?: string; editId?: string }>();
   const [selected, setSelected] = useState(todayISO);
@@ -66,7 +70,7 @@ export default function CalendarScreen() {
     (add
       ? 'new'
       : editId
-        ? ((events.data ?? []).find((e) => e.id === editId) ?? null)
+        ? ((events.data ?? []).find((e) => e.id === editId && !e.google_readonly) ?? null)
         : null);
 
   function closeForm() {
@@ -110,7 +114,8 @@ export default function CalendarScreen() {
   const dayEvents = eventsByDate.get(selected) ?? [];
   const dayTodos = todosByDate.get(selected) ?? [];
   const today = todayISO();
-  const dayEventIds = dayEvents.map((event) => event.id);
+  // 남이 만든 회의 초대처럼 구글에서만 고칠 수 있는 일정은 고르거나 지울 수 없다.
+  const dayEventIds = dayEvents.filter((event) => !event.google_readonly).map((event) => event.id);
   const selectedDayIds = dayEventIds.filter((id) => multi.isSelected(id));
   const isSelecting = dayEventIds.length > 0 && (multi.active || selectedDayIds.length > 0);
 
@@ -231,7 +236,9 @@ export default function CalendarScreen() {
             // 태그가 있으면 카드 왼쪽에 태그 색 띠를 둘러 한눈에 구분되게 한다.
             style={tagColor ? [styles.tagged, { borderLeftColor: tagColor }] : undefined}
             onPress={(e) => {
-              if (isSelecting) {
+              if (event.google_readonly) {
+                if (!isSelecting) setBulkError(READONLY_NOTICE);
+              } else if (isSelecting) {
                 multi.handlePress(event.id, dayEventIds, e);
               } else if (hasSelectionModifier(e)) {
                 setBulkError(null);
@@ -241,6 +248,7 @@ export default function CalendarScreen() {
               }
             }}
             onLongPress={() => {
+              if (event.google_readonly) return;
               setBulkError(null);
               multi.start(event.id);
             }}>
@@ -260,6 +268,11 @@ export default function CalendarScreen() {
                 {event.memo ? (
                   <ThemedText type="small" themeColor="textSecondary" numberOfLines={2}>
                     {event.memo}
+                  </ThemedText>
+                ) : null}
+                {event.google_readonly ? (
+                  <ThemedText type="small" themeColor="textSecondary">
+                    🔒 구글 캘린더에서만 고칠 수 있어요
                   </ThemedText>
                 ) : null}
               </View>

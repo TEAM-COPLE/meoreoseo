@@ -1,13 +1,17 @@
 /**
  * 구글 캘린더 양방향 연동 (Supabase Edge Function: google-calendar)
  *
- * 멀어서 일정(events 표)과 구글 캘린더의 "멀어서" 캘린더를 서로 맞춘다.
+ * 멀어서 일정(events 표)과 구글 캘린더를 서로 맞춘다.
+ *   - "멀어서" 캘린더: 앱에서 새로 만든 일정이 들어가는 곳 (항상 맞춘다)
+ *   - 사용자가 고른 다른 캘린더(기본 캘린더 등): 그 일정도 앱에서 보고 고칠 수 있다
  * 구글 캘린더에 들어간 일정은 휴대폰 캘린더 앱, 노션 캘린더 등에서도 보이고 고칠 수 있다.
  *
  * 하는 일
  *   GET  /google-calendar/callback  구글 로그인을 마치고 돌아오는 곳 (토큰을 받아 저장)
  *   POST { action: 'status' }       연결 상태 알려 주기
  *   POST { action: 'start', returnTo } 구글 로그인 주소 만들어 주기
+ *   POST { action: 'calendars' }    고를 수 있는 구글 캘린더 목록
+ *   POST { action: 'select', calendarIds } 맞출 캘린더 정하기
  *   POST { action: 'sync' }         지금 바로 맞추기
  *   POST { action: 'disconnect' }   연결 끊기
  *   POST { action: 'cron' }         5분마다 예약 작업이 불러서 모든 연결을 맞춘다
@@ -33,9 +37,16 @@ const CLIENT_ID = Deno.env.get('GOOGLE_CLIENT_ID') ?? '';
 const CLIENT_SECRET = Deno.env.get('GOOGLE_CLIENT_SECRET') ?? '';
 const REDIRECT_URI = `${SUPABASE_URL}/functions/v1/google-calendar/callback`;
 
-/** 앱이 만든 캘린더와 그 안의 일정만 다룰 수 있는 좁은 권한. 사용자의 다른 캘린더는 볼 수 없다. */
+/** 앱이 만든 캘린더("멀어서")와 그 안의 일정을 다루는 권한. 이것만은 꼭 있어야 한다. */
 const CALENDAR_SCOPE = 'https://www.googleapis.com/auth/calendar.app.created';
-const SCOPES = ['openid', 'email', CALENDAR_SCOPE].join(' ');
+/** 다른 캘린더의 일정을 보고 고치는 권한 */
+const EVENTS_SCOPE = 'https://www.googleapis.com/auth/calendar.events';
+/** 캘린더 목록(이름·색)을 보는 권한 */
+const LIST_SCOPE = 'https://www.googleapis.com/auth/calendar.calendarlist.readonly';
+const SCOPES = ['openid', 'email', CALENDAR_SCOPE, EVENTS_SCOPE, LIST_SCOPE].join(' ');
+
+/** 다른 캘린더를 처음 받을 때는 1년 전 일정부터만 받는다 (너무 많지 않게). */
+const IMPORT_DAYS_BACK = 365;
 
 const CALENDAR_NAME = '멀어서';
 const DEFAULT_TIME_ZONE = 'Asia/Seoul';
@@ -280,7 +291,26 @@ type Connection = {
   status: 'ok' | 'reauth';
   last_synced_at: string | null;
   last_error: string | null;
+  scopes: string;
 };
+
+/** 맞추기로 고른 구글 캘린더 하나 */
+type Link = {
+  user_id: string;
+  calendar_id: string;
+  name: string | null;
+  color: string | null;
+  access_role: string | null;
+  is_app: boolean;
+  is_primary: boolean;
+  sync_token: string | null;
+};
+
+/** 다른 캘린더까지 다룰 권한을 받았는지 */
+function canUseOtherCalendars(conn: Pick<Connection, 'scopes'>): boolean {
+  const granted = conn.scopes.split(' ');
+  return granted.includes(EVENTS_SCOPE) && granted.includes(LIST_SCOPE);
+}
 
 class ReauthError extends Error {}
 
@@ -355,6 +385,8 @@ type EventRow = {
   tag_id: string | null;
   excluded_dates: string[];
   google_event_id: string | null;
+  google_calendar_id: string | null;
+  google_readonly: boolean;
   google_dirty: boolean;
   local_version: number;
   google_original: Original | null;
@@ -390,6 +422,10 @@ type GoogleEvent = {
   recurringEventId?: string;
   originalStartTime?: GoogleTime;
   extendedProperties?: { private?: Record<string, string> };
+  /** 일정을 만든 사람. self 가 true 면 나, 없으면 다른 사람이 초대한 일정 */
+  organizer?: { self?: boolean };
+  /** default 가 아닌 일정(생일, 부재중, 지메일에서 온 일정 등)은 고칠 수 없다 */
+  eventType?: string;
 };
 
 /** 구글 일정 시각 → 우리 시간대의 { date, time } (하루 종일이면 time 은 null) */
@@ -553,6 +589,14 @@ function toGoogle(row: EventRow, timeZone: string, tagColors: Map<string, string
 
 type SyncResult = { pushed: number; pulled: number; removed: number; failed: number };
 
+/** 구글이 잠깐 바쁜 것인지 (그러면 다음 차례에 다시 해 본다) */
+function isTemporary(result: GoogleResult): boolean {
+  if (result.status >= 500 || result.status === 429) return true;
+  if (result.status !== 403) return false;
+  const errors = (result.data.error as { errors?: { reason?: string }[] } | undefined)?.errors ?? [];
+  return errors.some((e) => /rateLimit|quota/i.test(e.reason ?? ''));
+}
+
 async function loadConnection(userId: string): Promise<Connection | null> {
   const { data } = await db
     .from('google_calendar_connections')
@@ -562,13 +606,57 @@ async function loadConnection(userId: string): Promise<Connection | null> {
   return (data as Connection | null) ?? null;
 }
 
-/** 앱의 일정들을 구글에 다시 보내야 하는 상태로 되돌린다 (계정·캘린더가 바뀌었을 때) */
-async function resetLinks(userId: string) {
-  await db
-    .from('events')
-    .update({ google_event_id: null, google_original: null, google_dirty: true })
-    .eq('user_id', userId);
+async function loadLinks(userId: string): Promise<Link[]> {
+  const { data, error } = await db
+    .from('google_calendar_links')
+    .select('*')
+    .eq('user_id', userId)
+    .order('created_at');
+  if (error) throw new Error(error.message);
+  return (data ?? []) as Link[];
+}
+
+/** 이 칸들을 비우면 "아직 구글에 안 간 일정"이 된다 */
+const UNLINKED = {
+  google_event_id: null,
+  google_calendar_id: null,
+  google_original: null,
+  google_readonly: false,
+  google_dirty: true,
+};
+
+/**
+ * 처음부터 다시 맞추도록 되돌린다 (연결을 끊거나 다른 구글 계정으로 바꿀 때).
+ * - 다른 캘린더에서 받아 온 일정은 앱에서 뺀다 (구글에는 그대로 있다)
+ * - 앱에서 만든 일정은 남기고, 다음에 다시 보낼 일정으로 표시한다
+ */
+async function resetAll(userId: string, appCalendarId: string | null) {
+  let imported = db.from('events').delete().eq('user_id', userId).not('google_calendar_id', 'is', null);
+  if (appCalendarId) imported = imported.neq('google_calendar_id', appCalendarId);
+  await imported;
+  await db.from('events').update(UNLINKED).eq('user_id', userId);
   await db.from('google_calendar_deletions').delete().eq('user_id', userId);
+  await db.from('google_calendar_links').delete().eq('user_id', userId);
+}
+
+/** 구글에서 "멀어서" 캘린더가 지워졌을 때: 그 안에 있던 일정을 다시 보낼 일정으로 되돌린다 */
+async function resetAppCalendar(userId: string, oldId: string) {
+  await db.from('events').update(UNLINKED).eq('user_id', userId).eq('google_calendar_id', oldId);
+  await db.from('google_calendar_deletions').delete().eq('user_id', userId).eq('google_calendar_id', oldId);
+  await db.from('google_calendar_deletions').delete().eq('user_id', userId).is('google_calendar_id', null);
+  await db.from('google_calendar_links').delete().eq('user_id', userId).eq('calendar_id', oldId);
+}
+
+/** 고른 캘린더 하나를 뺀다: 그 캘린더에서 받아 온 일정을 앱에서 지운다 (구글에는 그대로) */
+async function removeLink(userId: string, calendarId: string) {
+  await db.from('events').delete().eq('user_id', userId).eq('google_calendar_id', calendarId);
+  await db.from('google_calendar_deletions').delete().eq('user_id', userId).eq('google_calendar_id', calendarId);
+  await db
+    .from('google_calendar_links')
+    .delete()
+    .eq('user_id', userId)
+    .eq('calendar_id', calendarId)
+    .eq('is_app', false);
 }
 
 /** "멀어서" 캘린더가 있는지 확인하고, 없으면 만든다. 새로 만들었으면 fresh=true */
@@ -581,11 +669,12 @@ async function ensureCalendar(conn: Connection, token: string): Promise<{ id: st
         conn.time_zone = timeZone;
         await db.from('google_calendar_connections').update({ time_zone: timeZone }).eq('user_id', conn.user_id);
       }
+      await saveAppLink(conn.user_id, conn.calendar_id);
       return { id: conn.calendar_id, fresh: false };
     }
     if (found.status !== 404 && found.status !== 410) throw googleError(found);
     // 사용자가 구글에서 캘린더를 지웠다 → 새로 만들고 처음부터 다시 맞춘다.
-    await resetLinks(conn.user_id);
+    await resetAppCalendar(conn.user_id, conn.calendar_id);
   }
 
   // 예전에 연결했다가 끊은 경우, 남아 있는 "멀어서" 캘린더를 다시 쓴다.
@@ -606,30 +695,45 @@ async function ensureCalendar(conn: Connection, token: string): Promise<{ id: st
     fresh = true;
   }
   conn.calendar_id = calendarId;
-  conn.sync_token = null;
   await db
     .from('google_calendar_connections')
     .update({ calendar_id: calendarId, calendar_name: CALENDAR_NAME, sync_token: null })
     .eq('user_id', conn.user_id);
+  await saveAppLink(conn.user_id, calendarId);
   return { id: calendarId, fresh };
 }
 
+/** "멀어서" 캘린더를 맞출 캘린더 목록에 넣어 둔다 (이미 있으면 그대로) */
+async function saveAppLink(userId: string, calendarId: string) {
+  await db
+    .from('google_calendar_links')
+    .upsert(
+      { user_id: userId, calendar_id: calendarId, name: CALENDAR_NAME, access_role: 'owner', is_app: true },
+      { onConflict: 'user_id,calendar_id', ignoreDuplicates: true },
+    );
+}
+
 /** 앱에서 지운 일정을 구글에서도 지운다 */
-async function pushDeletions(conn: Connection, token: string, calendar: string): Promise<number> {
+async function pushDeletions(conn: Connection, token: string, appCalendar: string): Promise<number> {
   const { data } = await db
     .from('google_calendar_deletions')
-    .select('id, google_event_id')
+    .select('id, google_event_id, google_calendar_id')
     .eq('user_id', conn.user_id)
     .order('id')
     .limit(200);
   let count = 0;
   for (const row of data ?? []) {
+    const calendar = (row.google_calendar_id as string | null) ?? appCalendar;
     const result = await google(
       token,
       `/calendars/${encodeURIComponent(calendar)}/events/${encodeURIComponent(row.google_event_id)}`,
       { method: 'DELETE' },
     );
-    if (result.status >= 300 && result.status !== 404 && result.status !== 410) throw googleError(result);
+    if (result.status >= 300 && isTemporary(result)) throw googleError(result);
+    if (result.status >= 300 && result.status !== 404 && result.status !== 410) {
+      // 지울 권한이 없는 등 다시 해도 안 되는 경우: 기록만 지운다.
+      console.error('delete rejected', result.status, JSON.stringify(result.data).slice(0, 300));
+    }
     await db.from('google_calendar_deletions').delete().eq('id', row.id);
     count++;
   }
@@ -644,11 +748,14 @@ async function findByLocalId(token: string, calendar: string, localId: string): 
   return items.find((item) => item.status !== 'cancelled')?.id ?? null;
 }
 
-/** 앱에서 새로 만들거나 고친 일정을 구글에 보낸다 */
+/**
+ * 앱에서 새로 만들거나 고친 일정을 구글에 보낸다.
+ * 새 일정은 "멀어서" 캘린더로, 다른 캘린더에서 받아 온 일정은 원래 캘린더로 간다.
+ */
 async function pushChanges(
   conn: Connection,
   token: string,
-  calendar: string,
+  appCalendar: string,
   fresh: boolean,
   result: SyncResult,
 ) {
@@ -664,9 +771,15 @@ async function pushChanges(
 
   const { data: tags } = await db.from('tags').select('id, color').eq('user_id', conn.user_id);
   const tagColors = new Map((tags ?? []).map((tag) => [tag.id as string, tag.color as string]));
-  const base = `/calendars/${encodeURIComponent(calendar)}/events`;
 
   for (const row of rows as EventRow[]) {
+    if (row.google_readonly) {
+      // 구글에서만 고칠 수 있는 일정은 보내지 않는다.
+      await db.from('events').update({ google_dirty: false }).eq('id', row.id);
+      continue;
+    }
+    const calendar = row.google_calendar_id ?? appCalendar;
+    const base = `/calendars/${encodeURIComponent(calendar)}/events`;
     let googleId = row.google_event_id;
     let response: GoogleResult | null = null;
 
@@ -680,7 +793,7 @@ async function pushChanges(
         response = null;
       }
     }
-    if (!googleId && !fresh) {
+    if (!googleId && !(fresh && calendar === appCalendar)) {
       // 예전에 보낸 적이 있는지 찾아본다(같은 일정이 두 번 생기지 않게).
       const existing = await findByLocalId(token, calendar, row.id);
       if (existing) {
@@ -693,11 +806,18 @@ async function pushChanges(
     if (!response) {
       response = await google(token, base, {
         method: 'POST',
-        body: JSON.stringify(toGoogle({ ...row, google_original: { ...row.google_original, instanceOf: undefined } }, conn.time_zone, tagColors, true)),
+        body: JSON.stringify(
+          toGoogle(
+            { ...row, google_original: { ...row.google_original, instanceOf: undefined } },
+            conn.time_zone,
+            tagColors,
+            true,
+          ),
+        ),
       });
     }
 
-    if (response.status >= 500 || response.status === 403 || response.status === 429) {
+    if (isTemporary(response)) {
       // 구글 쪽 일시적인 문제: 이번에는 여기서 멈추고 다음 차례에 다시 보낸다.
       throw googleError(response);
     }
@@ -717,7 +837,7 @@ async function pushChanges(
     const original = fromGoogle(saved, conn.time_zone, row.google_original)?.google_original ?? {};
     await db
       .from('events')
-      .update({ google_event_id: saved.id, google_original: original })
+      .update({ google_event_id: saved.id, google_calendar_id: calendar, google_original: original })
       .eq('id', row.id);
     // 보내는 사이에 앱에서 또 고쳤으면 다음에 다시 보낸다.
     await db
@@ -729,10 +849,27 @@ async function pushChanges(
   }
 }
 
-/** 구글에서 바뀐 일정을 받아 앱에 반영한다 */
-async function pullChanges(conn: Connection, token: string, calendar: string, result: SyncResult) {
+/** 이 구글 일정을 앱에서 고칠 수 없는지 (남이 만든 초대, 읽기만 되는 캘린더, 생일 같은 특별한 일정) */
+function isReadonly(item: GoogleEvent, link: Link): boolean {
+  const canWrite = link.is_app || link.access_role === 'owner' || link.access_role === 'writer';
+  if (!canWrite) return true;
+  if (item.organizer && !item.organizer.self) return true;
+  return Boolean(item.eventType && item.eventType !== 'default');
+}
+
+/**
+ * 구글 캘린더 하나에서 바뀐 일정을 받아 앱에 반영한다.
+ * @returns 'gone' 이면 그 캘린더가 구글에서 사라졌다(지워졌거나 공유가 끊김).
+ */
+async function pullChanges(
+  conn: Connection,
+  token: string,
+  link: Link,
+  result: SyncResult,
+): Promise<'ok' | 'gone'> {
+  const calendar = link.calendar_id;
   const base = `/calendars/${encodeURIComponent(calendar)}/events`;
-  let syncToken = conn.sync_token;
+  let syncToken = link.sync_token;
   let full = !syncToken;
   const items: GoogleEvent[] = [];
   let pageToken: string | null = null;
@@ -741,6 +878,10 @@ async function pullChanges(conn: Connection, token: string, calendar: string, re
   for (let page = 0; page < 40; page++) {
     const query = new URLSearchParams({ maxResults: '250', showDeleted: 'true' });
     if (syncToken) query.set('syncToken', syncToken);
+    else if (!link.is_app) {
+      // 다른 캘린더는 처음에 1년 전 일정부터만 받는다.
+      query.set('timeMin', new Date(Date.now() - IMPORT_DAYS_BACK * 86_400_000).toISOString());
+    }
     if (pageToken) query.set('pageToken', pageToken);
     const response = await google(token, `${base}?${query}`);
     if (response.status === 410) {
@@ -751,6 +892,7 @@ async function pullChanges(conn: Connection, token: string, calendar: string, re
       items.length = 0;
       continue;
     }
+    if (response.status === 404 && !link.is_app) return 'gone';
     if (response.status !== 200) throw googleError(response);
     items.push(...((response.data.items as GoogleEvent[] | undefined) ?? []));
     pageToken = (response.data.nextPageToken as string | undefined) ?? null;
@@ -766,104 +908,156 @@ async function pullChanges(conn: Connection, token: string, calendar: string, re
     .from('events')
     .select('*')
     .eq('user_id', userId)
+    .eq('google_calendar_id', calendar)
     .not('google_event_id', 'is', null);
   if (error) throw new Error(error.message);
   const byGoogleId = new Map<string, EventRow>();
   for (const row of (localRows ?? []) as EventRow[]) byGoogleId.set(row.google_event_id!, row);
 
-  const seen = new Set<string>();
-  // 반복 일정 본체를 먼저, 한 회차만 바뀐 것들은 나중에 처리한다.
-  const ordered = [...items.filter((i) => !i.recurringEventId), ...items.filter((i) => i.recurringEventId)];
-
-  for (const item of ordered) {
-    seen.add(item.id);
-    const local = byGoogleId.get(item.id) ?? null;
-
-    if (item.recurringEventId) {
-      // 반복 일정 중 한 날짜만 지워졌거나 고쳐졌다.
-      const parent = byGoogleId.get(item.recurringEventId) ?? null;
-      const when = readTime(item.originalStartTime, conn.time_zone);
-      if (parent && when) {
-        const original: Original = { ...(parent.google_original ?? {}) };
-        const key = item.status === 'cancelled' ? 'cancelledDates' : 'modifiedDates';
-        original[key] = [...new Set([...(original[key] ?? []), when.date])].sort().slice(-500);
-        const excluded = [...new Set([...(parent.excluded_dates ?? []), when.date])].sort().slice(-500);
-        await db.from('events').update({ excluded_dates: excluded, google_original: original }).eq('id', parent.id);
-        parent.excluded_dates = excluded;
-        parent.google_original = original;
-      }
-      if (item.status === 'cancelled') {
-        if (local) {
-          await db.from('events').delete().eq('id', local.id);
-          result.removed++;
-        }
-        continue;
-      }
-    } else if (item.status === 'cancelled') {
-      if (local) {
-        await db.from('events').delete().eq('id', local.id);
-        byGoogleId.delete(item.id);
-        result.removed++;
-      }
-      continue;
-    }
-
-    // 앱에서 보낸 적 있는 일정인데 아직 연결이 안 된 경우 (멀어서 id 로 찾아 잇는다)
-    let target = local;
-    const localId = item.extendedProperties?.private?.meoreoseoId;
-    if (!target && localId && /^[0-9a-f-]{36}$/i.test(localId)) {
-      const { data } = await db.from('events').select('*').eq('id', localId).eq('user_id', userId).maybeSingle();
-      if (data) target = data as EventRow;
-    }
-
-    const fields = fromGoogle(item, conn.time_zone, target?.google_original ?? null);
-    if (!fields) continue;
-
-    if (target) {
-      if (target.google_dirty) {
-        // 앱에서 고친 내용이 아직 안 갔으면 앱 쪽을 우선한다(다음에 구글로 보낸다). 연결만 해 둔다.
-        if (!target.google_event_id) {
-          await db.from('events').update({ google_event_id: item.id }).eq('id', target.id);
-        }
-      } else {
-        await db
-          .from('events')
-          .update({ ...fields, google_event_id: item.id })
-          .eq('id', target.id)
-          .eq('google_dirty', false);
-      }
-      byGoogleId.set(item.id, { ...target, ...fields, google_event_id: item.id });
-    } else {
+  // 새 일정은 모아 두었다가 한꺼번에 넣는다 (처음 가져올 때 일정이 많으므로).
+  const pending = new Map<string, Record<string, unknown>>();
+  async function flushInserts() {
+    const entries = [...pending.entries()];
+    pending.clear();
+    for (let i = 0; i < entries.length; i += 200) {
+      const chunk = entries.slice(i, i + 200);
       const { data, error: insertError } = await db
         .from('events')
-        .insert({ ...fields, user_id: userId, google_event_id: item.id, google_dirty: false })
-        .select('*')
-        .single();
-      if (insertError) {
-        console.error('pull insert failed', insertError.message);
-        result.failed++;
+        .insert(chunk.map(([, row]) => row))
+        .select('*');
+      if (!insertError) {
+        for (const row of (data ?? []) as EventRow[]) byGoogleId.set(row.google_event_id!, row);
+        result.pulled += data?.length ?? 0;
         continue;
       }
-      byGoogleId.set(item.id, data as EventRow);
+      // 한꺼번에 안 되면 하나씩 넣어 본다.
+      for (const [googleId, row] of chunk) {
+        const { data: one, error: oneError } = await db.from('events').insert(row).select('*').single();
+        if (oneError) {
+          console.error('pull insert failed', oneError.message);
+          result.failed++;
+          continue;
+        }
+        byGoogleId.set(googleId, one as EventRow);
+        result.pulled++;
+      }
     }
-    result.pulled++;
+  }
+
+  async function removeLocal(row: EventRow) {
+    await db.from('events').delete().eq('id', row.id);
+    byGoogleId.delete(row.google_event_id!);
+    result.removed++;
+  }
+
+  const seen = new Set<string>();
+  const touchedParents = new Map<string, EventRow>();
+  const masters = items.filter((i) => !i.recurringEventId);
+  const instances = items.filter((i) => i.recurringEventId);
+
+  // 반복 일정 본체(와 보통 일정)를 먼저, 한 회차만 바뀐 것들은 나중에 처리한다.
+  for (const phase of [masters, instances]) {
+    for (const item of phase) {
+      seen.add(item.id);
+      const local = byGoogleId.get(item.id) ?? null;
+
+      if (item.recurringEventId) {
+        // 반복 일정 중 한 날짜만 지워졌거나 고쳐졌다. → 본체에서 그 날짜를 뺀다.
+        const parent = byGoogleId.get(item.recurringEventId) ?? null;
+        const when = readTime(item.originalStartTime, conn.time_zone);
+        if (parent && when) {
+          const original: Original = { ...(parent.google_original ?? {}) };
+          const key = item.status === 'cancelled' ? 'cancelledDates' : 'modifiedDates';
+          original[key] = [...new Set([...(original[key] ?? []), when.date])].sort().slice(-500);
+          parent.excluded_dates = [...new Set([...(parent.excluded_dates ?? []), when.date])].sort().slice(-500);
+          parent.google_original = original;
+          touchedParents.set(parent.id, parent);
+        }
+      }
+      if (item.status === 'cancelled' || item.eventType === 'workingLocation') {
+        if (local) await removeLocal(local);
+        continue;
+      }
+
+      // 앱에서 보낸 적 있는 일정인데 아직 연결이 안 된 경우 (멀어서 id 로 찾아 잇는다)
+      let target = local;
+      const localId = item.extendedProperties?.private?.meoreoseoId;
+      if (!target && localId && /^[0-9a-f-]{36}$/i.test(localId)) {
+        const { data } = await db.from('events').select('*').eq('id', localId).eq('user_id', userId).maybeSingle();
+        const found = data as EventRow | null;
+        if (found && (found.google_calendar_id === null || found.google_calendar_id === calendar)) target = found;
+      }
+
+      const fields = fromGoogle(item, conn.time_zone, target?.google_original ?? null);
+      if (!fields) continue;
+      const readonly = isReadonly(item, link);
+
+      if (target) {
+        if (target.google_dirty && !readonly) {
+          // 앱에서 고친 내용이 아직 안 갔으면 앱 쪽을 우선한다(다음에 구글로 보낸다). 연결만 해 둔다.
+          if (!target.google_event_id) {
+            await db
+              .from('events')
+              .update({ google_event_id: item.id, google_calendar_id: calendar })
+              .eq('id', target.id);
+          }
+        } else {
+          await db
+            .from('events')
+            .update({
+              ...fields,
+              google_event_id: item.id,
+              google_calendar_id: calendar,
+              google_readonly: readonly,
+              google_dirty: false,
+            })
+            .eq('id', target.id)
+            .eq('local_version', target.local_version);
+        }
+        byGoogleId.set(item.id, { ...target, ...fields, google_event_id: item.id, google_calendar_id: calendar });
+        result.pulled++;
+      } else {
+        pending.set(item.id, {
+          ...fields,
+          user_id: userId,
+          google_event_id: item.id,
+          google_calendar_id: calendar,
+          google_readonly: readonly,
+          google_dirty: false,
+        });
+      }
+    }
+    await flushInserts();
+  }
+
+  // 한 회차가 바뀐 반복 일정 본체에 "빠진 날짜"를 저장한다.
+  for (const parent of touchedParents.values()) {
+    await db
+      .from('events')
+      .update({ excluded_dates: parent.excluded_dates, google_original: parent.google_original })
+      .eq('id', parent.id);
   }
 
   if (full) {
     // 처음부터 다 받았는데 구글에 없는 일정 → 구글에서 지워진 것이다.
-    const missing = ((localRows ?? []) as EventRow[]).filter(
-      (row) => !row.google_dirty && !seen.has(row.google_event_id!),
-    );
-    for (const row of missing) {
-      await db.from('events').delete().eq('id', row.id).eq('google_dirty', false);
-      result.removed++;
+    const missing = ((localRows ?? []) as EventRow[])
+      .filter((row) => !row.google_dirty && !seen.has(row.google_event_id!))
+      .map((row) => row.id);
+    for (let i = 0; i < missing.length; i += 200) {
+      await db.from('events').delete().in('id', missing.slice(i, i + 200)).eq('google_dirty', false);
     }
+    result.removed += missing.length;
   }
 
   if (nextSyncToken) {
-    conn.sync_token = nextSyncToken;
-    await db.from('google_calendar_connections').update({ sync_token: nextSyncToken }).eq('user_id', userId);
+    link.sync_token = nextSyncToken;
+    await db
+      .from('google_calendar_links')
+      .update({ sync_token: nextSyncToken, synced_at: new Date().toISOString() })
+      .eq('user_id', userId)
+      .eq('calendar_id', calendar);
   }
+  return 'ok';
 }
 
 /** 한 사람의 일정을 구글과 맞춘다 */
@@ -878,10 +1072,17 @@ async function syncUser(userId: string): Promise<SyncResult | { error: string; m
     if (conn.status !== 'ok') return { error: 'reauth', message: '구글 캘린더를 다시 연결해 주세요.' };
 
     const token = await accessTokenFor(conn);
-    const calendar = await ensureCalendar(conn, token);
-    result.removed += await pushDeletions(conn, token, calendar.id);
-    await pushChanges(conn, token, calendar.id, calendar.fresh, result);
-    await pullChanges(conn, token, calendar.id, result);
+    const app = await ensureCalendar(conn, token);
+    result.removed += await pushDeletions(conn, token, app.id);
+    await pushChanges(conn, token, app.id, app.fresh, result);
+
+    const others = canUseOtherCalendars(conn);
+    for (const link of await loadLinks(userId)) {
+      if (!link.is_app && !others) continue;
+      if (link.is_app && link.calendar_id !== app.id) continue;
+      const outcome = await pullChanges(conn, token, link, result);
+      if (outcome === 'gone') await removeLink(userId, link.calendar_id);
+    }
 
     await db
       .from('google_calendar_connections')
@@ -902,6 +1103,45 @@ async function syncUser(userId: string): Promise<SyncResult | { error: string; m
   } finally {
     await db.from('google_calendar_connections').update({ sync_started_at: null }).eq('user_id', userId);
   }
+}
+
+type CalendarChoice = {
+  id: string;
+  name: string;
+  color: string | null;
+  accessRole: string;
+  primary: boolean;
+};
+
+/** 고를 수 있는 구글 캘린더 목록 ("멀어서" 캘린더는 늘 맞추므로 뺀다) */
+async function listCalendars(conn: Connection, token: string): Promise<CalendarChoice[]> {
+  const result = await google(token, '/users/me/calendarList?minAccessRole=reader&maxResults=250');
+  if (result.status !== 200) throw googleError(result);
+  type Item = {
+    id: string;
+    summary?: string;
+    summaryOverride?: string;
+    backgroundColor?: string;
+    accessRole?: string;
+    primary?: boolean;
+  };
+  const items = (result.data.items as Item[] | undefined) ?? [];
+  return items
+    .filter((item) => item.id !== conn.calendar_id)
+    .filter((item) => !(conn.calendar_id === null && item.summary === CALENDAR_NAME && item.accessRole === 'owner'))
+    .map((item) => ({
+      id: item.id,
+      name: short(item.summaryOverride || item.summary || item.id, 100),
+      color: typeof item.backgroundColor === 'string' ? item.backgroundColor : null,
+      accessRole: item.accessRole ?? 'reader',
+      primary: item.primary === true,
+    }))
+    .sort((a, b) => Number(b.primary) - Number(a.primary) || a.name.localeCompare(b.name, 'ko'));
+}
+
+/** 구글 일을 하다 연결이 끊긴 것을 알게 되면 기록해 둔다 */
+async function markReauth(userId: string) {
+  await db.from('google_calendar_connections').update({ status: 'reauth' }).eq('user_id', userId);
 }
 
 // ───────────────────────── 요청 처리 ─────────────────────────
@@ -931,7 +1171,7 @@ async function handleCallback(url: URL): Promise<Response> {
     console.error('code exchange failed', String(data.error ?? ''));
     return redirect(withParam(returnTo, 'google', 'error'));
   }
-  const granted = String(data.scope ?? '').split(' ');
+  const granted = String(data.scope ?? '').split(' ').filter(Boolean);
   if (!granted.includes(CALENDAR_SCOPE)) return redirect(withParam(returnTo, 'google', 'scope'));
 
   let email: string | null = null;
@@ -948,7 +1188,7 @@ async function handleCallback(url: URL): Promise<Response> {
   const userId = saved.user_id as string;
   const previous = await loadConnection(userId);
   const sameAccount = previous !== null && previous.google_email === email;
-  if (previous && !sameAccount) await resetLinks(userId);
+  if (previous && !sameAccount) await resetAll(userId, previous.calendar_id);
 
   let refreshSealed: string | null = null;
   if (typeof data.refresh_token === 'string') refreshSealed = await encrypt(data.refresh_token);
@@ -964,7 +1204,7 @@ async function handleCallback(url: URL): Promise<Response> {
     access_token_expires_at: new Date(Date.now() + expiresIn * 1000).toISOString(),
     calendar_id: sameAccount ? previous!.calendar_id : null,
     calendar_name: sameAccount ? previous!.calendar_name : null,
-    sync_token: sameAccount ? previous!.sync_token : null,
+    scopes: granted.join(' '),
     status: 'ok',
     last_error: null,
     sync_started_at: null,
@@ -1016,6 +1256,7 @@ async function handleAction(request: Request): Promise<Response> {
 
   if (action === 'status') {
     const conn = await loadConnection(userId);
+    const links = conn ? await loadLinks(userId) : [];
     return json({
       configured: isConfigured(),
       connected: conn !== null,
@@ -1024,6 +1265,10 @@ async function handleAction(request: Request): Promise<Response> {
       calendarName: conn?.calendar_name ?? null,
       lastSyncedAt: conn?.last_synced_at ?? null,
       lastError: conn?.last_error ?? null,
+      canPickCalendars: conn ? canUseOtherCalendars(conn) : false,
+      calendars: links
+        .filter((link) => !link.is_app)
+        .map((link) => ({ id: link.calendar_id, name: link.name ?? link.calendar_id, color: link.color })),
     });
   }
 
@@ -1047,12 +1292,80 @@ async function handleAction(request: Request): Promise<Response> {
       scope: SCOPES,
       access_type: 'offline',
       prompt: 'consent',
+      include_granted_scopes: 'true',
       state,
     });
     return json({ url: `https://accounts.google.com/o/oauth2/v2/auth?${params}` });
   }
 
   if (action === 'sync') {
+    const outcome = await syncUser(userId);
+    return 'error' in outcome ? json(outcome, outcome.error === 'busy' ? 409 : 400) : json(outcome);
+  }
+
+  if (action === 'calendars' || action === 'select') {
+    const conn = await loadConnection(userId);
+    if (!conn) return fail('not_connected', '구글 캘린더가 연결되어 있지 않습니다.');
+    if (conn.status !== 'ok') return fail('reauth', '구글 캘린더를 다시 연결해 주세요.');
+    if (!canUseOtherCalendars(conn)) {
+      return fail('need_scope', '다른 캘린더를 고르려면 구글 캘린더를 다시 연결하고 권한을 모두 허용해 주세요.', 403);
+    }
+    let choices: CalendarChoice[];
+    try {
+      choices = await listCalendars(conn, await accessTokenFor(conn));
+    } catch (error) {
+      if (error instanceof ReauthError) {
+        await markReauth(userId);
+        return fail('reauth', '구글 캘린더 연결이 끊어졌습니다. 다시 연결해 주세요.');
+      }
+      console.error('calendar list failed', error instanceof Error ? error.message : String(error));
+      return fail('google', '구글 캘린더 목록을 불러오지 못했습니다. 잠시 후 다시 시도해 주세요.', 502);
+    }
+
+    const links = await loadLinks(userId);
+    if (action === 'calendars') {
+      const chosen = new Set(links.filter((link) => !link.is_app).map((link) => link.calendar_id));
+      return json({
+        calendars: choices.map((choice) => ({ ...choice, selected: chosen.has(choice.id) })),
+      });
+    }
+
+    // action === 'select'
+    const ids = body.calendarIds;
+    if (!Array.isArray(ids) || ids.length > 20 || !ids.every((id) => typeof id === 'string')) {
+      return fail('bad_request', '고른 캘린더가 올바르지 않습니다.');
+    }
+    const byId = new Map(choices.map((choice) => [choice.id, choice]));
+    const wanted = [...new Set(ids as string[])];
+    if (wanted.some((id) => !byId.has(id))) return fail('bad_calendar', '고를 수 없는 캘린더가 있습니다.');
+
+    const { data: claimed } = await db.rpc('google_calendar_claim_sync', { target: userId });
+    if (!claimed) return fail('busy', '지금 맞추는 중이에요. 잠시 후 다시 시도해 주세요.', 409);
+    try {
+      for (const link of links) {
+        if (!link.is_app && !wanted.includes(link.calendar_id)) await removeLink(userId, link.calendar_id);
+      }
+      if (wanted.length > 0) {
+        await db.from('google_calendar_links').upsert(
+          wanted.map((id) => {
+            const choice = byId.get(id)!;
+            return {
+              user_id: userId,
+              calendar_id: id,
+              name: choice.name,
+              color: choice.color,
+              access_role: choice.accessRole,
+              is_primary: choice.primary,
+              is_app: false,
+            };
+          }),
+          { onConflict: 'user_id,calendar_id' },
+        );
+      }
+    } finally {
+      await db.from('google_calendar_connections').update({ sync_started_at: null }).eq('user_id', userId);
+    }
+    // 고른 캘린더의 일정을 바로 가져온다.
     const outcome = await syncUser(userId);
     return 'error' in outcome ? json(outcome, outcome.error === 'busy' ? 409 : 400) : json(outcome);
   }
@@ -1068,7 +1381,7 @@ async function handleAction(request: Request): Promise<Response> {
         }).catch(() => undefined);
       }
       await db.from('google_calendar_connections').delete().eq('user_id', userId);
-      await resetLinks(userId);
+      await resetAll(userId, conn.calendar_id);
     }
     return json({ ok: true });
   }

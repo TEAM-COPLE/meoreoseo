@@ -24,6 +24,23 @@ export type GoogleCalendarStatus = {
   calendarName: string | null;
   lastSyncedAt: string | null;
   lastError: string | null;
+  /** 다른 캘린더를 고를 권한을 받았는지 (예전에 연결했으면 다시 연결해야 한다) */
+  canPickCalendars: boolean;
+  /** "멀어서" 말고 함께 맞추기로 고른 캘린더들 */
+  calendars: { id: string; name: string; color: string | null }[];
+};
+
+/** 고를 수 있는 구글 캘린더 하나 */
+export type GoogleCalendarChoice = {
+  id: string;
+  name: string;
+  /** 구글 캘린더에서 쓰는 색 (예: '#9fe1e7') */
+  color: string | null;
+  /** 'owner' | 'writer' 면 앱에서도 고칠 수 있고, 'reader' 면 보기만 된다 */
+  accessRole: string;
+  /** 기본 캘린더(내 이름으로 된 캘린더)인지 */
+  primary: boolean;
+  selected: boolean;
 };
 
 export const GOOGLE_STATUS_KEY = ['google-calendar-status'];
@@ -82,6 +99,22 @@ export async function connectGoogleCalendar(): Promise<string | null> {
 
 export async function disconnectGoogleCalendar(): Promise<void> {
   await call({ action: 'disconnect' });
+}
+
+/** 구글 계정에 있는 캘린더 목록 ("멀어서" 캘린더는 늘 맞추므로 빠져 있다) */
+export async function fetchGoogleCalendars(): Promise<GoogleCalendarChoice[]> {
+  const { calendars } = await call<{ calendars: GoogleCalendarChoice[] }>({ action: 'calendars' });
+  return calendars;
+}
+
+/**
+ * 함께 맞출 캘린더를 정한다. 고른 캘린더의 일정은 바로 앱으로 가져오고,
+ * 빼 버린 캘린더의 일정은 앱에서만 사라진다(구글에는 그대로 있다).
+ */
+export async function selectGoogleCalendars(calendarIds: string[]): Promise<void> {
+  await call({ action: 'select', calendarIds });
+  await queryClient.invalidateQueries({ queryKey: ['events'] });
+  await queryClient.invalidateQueries({ queryKey: GOOGLE_STATUS_KEY });
 }
 
 /** 돌아온 주소의 google=… 값을 사람이 읽을 문장으로 */

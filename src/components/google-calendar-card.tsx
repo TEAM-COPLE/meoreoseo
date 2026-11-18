@@ -1,21 +1,25 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useEffect, useState } from 'react';
-import { StyleSheet, View } from 'react-native';
+import { Pressable, StyleSheet, View } from 'react-native';
 
 import { ThemedText } from '@/components/themed-text';
 import { Button } from '@/components/ui/button';
+import { Checkbox } from '@/components/ui/checkbox';
 import { Card } from '@/components/ui/screen';
-import { Spacing } from '@/constants/theme';
+import { Radius, Spacing } from '@/constants/theme';
 import { useAuth } from '@/lib/auth';
 import { errorMessage } from '@/lib/format';
 import {
   connectGoogleCalendar,
   describeGoogleResult,
   disconnectGoogleCalendar,
+  fetchGoogleCalendars,
   fetchGoogleStatus,
   googleStatusKey,
   requestGoogleSync,
+  selectGoogleCalendars,
+  type GoogleCalendarStatus,
 } from '@/lib/google-calendar';
 
 /** '2026-11-18T05:00:00Z' → '11월 18일 오후 2:00' */
@@ -126,7 +130,7 @@ export function GoogleCalendarCard() {
     <Card>
       <ThemedText type="smallBold">구글 캘린더 연동</ThemedText>
       <ThemedText type="small" themeColor="textSecondary">
-        멀어서 일정이 구글 캘린더의 &quot;멀어서&quot; 캘린더와 서로 맞춰져요. 휴대폰 캘린더, 노션 캘린더에서도
+        멀어서 일정이 구글 캘린더의 &quot;멀어서&quot; 캘린더(그리고 아래에서 고른 캘린더)와 서로 맞춰져요. 휴대폰 캘린더, 노션 캘린더에서도
         보고 고칠 수 있어요. (자동으로 5분마다, 그리고 일정을 고칠 때마다)
       </ThemedText>
 
@@ -158,6 +162,10 @@ export function GoogleCalendarCard() {
             </ThemedText>
           ) : null}
         </View>
+      ) : null}
+
+      {connected && !needsReauth && data ? (
+        <CalendarPicker status={data} onReconnect={connect} busy={busy !== null} />
       ) : null}
 
       {message ? <ThemedText type="small">{message}</ThemedText> : null}
@@ -200,9 +208,197 @@ export function GoogleCalendarCard() {
   );
 }
 
+/**
+ * 기본 캘린더처럼 원래 구글에 있던 캘린더도 골라서 함께 맞춘다.
+ * 고른 캘린더의 일정은 앱에서도 보이고 고칠 수 있다(남이 만든 초대 등은 보기만).
+ */
+function CalendarPicker({
+  status,
+  onReconnect,
+  busy,
+}: {
+  status: GoogleCalendarStatus;
+  onReconnect: () => void;
+  busy: boolean;
+}) {
+  const [open, setOpen] = useState(false);
+  const [picked, setPicked] = useState<Set<string> | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [message, setMessage] = useState<string | null>(null);
+  const choices = useQuery({
+    queryKey: ['google-calendar-choices'],
+    enabled: open && status.canPickCalendars,
+    queryFn: fetchGoogleCalendars,
+    staleTime: 0,
+  });
+
+  if (!status.canPickCalendars) {
+    return (
+      <View style={styles.picker}>
+        <ThemedText type="small" themeColor="textSecondary">
+          기본 캘린더처럼 구글에 원래 있던 일정도 가져오려면, 다시 연결해서 캘린더 권한을 모두 허용해 주세요.
+        </ThemedText>
+        <Button
+          label="다른 캘린더도 가져오기 (다시 연결)"
+          variant="secondary"
+          size="small"
+          onPress={onReconnect}
+          disabled={busy}
+        />
+      </View>
+    );
+  }
+
+  // 아직 아무것도 누르지 않았으면 서버에 저장된 선택을 그대로 보여준다.
+  const selected =
+    picked ?? new Set((choices.data ?? []).filter((choice) => choice.selected).map((choice) => choice.id));
+
+  function toggle(id: string) {
+    const next = new Set(selected);
+    if (next.has(id)) next.delete(id);
+    else next.add(id);
+    setPicked(next);
+    setMessage(null);
+  }
+
+  async function save() {
+    setSaving(true);
+    setError(null);
+    setMessage(null);
+    try {
+      await selectGoogleCalendars([...selected]);
+      setMessage(selected.size > 0 ? '고른 캘린더의 일정을 가져왔어요.' : '함께 맞추는 캘린더를 모두 뺐어요.');
+      setPicked(null);
+      setOpen(false);
+    } catch (e) {
+      setError(errorMessage(e));
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  const names = status.calendars.map((calendar) => calendar.name);
+
+  return (
+    <View style={styles.picker}>
+      <ThemedText type="small" themeColor="textSecondary">
+        {names.length > 0
+          ? `함께 맞추는 캘린더: ${names.join(', ')}`
+          : '구글에 원래 있던 캘린더(기본 캘린더 등)도 골라서 가져올 수 있어요.'}
+      </ThemedText>
+
+      {open ? (
+        <View style={styles.list}>
+          {choices.isLoading ? (
+            <ThemedText type="small" themeColor="textSecondary">
+              캘린더 목록을 불러오는 중…
+            </ThemedText>
+          ) : choices.isError ? (
+            <ThemedText type="small" themeColor="danger">
+              {errorMessage(choices.error)}
+            </ThemedText>
+          ) : (choices.data ?? []).length === 0 ? (
+            <ThemedText type="small" themeColor="textSecondary">
+              고를 수 있는 캘린더가 없어요.
+            </ThemedText>
+          ) : (
+            (choices.data ?? []).map((choice) => {
+              const readOnly = choice.accessRole !== 'owner' && choice.accessRole !== 'writer';
+              const checked = selected.has(choice.id);
+              return (
+                <Pressable
+                  key={choice.id}
+                  style={styles.row}
+                  onPress={() => toggle(choice.id)}
+                  disabled={saving}
+                  accessibilityRole="checkbox"
+                  accessibilityLabel={choice.name}
+                  accessibilityState={{ checked, disabled: saving }}>
+                  <Checkbox checked={checked} onPress={() => toggle(choice.id)} label={choice.name} disabled={saving} />
+                  <View style={[styles.dot, { backgroundColor: choice.color ?? '#9e9e9e' }]} />
+                  <View style={styles.rowText}>
+                    <ThemedText type="default" numberOfLines={1}>
+                      {choice.name}
+                    </ThemedText>
+                    {choice.primary || readOnly ? (
+                      <ThemedText type="small" themeColor="textSecondary">
+                        {[choice.primary ? '기본 캘린더' : null, readOnly ? '보기만 할 수 있어요' : null]
+                          .filter(Boolean)
+                          .join(' · ')}
+                      </ThemedText>
+                    ) : null}
+                  </View>
+                </Pressable>
+              );
+            })
+          )}
+          <ThemedText type="small" themeColor="textSecondary">
+            새로 만드는 일정은 &quot;멀어서&quot; 캘린더에 들어가요. 남이 보낸 회의 초대는 앱에서 보기만 할 수 있어요.
+            빼 버린 캘린더의 일정은 앱에서만 사라지고 구글에는 그대로 있어요.
+          </ThemedText>
+          <View style={styles.buttons}>
+            <Button label="저장" size="small" onPress={save} loading={saving} disabled={saving || !choices.data} />
+            <Button
+              label="닫기"
+              variant="secondary"
+              size="small"
+              onPress={() => {
+                setOpen(false);
+                setPicked(null);
+              }}
+              disabled={saving}
+            />
+          </View>
+        </View>
+      ) : (
+        <Button
+          label="가져올 캘린더 고르기"
+          variant="secondary"
+          size="small"
+          onPress={() => {
+            setOpen(true);
+            setMessage(null);
+            setError(null);
+          }}
+          disabled={busy}
+        />
+      )}
+
+      {message ? <ThemedText type="small">{message}</ThemedText> : null}
+      {error ? (
+        <ThemedText type="small" themeColor="danger">
+          {error}
+        </ThemedText>
+      ) : null}
+    </View>
+  );
+}
+
 const styles = StyleSheet.create({
   info: {
     gap: Spacing.one,
+  },
+  picker: {
+    gap: Spacing.two,
+  },
+  list: {
+    gap: Spacing.two,
+  },
+  row: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.two,
+    paddingVertical: Spacing.one,
+  },
+  dot: {
+    width: 12,
+    height: 12,
+    borderRadius: Radius.full,
+  },
+  rowText: {
+    flex: 1,
+    gap: Spacing.half,
   },
   buttons: {
     gap: Spacing.two,

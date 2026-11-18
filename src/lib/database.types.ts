@@ -52,6 +52,10 @@ type EventRow = {
   excluded_dates: string[];
   /** 구글 캘린더 쪽 같은 일정의 id (서버만 바꾼다) */
   google_event_id: string | null;
+  /** 그 일정이 들어 있는 구글 캘린더의 id (서버만 바꾼다) */
+  google_calendar_id: string | null;
+  /** 남이 만든 회의 초대처럼 구글에서만 고칠 수 있는 일정인지 (서버만 바꾼다) */
+  google_readonly: boolean;
   /** 아직 구글에 보내지 않은 변경이 있는지 (서버만 바꾼다) */
   google_dirty: boolean;
   /** 앱에서 고칠 때마다 1씩 늘어나는 번호 (서버만 바꾼다) */
@@ -169,6 +173,8 @@ export type Database = {
         | 'tag_id'
         | 'excluded_dates'
         | 'google_event_id'
+        | 'google_calendar_id'
+        | 'google_readonly'
         | 'google_dirty'
         | 'local_version'
         | 'google_original'
