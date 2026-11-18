@@ -25,23 +25,41 @@ expo-env.d.ts
 npm-debug.*
 yarn-debug.*
 yarn-error.*
+pnpm-debug.*
+*.log
 
-# macOS
+# OS
 .DS_Store
+Thumbs.db
+desktop.ini
+
+# certs & keys
 *.pem
 
-# local env files
-.env*.local
+# env files
+.env
+.env.*
+!.env.example
 
 # Android / iOS build artifacts & signing
 *.apk
 *.aab
 *.ipa
 *.keystore
+build-*.tar.gz
 
-# Vercel & Windows
+# Supabase
+supabase/.temp/
+supabase/.branches/
+
+# Vercel
 .vercel
-Thumbs.db
+
+# Claude Code local settings
+.claude/settings.local.json
+
+# testing
+coverage/
 
 # typescript
 *.tsbuildinfo
@@ -51,3 +69,7 @@ example
 # generated native folders
 /ios
 /android
+
+# Local Expo modules build artifacts
+.gradle/
+modules/*/android/build/
