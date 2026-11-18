@@ -94,8 +94,13 @@ type TransactionRow = {
   category: string;
   memo: string | null;
   occurred_on: string;
+  /** 기록 경로: 'manual'(직접) / 'notification'(결제 알림) / 'import'(엑셀 가져오기) */
   source: string;
   created_at: string;
+  /** 결제한 시각 (알 수 있을 때만) */
+  occurred_at: string | null;
+  /** 자동 입력 한 건을 구별하는 이름 (같은 것이 두 번 들어오지 않게) */
+  external_id: string | null;
 };
 
 type UserSettingsRow = {
@@ -162,7 +167,14 @@ export type Database = {
       >;
       transactions: Table<
         TransactionRow,
-        'id' | 'user_id' | 'memo' | 'occurred_on' | 'source' | 'created_at'
+        | 'id'
+        | 'user_id'
+        | 'memo'
+        | 'occurred_on'
+        | 'source'
+        | 'created_at'
+        | 'occurred_at'
+        | 'external_id'
       >;
       user_settings: Table<
         UserSettingsRow,
