@@ -1,5 +1,5 @@
 import { router } from 'expo-router';
-import { useState, type PropsWithChildren, type ReactNode } from 'react';
+import { useState, type PropsWithChildren, type ReactNode, type Ref } from 'react';
 import {
   Modal,
   Platform,
@@ -10,6 +10,10 @@ import {
   useWindowDimensions,
   View,
   type GestureResponderEvent,
+  type LayoutChangeEvent,
+  type NativeScrollEvent,
+  type NativeSyntheticEvent,
+  type ScrollViewInstance,
   type StyleProp,
   type ViewStyle,
 } from 'react-native';
@@ -36,6 +40,12 @@ type Props = PropsWithChildren<{
   wide?: boolean;
   /** false 면 잠시 스크롤을 멈춘다. 상자를 끌어서 옮기는 동안 화면이 같이 움직이지 않게 할 때 쓴다. */
   scrollEnabled?: boolean;
+  /** 스크롤 위치를 직접 옮겨야 할 때(상자를 끌다가 화면 끝에 닿으면 자동 스크롤) 쓰는 ref */
+  scrollRef?: Ref<ScrollViewInstance>;
+  /** 스크롤 위치·내용 크기·화면 크기를 알아야 할 때 넘긴다. */
+  onScroll?: (event: NativeSyntheticEvent<NativeScrollEvent>) => void;
+  onContentSizeChange?: (width: number, height: number) => void;
+  onScrollLayout?: (event: LayoutChangeEvent) => void;
 }>;
 
 /**
@@ -50,6 +60,10 @@ export function Screen({
   onRefresh,
   wide = false,
   scrollEnabled = true,
+  scrollRef,
+  onScroll,
+  onContentSizeChange,
+  onScrollLayout,
   children,
 }: Props) {
   const theme = useTheme();
@@ -74,7 +88,12 @@ export function Screen({
   return (
     <View style={[styles.root, { backgroundColor: theme.background }]}>
       <ScrollView
+        ref={scrollRef}
         scrollEnabled={scrollEnabled}
+        onScroll={onScroll}
+        scrollEventThrottle={onScroll ? 16 : undefined}
+        onContentSizeChange={onContentSizeChange}
+        onLayout={onScrollLayout}
         keyboardShouldPersistTaps="handled"
         refreshControl={
           onRefresh ? (

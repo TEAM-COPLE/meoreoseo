@@ -1,10 +1,19 @@
 import { useQueryClient } from '@tanstack/react-query';
 import { router } from 'expo-router';
-import { useState, type PropsWithChildren } from 'react';
-import { Platform, Pressable, StyleSheet, useWindowDimensions, View, type StyleProp, type ViewStyle } from 'react-native';
+import { useLayoutEffect, useRef, useState, type PropsWithChildren } from 'react';
+import {
+  Platform,
+  Pressable,
+  StyleSheet,
+  useWindowDimensions,
+  View,
+  type ScrollViewInstance,
+  type StyleProp,
+  type ViewStyle,
+} from 'react-native';
 
 import { ThemedText } from '@/components/themed-text';
-import { TodayLayoutEditor } from '@/components/today-layout-editor';
+import { BoardDragController, EditableBox } from '@/components/today-board-edit';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import {
@@ -50,13 +59,29 @@ export default function TodayScreen() {
     toggleCollapsed,
     resetLayout,
   } = useTodayLayout();
-  // "편집"을 누르면 상자들이 끌어서 옮길 수 있는 모양으로 바뀐다. "완료"를 누르면 원래 화면으로 돌아온다.
+  // "편집"을 누르면 상자 모양은 그대로 두고, 각 상자에 "옮기기" 손잡이와 "숨기기" 버튼이 생긴다.
+  // 손잡이를 잡고 끌면 그 자리에서 상자를 옮길 수 있다. "완료"를 누르면 원래 화면으로 돌아온다.
   const [editingLayout, setEditingLayout] = useState(false);
-  const [draggingBox, setDraggingBox] = useState(false);
+  const [draggingId, setDraggingId] = useState<TodaySectionId | null>(null);
+  const scrollRef = useRef<ScrollViewInstance>(null);
+  const [boardDrag] = useState(() => new BoardDragController());
+
+  // 끌기 처리기에게 항상 최신 순서를 알려 주고, 순서가 바뀌어 다시 그려진 직후 새 자리를 재게 한다.
+  useLayoutEffect(() => {
+    boardDrag.setCallbacks({
+      order,
+      onReorder: setOrder,
+      onDraggingChange: setDraggingId,
+      scrollTo: (y) => scrollRef.current?.scrollTo({ y, animated: false }),
+    });
+  }, [boardDrag, order, setOrder]);
+  useLayoutEffect(() => {
+    boardDrag.onOrderCommitted();
+  }, [order, boardDrag]);
 
   const visibleOrder = order.filter((id) => !hidden.includes(id));
-  const showWeatherTop = visibleOrder.includes('weather');
-  const gridSections = visibleOrder.filter((id) => id !== 'weather');
+  // 편집 중에는 숨긴 상자도 흐리게 보여 줘서 다시 켤 수 있게 한다.
+  const shownOrder = editingLayout ? order : visibleOrder;
 
   function renderSection(id: TodaySectionId, index: number) {
     const isCollapsed = collapsed.includes(id);
@@ -114,11 +139,41 @@ export default function TodayScreen() {
     }
   }
 
+  /** 상자 하나를 그린다. 편집 중이면 옮기기 손잡이가 달린 틀로 감싼다. */
+  function renderBox(id: TodaySectionId, index: number, style?: StyleProp<ViewStyle>) {
+    const section = renderSection(id, index);
+    if (editingLayout) {
+      return (
+        <EditableBox
+          key={id}
+          id={id}
+          controller={boardDrag}
+          isHidden={hidden.includes(id)}
+          isDragging={draggingId === id}
+          onToggleHidden={() => toggleHidden(id)}
+          onMove={(direction) => moveSection(id, direction)}
+          style={style}>
+          {section}
+        </EditableBox>
+      );
+    }
+    if (!style) return section;
+    return (
+      <View key={id} style={style}>
+        {section}
+      </View>
+    );
+  }
+
   return (
     <Screen
       title="오늘"
       wide
-      scrollEnabled={!draggingBox}
+      scrollEnabled={draggingId === null}
+      scrollRef={scrollRef}
+      onScroll={boardDrag.handleScroll}
+      onContentSizeChange={boardDrag.handleContentSize}
+      onScrollLayout={boardDrag.handleLayout}
       onRefresh={() => queryClient.refetchQueries({ type: 'active' })}
       action={
         <Button
@@ -182,29 +237,29 @@ export default function TodayScreen() {
       </View>
 
       {editingLayout ? (
-        <TodayLayoutEditor
-          order={order}
-          hidden={hidden}
-          onReorder={setOrder}
-          onMove={moveSection}
-          onToggleHidden={toggleHidden}
-          onReset={resetLayout}
-          onDraggingChange={setDraggingBox}
-        />
-      ) : isWideWeb ? (
-        <>
-          {showWeatherTop ? renderSection('weather', 0) : null}
-          <View style={styles.webGrid}>
-            {gridSections.map((id, idx) => (
-              <View key={id} style={styles.webGridItem}>
-                {renderSection(id, showWeatherTop ? idx + 1 : idx)}
-              </View>
-            ))}
-          </View>
-        </>
+        <View style={[styles.editHint, { backgroundColor: theme.tintSoft }]}>
+          <ThemedText type="small" themeColor="tint">
+            상자의 &quot;≡ 옮기기&quot;를 잡고 원하는 자리로 끌어 놓으세요. 다 됐으면 오른쪽 위
+            &quot;완료&quot;를 누르세요.
+          </ThemedText>
+        </View>
+      ) : null}
+
+      {isWideWeb ? (
+        <View style={styles.webGrid}>
+          {shownOrder.map((id, idx) =>
+            renderBox(id, idx, [styles.webGridItem, id === 'weather' && styles.webGridFull]),
+          )}
+        </View>
       ) : (
-        visibleOrder.map((id, idx) => renderSection(id, idx))
+        shownOrder.map((id, idx) => renderBox(id, idx))
       )}
+
+      {editingLayout ? (
+        <View style={styles.editFooter}>
+          <Button label="기본값으로 되돌리기" variant="secondary" size="small" onPress={resetLayout} />
+        </View>
+      ) : null}
 
       {!editingLayout && visibleOrder.length === 0 ? (
         <Card>
@@ -832,6 +887,17 @@ const styles = StyleSheet.create({
     flexBasis: '48%',
     flexGrow: 1,
     minWidth: 320,
+  },
+  webGridFull: {
+    flexBasis: '100%',
+  },
+  editHint: {
+    borderRadius: Radius.medium,
+    paddingHorizontal: Spacing.three,
+    paddingVertical: Spacing.two,
+  },
+  editFooter: {
+    alignItems: 'flex-start',
   },
   sectionTitlePress: {
     flex: 1,
