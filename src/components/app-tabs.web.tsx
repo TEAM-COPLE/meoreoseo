@@ -52,12 +52,12 @@ function TabButton({ children, isFocused, ...props }: TabTriggerSlotProps) {
       {...(props as PressableProps)}
       style={({ pressed }) => [
         styles.tabButton,
-        { backgroundColor: isFocused ? theme.backgroundSelected : 'transparent' },
+        { backgroundColor: isFocused ? theme.tintSoft : 'transparent' },
         pressed && styles.pressed,
       ]}>
       <ThemedText
         type={isFocused ? 'smallBold' : 'small'}
-        themeColor={isFocused ? 'text' : 'textSecondary'}>
+        themeColor={isFocused ? 'tint' : 'textSecondary'}>
         {children}
       </ThemedText>
     </Pressable>
@@ -70,7 +70,10 @@ function TabBar(props: TabListProps) {
   return (
     <View
       {...props}
-      style={[styles.bar, { backgroundColor: theme.background, borderBottomColor: theme.border }]}>
+      style={[
+        styles.bar,
+        { backgroundColor: theme.backgroundElement, borderBottomColor: theme.border },
+      ]}>
       <View style={styles.barInner}>
         <HomeLogo />
         <View style={styles.tabs}>{props.children}</View>

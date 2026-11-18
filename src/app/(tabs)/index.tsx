@@ -1,10 +1,15 @@
 import { router } from 'expo-router';
 import { useState, type PropsWithChildren } from 'react';
-import { ActivityIndicator, Pressable, StyleSheet, View } from 'react-native';
+import { Pressable, StyleSheet, View } from 'react-native';
 
 import { ThemedText } from '@/components/themed-text';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
+import {
+  SectionSkeleton,
+  StaggeredReveal,
+  type SectionSkeletonVariant,
+} from '@/components/ui/loading-animation';
 import { Card, Screen } from '@/components/ui/screen';
 import { WeatherCityPicker } from '@/components/weather-city-picker';
 import { Spacing } from '@/constants/theme';
@@ -57,6 +62,8 @@ function WeatherSection() {
 
   return (
     <Section
+      index={0}
+      highlight
       title={city.data ? `날씨 · ${city.data.name}` : '날씨'}
       linkLabel={picking ? '닫기' : '지역 변경'}
       onLink={() => setPicking((open) => !open)}>
@@ -74,6 +81,7 @@ function WeatherSection() {
         loading={city.isPending || weather.isPending}
         error={weather.error}
         onRetry={weather.refetch}
+        variant="weather"
       />
 
       {now && look ? (
@@ -126,8 +134,13 @@ function TodoSection({ today }: { today: string }) {
   const laterCount = all.filter((todo) => !todo.done).length - items.filter((t) => !t.done).length;
 
   return (
-    <Section title="할 일" linkLabel="전체 보기" onLink={() => router.navigate('/todos')}>
-      <SectionStatus loading={todos.isPending} error={todos.error} onRetry={todos.refetch} />
+    <Section index={1} title="할 일" linkLabel="전체 보기" onLink={() => router.navigate('/todos')}>
+      <SectionStatus
+        loading={todos.isPending}
+        error={todos.error}
+        onRetry={todos.refetch}
+        variant="list"
+      />
 
       {todos.data && items.length === 0 ? (
         <ThemedText type="small" themeColor="textSecondary">
@@ -172,8 +185,13 @@ function EventSection({ today }: { today: string }) {
   const items = (events.data ?? []).filter((event) => event.event_date === today);
 
   return (
-    <Section title="일정" linkLabel="달력 보기" onLink={() => router.navigate('/calendar')}>
-      <SectionStatus loading={events.isPending} error={events.error} onRetry={events.refetch} />
+    <Section index={2} title="일정" linkLabel="달력 보기" onLink={() => router.navigate('/calendar')}>
+      <SectionStatus
+        loading={events.isPending}
+        error={events.error}
+        onRetry={events.refetch}
+        variant="list"
+      />
 
       {events.data && items.length === 0 ? (
         <ThemedText type="small" themeColor="textSecondary">
@@ -223,6 +241,7 @@ function HabitSection({ today }: { today: string }) {
 
   return (
     <Section
+      index={3}
       title={ready && items.length > 0 ? `습관 ${doneCount}/${items.length}` : '습관'}
       // 습관을 추가·수정하거나 지난 7일을 보려면 습관 화면(src/app/habits.tsx)으로 간다.
       linkLabel="관리"
@@ -234,6 +253,7 @@ function HabitSection({ today }: { today: string }) {
           habits.refetch();
           logs.refetch();
         }}
+        variant="list"
       />
 
       {ready && items.length === 0 ? (
@@ -296,11 +316,12 @@ function MoneySection({ today }: { today: string }) {
   const todayExpense = sum(expenses.filter((item) => item.occurred_on === today));
 
   return (
-    <Section title="이번 달 가계부" linkLabel="내역 보기" onLink={() => router.navigate('/money')}>
+    <Section index={4} title="이번 달 가계부" linkLabel="내역 보기" onLink={() => router.navigate('/money')}>
       <SectionStatus
         loading={transactions.isPending}
         error={transactions.error}
         onRetry={transactions.refetch}
+        variant="stats"
       />
 
       {transactions.data ? (
@@ -323,30 +344,40 @@ function MoneySection({ today }: { today: string }) {
 
 /** 제목 줄(왼쪽 제목, 오른쪽 이동 버튼)과 내용을 담는 상자. */
 function Section({
+  index = 0,
+  highlight = false,
   title,
   linkLabel,
   onLink,
   children,
-}: PropsWithChildren<{ title: string; linkLabel: string; onLink: () => void }>) {
+}: PropsWithChildren<{
+  index?: number;
+  highlight?: boolean;
+  title: string;
+  linkLabel: string;
+  onLink: () => void;
+}>) {
   return (
-    <Card>
-      <View style={styles.sectionHeader}>
-        <ThemedText accessibilityRole="header" type="default" style={styles.sectionTitle}>
-          {title}
-        </ThemedText>
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel={`${title} ${linkLabel}`}
-          hitSlop={10}
-          onPress={onLink}
-          style={({ pressed }) => pressed && styles.pressed}>
-          <ThemedText type="small" themeColor="tint">
-            {linkLabel} ›
+    <StaggeredReveal index={index}>
+      <Card highlight={highlight}>
+        <View style={styles.sectionHeader}>
+          <ThemedText accessibilityRole="header" type="default" style={styles.sectionTitle}>
+            {title}
           </ThemedText>
-        </Pressable>
-      </View>
-      {children}
-    </Card>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={`${title} ${linkLabel}`}
+            hitSlop={10}
+            onPress={onLink}
+            style={({ pressed }) => pressed && styles.pressed}>
+            <ThemedText type="small" themeColor="tint">
+              {linkLabel} ›
+            </ThemedText>
+          </Pressable>
+        </View>
+        {children}
+      </Card>
+    </StaggeredReveal>
   );
 }
 
@@ -355,19 +386,15 @@ function SectionStatus({
   loading,
   error,
   onRetry,
+  variant = 'list',
 }: {
   loading: boolean;
   error: unknown;
   onRetry: () => void;
+  variant?: SectionSkeletonVariant;
 }) {
-  const theme = useTheme();
-
   if (loading) {
-    return (
-      <View style={styles.status}>
-        <ActivityIndicator color={theme.textSecondary} />
-      </View>
-    );
+    return <SectionSkeleton variant={variant} />;
   }
   if (error) {
     return (
@@ -440,10 +467,6 @@ const styles = StyleSheet.create({
   },
   statValue: {
     fontWeight: 700,
-  },
-  status: {
-    paddingVertical: Spacing.two,
-    alignItems: 'center',
   },
   pressed: {
     opacity: 0.6,

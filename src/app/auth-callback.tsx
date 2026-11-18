@@ -1,10 +1,11 @@
 import * as Linking from 'expo-linking';
 import { Redirect, router } from 'expo-router';
 import { useEffect, useState } from 'react';
-import { ActivityIndicator, Platform, StyleSheet, View } from 'react-native';
+import { Platform, StyleSheet, View } from 'react-native';
 
 import { ThemedText } from '@/components/themed-text';
 import { Button } from '@/components/ui/button';
+import { AppLoadingScreen } from '@/components/ui/loading-animation';
 import { Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import { useAuth } from '@/lib/auth';
@@ -58,14 +59,7 @@ export default function AuthCallbackScreen() {
   }
 
   if (loading || !done) {
-    return (
-      <View style={[styles.root, { backgroundColor: theme.background }]}>
-        <ActivityIndicator color={theme.textSecondary} />
-        <ThemedText type="small" themeColor="textSecondary">
-          로그인하는 중…
-        </ThemedText>
-      </View>
-    );
+    return <AppLoadingScreen statusText="로그인하는 중…" />;
   }
 
   // 처리할 로그인 결과가 없으면 로그인 화면으로 돌려보낸다.

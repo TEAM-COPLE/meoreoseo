@@ -1,7 +1,6 @@
 import { router } from 'expo-router';
 import type { PropsWithChildren, ReactNode } from 'react';
 import {
-  ActivityIndicator,
   Platform,
   Pressable,
   ScrollView,
@@ -18,6 +17,7 @@ import { BottomTabInset, MaxContentWidth, Radius, Spacing } from '@/constants/th
 import { useTheme, useThemeMode } from '@/hooks/use-theme';
 
 import { Button } from './button';
+import { SkeletonList } from './loading-animation';
 
 type Props = PropsWithChildren<{
   title: string;
@@ -76,7 +76,11 @@ export function Screen({ title, action, onBack, overlay, children }: Props) {
             onPress={toggleScheme}
             style={({ pressed }) => [
               styles.account,
-              { backgroundColor: theme.backgroundElement, opacity: pressed ? 0.7 : 1 },
+              {
+                backgroundColor: theme.backgroundElement,
+                borderColor: theme.border,
+                opacity: pressed ? 0.7 : 1,
+              },
             ]}>
             <ThemedText type="small">{isDark ? '라이트' : '다크'}</ThemedText>
           </Pressable>
@@ -87,7 +91,11 @@ export function Screen({ title, action, onBack, overlay, children }: Props) {
             onPress={() => router.push('/account')}
             style={({ pressed }) => [
               styles.account,
-              { backgroundColor: theme.backgroundElement, opacity: pressed ? 0.7 : 1 },
+              {
+                backgroundColor: theme.backgroundElement,
+                borderColor: theme.border,
+                opacity: pressed ? 0.7 : 1,
+              },
             ]}>
             <ThemedText type="small">계정</ThemedText>
           </Pressable>
@@ -126,14 +134,8 @@ export function ListStatus({
   emptyText: string;
   onRetry: () => void;
 }) {
-  const theme = useTheme();
-
   if (loading) {
-    return (
-      <View style={styles.status}>
-        <ActivityIndicator color={theme.textSecondary} />
-      </View>
-    );
+    return <SkeletonList />;
   }
   if (error) {
     return (
@@ -164,6 +166,7 @@ export function Card({
   onLongPress,
   selected = false,
   selecting = false,
+  highlight = false,
   accessibilityLabel,
   accessibilityHint,
   style,
@@ -172,17 +175,22 @@ export function Card({
   onLongPress?: () => void;
   selected?: boolean;
   selecting?: boolean;
+  highlight?: boolean;
   accessibilityLabel?: string;
   accessibilityHint?: string;
   style?: StyleProp<ViewStyle>;
 }>) {
   const theme = useTheme();
+  const { resolvedScheme } = useThemeMode();
+  const isLight = resolvedScheme === 'light';
   const baseStyle = [
     styles.card,
     {
-      backgroundColor: selected ? theme.tintSoft : theme.backgroundElement,
-      borderColor: selected ? theme.tint : 'transparent',
+      backgroundColor: selected || highlight ? theme.tintSoft : theme.backgroundElement,
+      borderColor: selected ? theme.tint : highlight ? theme.tint : theme.border,
+      borderWidth: selected ? 1.5 : 1,
     },
+    isLight && styles.cardShadowLight,
     selecting && Platform.OS === 'web' && styles.noSelect,
     style,
   ];
@@ -244,6 +252,7 @@ const styles = StyleSheet.create({
     minHeight: 34,
     paddingHorizontal: Spacing.three - 2,
     borderRadius: Radius.full,
+    borderWidth: 1,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -257,9 +266,16 @@ const styles = StyleSheet.create({
   },
   card: {
     borderRadius: Radius.large,
-    borderWidth: 1.5,
+    borderWidth: 1,
     padding: Spacing.three,
     gap: Spacing.two,
+  },
+  cardShadowLight: {
+    shadowColor: '#171626',
+    shadowOpacity: 0.045,
+    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 2,
   },
   // userSelect 는 웹 전용이라 RN ViewStyle 타입에 없어 캐스팅한다.
   noSelect: {
