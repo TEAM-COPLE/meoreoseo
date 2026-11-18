@@ -1,6 +1,6 @@
 import { Redirect } from 'expo-router';
 import { useState } from 'react';
-import { StyleSheet, View } from 'react-native';
+import { Linking, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { ThemedText } from '@/components/themed-text';
@@ -14,6 +14,8 @@ import { signInWith, type SocialProvider } from '@/lib/social-auth';
 // 각 회사가 정해 둔 버튼 색. 밝은 화면·어두운 화면에서 똑같이 쓴다.
 const GOOGLE_COLORS = { background: '#FFFFFF', text: '#1F1F1F' };
 const KAKAO_COLORS = { background: '#FEE500', text: '#191919' };
+// 개인정보처리방침·이용약관이 있는 웹사이트 (public/privacy.html, public/terms.html)
+const SITE = 'https://meoreoseo.vercel.app';
 
 export default function SignInScreen() {
   const theme = useTheme();
@@ -81,6 +83,29 @@ export default function SignInScreen() {
             </ThemedText>
           ) : null}
         </View>
+
+        {/* 구글이 "홈페이지에서 개인정보처리방침으로 갈 수 있어야 한다"고 요구해서 둔 링크 */}
+        <View style={styles.links}>
+          <ThemedText
+            type="small"
+            themeColor="textSecondary"
+            accessibilityRole="link"
+            style={styles.link}
+            onPress={() => Linking.openURL(`${SITE}/privacy`)}>
+            개인정보처리방침
+          </ThemedText>
+          <ThemedText type="small" themeColor="textSecondary">
+            ·
+          </ThemedText>
+          <ThemedText
+            type="small"
+            themeColor="textSecondary"
+            accessibilityRole="link"
+            style={styles.link}
+            onPress={() => Linking.openURL(`${SITE}/terms`)}>
+            이용약관
+          </ThemedText>
+        </View>
       </View>
     </View>
   );
@@ -111,5 +136,13 @@ const styles = StyleSheet.create({
   },
   outlined: {
     borderWidth: 1,
+  },
+  links: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    gap: Spacing.two,
+  },
+  link: {
+    textDecorationLine: 'underline',
   },
 });

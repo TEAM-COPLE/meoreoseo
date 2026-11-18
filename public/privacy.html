@@ -1,0 +1,186 @@
+<!doctype html>
+<!--
+  멀어서 개인정보처리방침.
+  로그인하지 않아도 누구나 읽을 수 있어야 해서 앱 화면이 아니라 그냥 HTML 로 만들었다.
+  주소: https://meoreoseo.vercel.app/privacy  (구글 클라우드 콘솔 "브랜딩"에 이 주소를 넣는다)
+  내용을 바꾸면 아래 "시행일"도 함께 바꾼다.
+-->
+<html lang="ko">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>멀어서 개인정보처리방침</title>
+    <meta name="description" content="멀어서 앱이 어떤 정보를 왜 모으고 어떻게 다루는지 설명합니다." />
+    <style>
+      :root {
+        --bg: #ffffff;
+        --text: #1f1f1f;
+        --muted: #5f6368;
+        --line: #e3e3e3;
+        --link: #1a5fd0;
+      }
+      @media (prefers-color-scheme: dark) {
+        :root {
+          --bg: #121212;
+          --text: #ececec;
+          --muted: #a8a8a8;
+          --line: #2e2e2e;
+          --link: #8ab4f8;
+        }
+      }
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        background: var(--bg);
+        color: var(--text);
+        font-family: -apple-system, BlinkMacSystemFont, 'Apple SD Gothic Neo', 'Malgun Gothic', 'Noto Sans KR', sans-serif;
+        line-height: 1.7;
+        word-break: keep-all;
+      }
+      main { max-width: 760px; margin: 0 auto; padding: 40px 16px 64px; }
+      h1 { font-size: 28px; margin: 0 0 4px; }
+      h2 { font-size: 19px; margin: 36px 0 8px; padding-top: 16px; border-top: 1px solid var(--line); }
+      .meta { color: var(--muted); margin: 0 0 24px; }
+      a { color: var(--link); }
+      table { width: 100%; border-collapse: collapse; margin: 8px 0; font-size: 15px; }
+      th, td { text-align: left; vertical-align: top; padding: 8px; border: 1px solid var(--line); }
+      th { width: 30%; }
+      footer { margin-top: 48px; color: var(--muted); font-size: 14px; }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>멀어서 개인정보처리방침</h1>
+      <p class="meta">시행일: 2026년 11월 18일</p>
+
+      <p>
+        멀어서(이하 "앱")는 할 일, 일정, 습관, 메모, 가계부를 기록하고 여러 기기에서 이어서 쓸 수 있게
+        해 주는 개인용 앱입니다. 이 방침은 앱이 어떤 정보를 왜 모으고, 어디에 두고, 언제 지우는지
+        설명합니다. 앱은 광고를 하지 않으며, 이용자의 정보를 팔거나 광고에 쓰지 않습니다.
+      </p>
+
+      <h2>1. 모으는 정보와 쓰는 목적</h2>
+      <table>
+        <tr>
+          <th>로그인 정보</th>
+          <td>
+            Google 또는 카카오로 로그인할 때 받는 이메일 주소, 이름(닉네임), 계정 고유 번호.
+            계정을 만들고 본인을 확인하는 데만 씁니다.
+          </td>
+        </tr>
+        <tr>
+          <th>이용자가 직접 입력한 내용</th>
+          <td>
+            할 일, 일정, 습관과 그 기록, 메모, 가계부 내역, 태그, 날씨를 볼 지역, 알림 설정 등.
+            여러 기기에서 같은 내용을 보여 주는 데 씁니다.
+          </td>
+        </tr>
+        <tr>
+          <th>Google 캘린더 연동 (선택)</th>
+          <td>
+            이용자가 "구글 캘린더 연결"을 켠 경우에만, 이용자가 고른 캘린더의 일정(제목, 날짜·시간,
+            설명, 반복 규칙)과 캘린더 이름·색, Google 계정 이메일, 연결을 유지하기 위한 인증 토큰.
+            앱의 일정과 Google 캘린더를 서로 맞추는 데만 씁니다. 자세한 내용은 아래 3항을 보세요.
+          </td>
+        </tr>
+        <tr>
+          <th>결제 알림 읽기 (선택, Android)</th>
+          <td>
+            이용자가 휴대폰 설정에서 알림 접근을 허용한 경우에만, 카드·은행 앱의 결제 알림에서
+            금액, 가게 이름, 결제 시각을 읽어 가계부에 자동으로 기록합니다. 결제 알림이 아닌 알림은
+            저장하지 않습니다.
+          </td>
+        </tr>
+        <tr>
+          <th>가져오기 파일 (선택)</th>
+          <td>
+            이용자가 고른 엑셀·CSV 파일에서 가계부 내역만 읽어 기록합니다. 파일 자체는 저장하지 않습니다.
+          </td>
+        </tr>
+        <tr>
+          <th>오류 기록</th>
+          <td>
+            앱에 오류가 나면 오류 문장, 기기 종류(Android/iOS/웹), 앱 버전을 남깁니다.
+            문제를 고치는 데만 씁니다.
+          </td>
+        </tr>
+      </table>
+      <p>
+        앱은 위치(GPS), 연락처, 사진, 마이크, 카메라 정보를 모으지 않습니다. 날씨는 이용자가
+        고른 지역 이름으로만 조회합니다.
+      </p>
+
+      <h2>2. 보관 장소와 다른 회사에 맡기는 일</h2>
+      <p>앱은 아래 회사의 서비스를 이용해 동작합니다. 이 회사들은 앱을 운영하는 데 필요한 범위에서만 정보를 다룹니다.</p>
+      <table>
+        <tr><th>Supabase</th><td>로그인과 데이터 저장 (서버 위치: 일본 도쿄)</td></tr>
+        <tr><th>Vercel</th><td>웹사이트 제공</td></tr>
+        <tr><th>Google</th><td>Google 로그인, Google 캘린더 연동</td></tr>
+        <tr><th>카카오</th><td>카카오 로그인</td></tr>
+        <tr><th>기상청</th><td>날씨 조회 (지역 정보만 보내며 개인 정보는 보내지 않음)</td></tr>
+        <tr><th>Expo</th><td>앱 설치 파일과 업데이트 전달</td></tr>
+      </table>
+      <p>법에 따라 요구되는 경우를 빼고, 위 목적 밖으로 다른 사람이나 회사에 정보를 주지 않습니다.</p>
+
+      <h2>3. Google 사용자 데이터</h2>
+      <p>
+        Google 캘린더 연동을 켜면 앱은 다음 권한을 요청합니다.
+      </p>
+      <ul>
+        <li><strong>앱이 만든 캘린더 관리</strong>: Google 캘린더에 "멀어서" 캘린더를 만들고, 앱에서 만든 일정을 넣고 고치고 지웁니다.</li>
+        <li><strong>캘린더 일정 보기·수정</strong>: 이용자가 맞추기로 고른 캘린더의 일정을 앱으로 가져오고, 앱에서 고친 내용을 그 캘린더에 반영합니다.</li>
+        <li><strong>캘린더 목록 보기</strong>: 어떤 캘린더를 맞출지 고를 수 있도록 캘린더 이름과 색을 보여 줍니다.</li>
+        <li><strong>이메일 주소</strong>: 어떤 Google 계정에 연결됐는지 앱 화면에 보여 줍니다.</li>
+      </ul>
+      <p>
+        Google에서 받은 정보는 이용자에게 일정 맞추기 기능을 제공하는 데만 쓰며, 광고에 쓰거나
+        다른 사람에게 팔거나 넘기지 않습니다. 사람이 이 정보를 직접 읽지 않으며, 예외는 이용자가
+        동의한 경우, 보안 문제를 조사할 때, 법을 지켜야 할 때뿐입니다. 연결 토큰은 암호화해서
+        저장합니다.
+      </p>
+      <p>
+        멀어서가 Google API로 받은 정보를 사용하고 다른 앱으로 전송하는 방식은
+        <a href="https://developers.google.com/terms/api-services-user-data-policy" rel="noopener">Google API 서비스 사용자 데이터 정책</a>의
+        제한적 사용(Limited Use) 요구 사항을 포함한 모든 내용을 따릅니다.
+      </p>
+      <p>
+        연동은 앱의 설정 화면에서 언제든 끊을 수 있습니다. 끊으면 Google에 권한 반납을 요청하고,
+        저장된 토큰과 다른 캘린더에서 가져온 일정을 앱에서 지웁니다. Google 캘린더에 있는 일정은
+        그대로 남습니다. <a href="https://myaccount.google.com/permissions" rel="noopener">Google 계정의 서드파티 액세스</a>
+        화면에서도 권한을 거둘 수 있습니다.
+      </p>
+
+      <h2>4. 보관 기간과 삭제</h2>
+      <p>
+        정보는 이용자가 계정을 쓰는 동안 보관하고, 이용자가 지운 내용은 바로 지웁니다.
+        계정 삭제를 원하면 아래 문의처로 알려 주세요. 확인 후 30일 안에 계정과 모든 기록을 지웁니다.
+        오류 기록도 계정을 지울 때 함께 지웁니다.
+      </p>
+
+      <h2>5. 이용자의 권리</h2>
+      <p>
+        이용자는 언제든 자신의 정보를 보고, 고치고, 지우고, 처리를 멈춰 달라고 요청할 수 있습니다.
+        대부분은 앱 안에서 바로 할 수 있고, 그 밖의 요청은 아래 문의처로 보내 주세요.
+        만 14세 미만은 보호자의 동의 없이 가입할 수 없습니다.
+      </p>
+
+      <h2>6. 안전하게 지키는 방법</h2>
+      <p>
+        모든 통신은 암호화(HTTPS)되고, 데이터베이스는 본인 계정의 기록만 읽고 쓸 수 있도록 막혀
+        있습니다. Google 연결 토큰은 따로 암호화해서 보관하며 앱 화면으로는 꺼낼 수 없습니다.
+      </p>
+
+      <h2>7. 문의처 (개인정보 보호책임자)</h2>
+      <p>
+        이메일: <a href="mailto:seohw1001@gmail.com">seohw1001@gmail.com</a>
+      </p>
+
+      <h2>8. 방침의 변경</h2>
+      <p>이 방침을 바꾸면 이 페이지에 새 내용과 시행일을 올립니다.</p>
+
+      <footer>
+        <a href="/terms">서비스 이용약관</a> · <a href="/">멀어서 홈</a>
+      </footer>
+    </main>
+  </body>
+</html>
