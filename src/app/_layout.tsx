@@ -6,6 +6,7 @@ import { useEffect } from 'react';
 
 import { ThemeModeProvider, useColorScheme } from '@/hooks/use-theme';
 import { NotificationSync } from '@/components/notification-sync';
+import { WidgetSync } from '@/components/widget-sync';
 import { ConfirmRootHost } from '@/components/ui/confirm-modal';
 import { InitialDbLoadingOverlay } from '@/components/ui/loading-animation';
 import { useAutoUpdateOnAppActive } from '@/lib/app-version';
@@ -49,8 +50,9 @@ function ThemedRootNavigator() {
   return (
     <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
       <StatusBar style={colorScheme === 'dark' ? 'light' : 'dark'} />
-      {/* 로그인된 상태에서 휴대폰의 예약 알림을 데이터와 맞춘다. 화면에는 보이지 않는다. */}
+      {/* 로그인된 상태에서 휴대폰의 예약 알림과 홈 화면 위젯을 데이터와 맞춘다. 화면에는 보이지 않는다. */}
       {signedIn && notificationsSupported ? <NotificationSync /> : null}
+      {signedIn ? <WidgetSync /> : null}
 
       {!loading ? (
         <Stack screenOptions={{ headerShown: false }}>
