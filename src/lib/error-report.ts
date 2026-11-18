@@ -112,7 +112,11 @@ export function installGlobalErrorHandler(): void {
   if (!utils) return; // 웹에는 없다.
   const previous = utils.getGlobalHandler();
   utils.setGlobalHandler((error, isFatal) => {
-    reportError("app", error);
+    try {
+      reportError("app", error);
+    } catch {
+      // 오류 기록 자체가 실패해도 원래 처리는 이어서 한다.
+    }
     previous(error, isFatal);
   });
 }

@@ -226,14 +226,20 @@ export function buildDashboardWidgetProps(input: WidgetSyncInput, today = todayI
 
 export function syncAllWidgets(input: WidgetSyncInput): void {
   const today = todayISO();
-  try {
-    TodoWidget.updateSnapshot(buildTodoWidgetProps(input, today));
-    EventsWidget.updateSnapshot(buildEventsWidgetProps(input, today));
-    NotesWidget.updateSnapshot(buildNotesWidgetProps(input, today));
-    HabitsWidget.updateSnapshot(buildHabitsWidgetProps(input, today));
-    MoneyWidget.updateSnapshot(buildMoneyWidgetProps(input, today));
-    DashboardWidget.updateSnapshot(buildDashboardWidgetProps(input, today));
-  } catch {
-    // Expo Go 등 위젯 네이티브 모듈이 없는 환경에서는 조용히 무시한다.
+  // 위젯 하나가 실패해도 나머지 위젯과 앱에는 영향을 주지 않도록 하나씩 따로 보호한다.
+  const jobs: [string, () => void][] = [
+    ['todo', () => TodoWidget.updateSnapshot(buildTodoWidgetProps(input, today))],
+    ['events', () => EventsWidget.updateSnapshot(buildEventsWidgetProps(input, today))],
+    ['notes', () => NotesWidget.updateSnapshot(buildNotesWidgetProps(input, today))],
+    ['habits', () => HabitsWidget.updateSnapshot(buildHabitsWidgetProps(input, today))],
+    ['money', () => MoneyWidget.updateSnapshot(buildMoneyWidgetProps(input, today))],
+    ['dashboard', () => DashboardWidget.updateSnapshot(buildDashboardWidgetProps(input, today))],
+  ];
+  for (const [, run] of jobs) {
+    try {
+      run();
+    } catch {
+      // Expo Go 등 위젯 네이티브 모듈이 없거나 갱신에 실패하면 조용히 넘어간다.
+    }
   }
 }

@@ -1,33 +1,40 @@
-import { usePathname } from 'expo-router';
-import { SymbolView, type SFSymbol } from 'expo-symbols';
-import { useEffect, useState, type ComponentType } from 'react';
-import { Platform, Pressable, StyleSheet, useWindowDimensions, View } from 'react-native';
-import { Gesture, GestureDetector } from 'react-native-gesture-handler';
+import { usePathname } from "expo-router";
+import { SymbolView, type SFSymbol } from "expo-symbols";
+import { useEffect, useState, type ComponentType } from "react";
+import {
+    Platform,
+    Pressable,
+    StyleSheet,
+    useWindowDimensions,
+    View,
+} from "react-native";
+import { Gesture, GestureDetector } from "react-native-gesture-handler";
 import Animated, {
-  Easing,
-  Extrapolation,
-  interpolate,
-  runOnJS,
-  useAnimatedStyle,
-  useSharedValue,
-  withSpring,
-  withTiming,
-  type SharedValue,
-} from 'react-native-reanimated';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
+    Easing,
+    Extrapolation,
+    interpolate,
+    runOnJS,
+    useAnimatedStyle,
+    useSharedValue,
+    withSpring,
+    withTiming,
+    type SharedValue,
+} from "react-native-reanimated";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-import CalendarScreen from '@/app/(tabs)/calendar';
-import TodayScreen from '@/app/(tabs)/index';
-import MoneyScreen from '@/app/(tabs)/money';
-import NotesScreen from '@/app/(tabs)/notes';
-import TodosScreen from '@/app/(tabs)/todos';
-import { ThemedText } from '@/components/themed-text';
-import { Colors, Radius, Spacing } from '@/constants/theme';
-import { useColorScheme } from '@/hooks/use-theme';
-import { indexOfSwipeRoute, useIsSwipeLocked } from '@/lib/swipe-navigation';
+import CalendarScreen from "@/app/(tabs)/calendar";
+import TodayScreen from "@/app/(tabs)/index";
+import MoneyScreen from "@/app/(tabs)/money";
+import NotesScreen from "@/app/(tabs)/notes";
+import TodosScreen from "@/app/(tabs)/todos";
+import { SafeBoundary } from "@/components/safe-boundary";
+import { ThemedText } from "@/components/themed-text";
+import { Colors, Radius, Spacing } from "@/constants/theme";
+import { useColorScheme } from "@/hooks/use-theme";
+import { indexOfSwipeRoute, useIsSwipeLocked } from "@/lib/swipe-navigation";
 
 type TabDefinition = {
-  path: '/' | '/todos' | '/calendar' | '/notes' | '/money';
+  path: "/" | "/todos" | "/calendar" | "/notes" | "/money";
   label: string;
   sf: SFSymbol;
   md: string;
@@ -35,15 +42,39 @@ type TabDefinition = {
 };
 
 const TABS: readonly TabDefinition[] = [
-  { path: '/', label: '오늘', sf: 'sun.max', md: 'today', Component: TodayScreen },
-  { path: '/todos', label: '할 일', sf: 'checklist', md: 'checklist', Component: TodosScreen },
-  { path: '/calendar', label: '일정', sf: 'calendar', md: 'calendar_month', Component: CalendarScreen },
-  { path: '/notes', label: '메모', sf: 'note.text', md: 'sticky_note_2', Component: NotesScreen },
   {
-    path: '/money',
-    label: '가계부',
-    sf: 'wonsign.circle',
-    md: 'account_balance_wallet',
+    path: "/",
+    label: "오늘",
+    sf: "sun.max",
+    md: "today",
+    Component: TodayScreen,
+  },
+  {
+    path: "/todos",
+    label: "할 일",
+    sf: "checklist",
+    md: "checklist",
+    Component: TodosScreen,
+  },
+  {
+    path: "/calendar",
+    label: "일정",
+    sf: "calendar",
+    md: "calendar_month",
+    Component: CalendarScreen,
+  },
+  {
+    path: "/notes",
+    label: "메모",
+    sf: "note.text",
+    md: "sticky_note_2",
+    Component: NotesScreen,
+  },
+  {
+    path: "/money",
+    label: "가계부",
+    sf: "wonsign.circle",
+    md: "account_balance_wallet",
     Component: MoneyScreen,
   },
 ];
@@ -59,7 +90,7 @@ const DOCK_PADDING = 6;
 export default function AppTabs() {
   const pathname = usePathname();
   const scheme = useColorScheme();
-  const colors = Colors[scheme === 'dark' ? 'dark' : 'light'];
+  const colors = Colors[scheme === "dark" ? "dark" : "light"];
   const insets = useSafeAreaInsets();
   const { width } = useWindowDimensions();
   const swipeLocked = useIsSwipeLocked();
@@ -132,7 +163,10 @@ export default function AppTabs() {
       if (isAnimating.get()) return;
       const projected = event.translationX + event.velocityX * 0.16;
       const threshold = width * 0.2;
-      if (Math.abs(projected) > threshold && Math.abs(event.translationX) > 16) {
+      if (
+        Math.abs(projected) > threshold &&
+        Math.abs(event.translationX) > 16
+      ) {
         const step = projected < 0 ? 1 : -1;
         const nextIdx = (activeIdxSV.get() + step + TAB_COUNT) % TAB_COUNT;
         // 손을 떼는 즉시 하단바 아이콘/라벨을 전환해 딜레이 없이 반응하게 한다.
@@ -172,7 +206,10 @@ export default function AppTabs() {
       );
     });
 
-  const slotWidth = dockWidth > DOCK_PADDING * 2 ? (dockWidth - DOCK_PADDING * 2) / TAB_COUNT : 0;
+  const slotWidth =
+    dockWidth > DOCK_PADDING * 2
+      ? (dockWidth - DOCK_PADDING * 2) / TAB_COUNT
+      : 0;
 
   const indicatorAnimatedStyle = useAnimatedStyle(() => {
     if (slotWidth <= 0 || dockWidth <= 0) return { opacity: 0 };
@@ -182,7 +219,12 @@ export default function AppTabs() {
     if (rawProgress < 0) {
       const t = Math.min(1, Math.max(0, -rawProgress));
       const fullFactor = t <= 0.5 ? t * 2 : (1 - t) * 2;
-      const inset = interpolate(fullFactor, [0, 1], [DOCK_PADDING, 0], Extrapolation.CLAMP);
+      const inset = interpolate(
+        fullFactor,
+        [0, 1],
+        [DOCK_PADDING, 0],
+        Extrapolation.CLAMP,
+      );
       const pillLeft =
         t <= 0.5
           ? interpolate(t, [0, 0.5], [DOCK_PADDING, 0], Extrapolation.CLAMP)
@@ -194,8 +236,18 @@ export default function AppTabs() {
             );
       const pillWidth =
         t <= 0.5
-          ? interpolate(t, [0, 0.5], [slotWidth, dockWidth], Extrapolation.CLAMP)
-          : interpolate(t, [0.5, 1], [dockWidth, slotWidth], Extrapolation.CLAMP);
+          ? interpolate(
+              t,
+              [0, 0.5],
+              [slotWidth, dockWidth],
+              Extrapolation.CLAMP,
+            )
+          : interpolate(
+              t,
+              [0.5, 1],
+              [dockWidth, slotWidth],
+              Extrapolation.CLAMP,
+            );
 
       return {
         opacity: 1,
@@ -210,7 +262,12 @@ export default function AppTabs() {
     if (rawProgress > TAB_COUNT - 1) {
       const t = Math.min(1, Math.max(0, rawProgress - (TAB_COUNT - 1)));
       const fullFactor = t <= 0.5 ? t * 2 : (1 - t) * 2;
-      const inset = interpolate(fullFactor, [0, 1], [DOCK_PADDING, 0], Extrapolation.CLAMP);
+      const inset = interpolate(
+        fullFactor,
+        [0, 1],
+        [DOCK_PADDING, 0],
+        Extrapolation.CLAMP,
+      );
       const pillLeft =
         t <= 0.5
           ? interpolate(
@@ -222,8 +279,18 @@ export default function AppTabs() {
           : interpolate(t, [0.5, 1], [0, DOCK_PADDING], Extrapolation.CLAMP);
       const pillWidth =
         t <= 0.5
-          ? interpolate(t, [0, 0.5], [slotWidth, dockWidth], Extrapolation.CLAMP)
-          : interpolate(t, [0.5, 1], [dockWidth, slotWidth], Extrapolation.CLAMP);
+          ? interpolate(
+              t,
+              [0, 0.5],
+              [slotWidth, dockWidth],
+              Extrapolation.CLAMP,
+            )
+          : interpolate(
+              t,
+              [0.5, 1],
+              [dockWidth, slotWidth],
+              Extrapolation.CLAMP,
+            );
 
       return {
         opacity: 1,
@@ -243,7 +310,8 @@ export default function AppTabs() {
     };
   });
 
-  const dockBottom = Math.max(insets.bottom, Spacing.two) + (Platform.OS === 'ios' ? 2 : 6);
+  const dockBottom =
+    Math.max(insets.bottom, Spacing.two) + (Platform.OS === "ios" ? 2 : 6);
 
   return (
     <View style={[styles.root, { backgroundColor: colors.background }]}>
@@ -254,22 +322,33 @@ export default function AppTabs() {
             const prevIdx = (activeIndex - 1 + TAB_COUNT) % TAB_COUNT;
             const nextIdx = (activeIndex + 1) % TAB_COUNT;
             const shouldMount =
-              allTabsMounted || index === activeIndex || index === prevIdx || index === nextIdx;
+              allTabsMounted ||
+              index === activeIndex ||
+              index === prevIdx ||
+              index === nextIdx;
             return (
               <PagerPage
                 key={tab.path}
                 index={index}
                 activeIdxSV={activeIdxSV}
                 dragX={dragX}
-                width={width}>
-                {shouldMount ? <ScreenComponent /> : null}
+                width={width}
+              >
+                {shouldMount ? (
+                  <SafeBoundary name={`tab:${tab.path}`}>
+                    <ScreenComponent />
+                  </SafeBoundary>
+                ) : null}
               </PagerPage>
             );
           })}
         </View>
       </GestureDetector>
 
-      <View pointerEvents="box-none" style={[styles.dockWrapper, { bottom: dockBottom }]}>
+      <View
+        pointerEvents="box-none"
+        style={[styles.dockWrapper, { bottom: dockBottom }]}
+      >
         <View
           onLayout={(e) => setDockWidth(e.nativeEvent.layout.width)}
           style={[
@@ -277,9 +356,10 @@ export default function AppTabs() {
             {
               backgroundColor: colors.backgroundElement,
               borderColor: colors.border,
-              shadowColor: scheme === 'dark' ? '#000' : '#171626',
+              shadowColor: scheme === "dark" ? "#000" : "#171626",
             },
-          ]}>
+          ]}
+        >
           <View pointerEvents="none" style={styles.pillClip}>
             <Animated.View
               style={[
@@ -299,7 +379,11 @@ export default function AppTabs() {
                 accessibilityState={{ selected }}
                 accessibilityLabel={tab.label}
                 onPress={() => handleTabPress(index)}
-                style={({ pressed }) => [styles.tabItem, pressed && styles.tabPressed]}>
+                style={({ pressed }) => [
+                  styles.tabItem,
+                  pressed && styles.tabPressed,
+                ]}
+              >
                 <SymbolView
                   name={{
                     ios: tab.sf,
@@ -314,7 +398,8 @@ export default function AppTabs() {
                     styles.tabLabel,
                     { color: selected ? colors.tint : colors.textSecondary },
                     selected && styles.tabLabelSelected,
-                  ]}>
+                  ]}
+                >
                   {tab.label}
                 </ThemedText>
               </Pressable>
@@ -349,7 +434,11 @@ function PagerPage({
     };
   });
 
-  return <Animated.View style={[styles.page, animatedStyle]}>{children}</Animated.View>;
+  return (
+    <Animated.View style={[styles.page, animatedStyle]}>
+      {children}
+    </Animated.View>
+  );
 }
 
 const styles = StyleSheet.create({
@@ -358,53 +447,53 @@ const styles = StyleSheet.create({
   },
   pager: {
     flex: 1,
-    overflow: 'hidden',
+    overflow: "hidden",
   },
   page: {
-    position: 'absolute',
+    position: "absolute",
     top: 0,
     right: 0,
     bottom: 0,
     left: 0,
   },
   dockWrapper: {
-    position: 'absolute',
+    position: "absolute",
     left: Spacing.three,
     right: Spacing.three,
-    alignItems: 'center',
+    alignItems: "center",
   },
   dock: {
-    width: '100%',
+    width: "100%",
     maxWidth: 460,
     height: DOCK_HEIGHT,
     padding: DOCK_PADDING,
     borderRadius: Radius.full,
     borderWidth: StyleSheet.hairlineWidth,
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
     shadowOffset: { width: 0, height: 8 },
     shadowOpacity: 0.12,
     shadowRadius: 18,
     elevation: 8,
   },
   pillClip: {
-    position: 'absolute',
+    position: "absolute",
     top: 0,
     right: 0,
     bottom: 0,
     left: 0,
     borderRadius: Radius.full,
-    overflow: 'hidden',
+    overflow: "hidden",
   },
   activePill: {
-    position: 'absolute',
+    position: "absolute",
     borderRadius: Radius.full,
   },
   tabItem: {
     flex: 1,
-    height: '100%',
-    alignItems: 'center',
-    justifyContent: 'center',
+    height: "100%",
+    alignItems: "center",
+    justifyContent: "center",
     gap: 3,
   },
   tabPressed: {
@@ -415,6 +504,6 @@ const styles = StyleSheet.create({
     lineHeight: 13,
   },
   tabLabelSelected: {
-    fontWeight: '600',
+    fontWeight: "600",
   },
 });
