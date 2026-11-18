@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { ScrollView, StyleSheet } from 'react-native';
 
+import { GoogleCalendarCard } from '@/components/google-calendar-card';
 import { NotificationSettingsCard } from '@/components/notification-settings-card';
 import { ThemedText } from '@/components/themed-text';
 import { VersionInfoCard } from '@/components/version-info-card';
@@ -49,6 +50,8 @@ export default function AccountScreen() {
       </Card>
 
       <NotificationSettingsCard />
+
+      <GoogleCalendarCard />
 
       <Card>
         <ThemedText type="smallBold">로그인된 계정</ThemedText>

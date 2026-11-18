@@ -1,5 +1,5 @@
-import { router, useLocalSearchParams } from 'expo-router';
-import { useMemo, useState } from 'react';
+import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
+import { useCallback, useMemo, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 
 import { RepeatPicker } from '@/components/repeat-picker';
@@ -39,6 +39,7 @@ import {
   type YearMonth,
 } from '@/lib/dates';
 import { confirm, errorMessage } from '@/lib/format';
+import { requestGoogleSync } from '@/lib/google-calendar';
 import { isRepeat, isWaitingRepeat, repeatLabel, todoPeriodLabel, todoStartOf } from '@/lib/repeat';
 
 export default function CalendarScreen() {
@@ -56,6 +57,9 @@ export default function CalendarScreen() {
   const theme = useTheme();
   const tagMap = useTagMap();
   const tagColorOf = useTagColorOf();
+
+  // 캘린더 화면을 열 때마다 구글 캘린더에서 바뀐 일정을 받아 온다(연결된 경우에만).
+  useFocusEffect(useCallback(() => requestGoogleSync(300), []));
 
   const activeEditing: CalendarEvent | 'new' | null =
     editing ??
