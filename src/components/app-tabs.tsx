@@ -13,9 +13,9 @@ export default function AppTabs() {
 
   return (
     <NativeTabs
-      backgroundColor={colors.background}
-      indicatorColor={colors.backgroundSelected}
-      labelStyle={{ selected: { color: colors.text } }}>
+      backgroundColor={colors.backgroundElement}
+      indicatorColor={colors.tintSoft}
+      labelStyle={{ selected: { color: colors.tint } }}>
       <NativeTabs.Trigger name="index">
         <NativeTabs.Trigger.Label>오늘</NativeTabs.Trigger.Label>
         <NativeTabs.Trigger.Icon sf="sun.max" md="today" />

@@ -50,7 +50,12 @@ export function Button({
       style={({ pressed }) => [
         styles.base,
         size === 'small' && styles.small,
-        { backgroundColor, opacity: inactive ? 0.5 : pressed ? 0.75 : 1 },
+        {
+          backgroundColor,
+          borderColor: !colors && variant === 'secondary' ? theme.border : 'transparent',
+          borderWidth: !colors && variant === 'secondary' ? 1 : 0,
+          opacity: inactive ? 0.5 : pressed ? 0.75 : 1,
+        },
         style,
       ]}>
       {loading ? (
