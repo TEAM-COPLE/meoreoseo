@@ -38,7 +38,7 @@ type Props = PropsWithChildren<{
 
 /**
  * 탭 화면의 공통 틀: 위쪽 제목 줄 + 스크롤되는 내용.
- * 제목 줄 오른쪽에서 테마를 바꾸거나 "계정" 화면으로 갈 수 있다.
+ * 제목 줄 오른쪽에서 테마를 바꾸거나 "설정" 화면으로 갈 수 있다.
  */
 export function Screen({ title, action, onBack, overlay, onRefresh, wide = false, children }: Props) {
   const theme = useTheme();
@@ -117,9 +117,9 @@ export function Screen({ title, action, onBack, overlay, onRefresh, wide = false
           </Pressable>
           <Pressable
             accessibilityRole="button"
-            accessibilityLabel="계정 및 설정"
+            accessibilityLabel="설정"
             hitSlop={8}
-            onPress={() => router.push('/account')}
+            onPress={() => router.push('/settings')}
             style={({ pressed }) => [
               styles.account,
               {
@@ -128,7 +128,7 @@ export function Screen({ title, action, onBack, overlay, onRefresh, wide = false
                 opacity: pressed ? 0.7 : 1,
               },
             ]}>
-            <ThemedText type="small">계정</ThemedText>
+            <ThemedText type="small">설정</ThemedText>
           </Pressable>
         </View>
 

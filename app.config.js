@@ -3,7 +3,7 @@ const { execSync } = require('child_process');
 
 /**
  * 앱 설정의 대부분은 app.json 에 있다. 이 파일은 거기에 "지금 어떤 코드로 만들었는지"만 덧붙인다.
- * 계정 화면의 "버전 정보" 칸이 이 값을 보여준다(src/components/version-info-card.tsx).
+ * 설정 화면의 "버전 정보" 칸이 이 값을 보여준다(src/components/version-info-card.tsx).
  *
  * - gitCommit: 만든 코드의 GitHub 커밋 번호
  *     Expo 클라우드 빌드 → EAS_BUILD_GIT_COMMIT_HASH, Vercel 웹 배포 → VERCEL_GIT_COMMIT_SHA,
