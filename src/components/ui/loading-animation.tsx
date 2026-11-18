@@ -1,4 +1,3 @@
-import { useIsFetching } from '@tanstack/react-query';
 import { Image } from 'expo-image';
 import { useEffect, useState, type PropsWithChildren } from 'react';
 import {
@@ -16,7 +15,6 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ThemedText } from '@/components/themed-text';
 import { MaxContentWidth, Radius, Spacing } from '@/constants/theme';
 import { useTheme, useThemeMode } from '@/hooks/use-theme';
-import { hasWarmQueryCache } from '@/lib/query';
 
 const USE_NATIVE_DRIVER = Platform.OS !== 'web';
 const STAGGER_MS = 95;
@@ -365,35 +363,15 @@ export function InitialDbLoadingOverlay({
   authLoading: boolean;
   signedIn: boolean;
 }) {
-  const isFetching = useIsFetching();
-  const [bootDone, setBootDone] = useState(false);
   const [unmounted, setUnmounted] = useState(false);
   const [fade] = useState(() => new Animated.Value(1));
-  const warmReady = !authLoading && signedIn && hasWarmQueryCache();
-  const readyToFade = bootDone || (!authLoading && !signedIn) || warmReady;
-
-  useEffect(() => {
-    if (readyToFade || authLoading || !signedIn) return;
-
-    // DB 요청이 길어져도 6초 후에는 화면을 열어 오류/재시도 UI에 접근할 수 있게 한다.
-    const maxTimer = setTimeout(() => setBootDone(true), 6000);
-    return () => clearTimeout(maxTimer);
-  }, [authLoading, signedIn, readyToFade]);
-
-  useEffect(() => {
-    if (readyToFade || authLoading || !signedIn) return;
-    if (isFetching > 0) return;
-
-    // 첫 마운트 직후 또는 연쇄 쿼리(예: 도시 -> 날씨) 사이 잠깐 0이 될 수 있어 350ms 여유를 둔다.
-    const settleTimer = setTimeout(() => setBootDone(true), 350);
-    return () => clearTimeout(settleTimer);
-  }, [authLoading, signedIn, isFetching, readyToFade]);
+  const readyToFade = !authLoading;
 
   useEffect(() => {
     if (!readyToFade) return;
     const anim = Animated.timing(fade, {
       toValue: 0,
-      duration: 320,
+      duration: 200,
       easing: Easing.out(Easing.cubic),
       useNativeDriver: USE_NATIVE_DRIVER,
     });

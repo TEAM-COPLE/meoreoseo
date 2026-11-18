@@ -156,8 +156,14 @@ export function AuthProvider({ children }: PropsWithChildren) {
       } else if (!hasSupabaseConfig) {
         setState({ session: null, isDevMode: false, userId: null, loading: false });
       } else {
-        const { data } = await supabase.auth.getSession();
-        await applySession(data.session);
+        try {
+          const { data } = await supabase.auth.getSession();
+          await applySession(data.session);
+        } catch {
+          if (alive) {
+            setState({ session: null, isDevMode: false, userId: null, loading: false });
+          }
+        }
       }
 
       if (hasSupabaseConfig && alive) {

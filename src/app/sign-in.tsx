@@ -1,4 +1,3 @@
-import { Redirect } from 'expo-router';
 import { useState } from 'react';
 import { Linking, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -25,7 +24,7 @@ export default function SignInScreen() {
   const [busy, setBusy] = useState<SocialProvider | 'dev' | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  if (session || isDevMode) return <Redirect href="/" />;
+  if (session || isDevMode) return null;
 
   async function signIn(provider: SocialProvider) {
     setBusy(provider);

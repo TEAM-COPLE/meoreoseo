@@ -106,9 +106,10 @@ function describeError(message: string): string {
   return '로그인 처리 중 문제가 발생했습니다. 잠시 후 다시 시도해 주세요.';
 }
 
-// 같은 주소를 두 번 처리하지 않도록 기억해 둔다.
+// 같은 주소를 두 번 처리하지 않도록 진행 중인 요청을 공유한다.
 // (휴대폰에서는 로그인 버튼 쪽과 /auth-callback 화면 쪽이 같은 주소를 동시에 받을 수 있다.)
-let handledUrl: string | null = null;
+let pendingUrl: string | null = null;
+let pendingPromise: Promise<string | null> | null = null;
 
 /**
  * 로그인 후 돌아온 주소에서 인증 코드 또는 토큰을 꺼내 로그인 상태를 만든다.
@@ -116,30 +117,38 @@ let handledUrl: string | null = null;
  */
 export async function completeSignInFromUrl(url: string): Promise<string | null> {
   if (!isAllowedCallbackUrl(url)) return null;
-  if (url === handledUrl) return null;
-  handledUrl = url;
+  if (url === pendingUrl && pendingPromise) return pendingPromise;
 
-  const params = readParams(url);
-  scrubBrowserUrl();
+  pendingUrl = url;
+  pendingPromise = (async () => {
+    try {
+      const params = readParams(url);
+      scrubBrowserUrl();
 
-  const failure = params.get('error_description') || params.get('error');
-  if (failure) return describeError(failure);
+      const failure = params.get('error_description') || params.get('error');
+      if (failure) return describeError(failure);
 
-  const code = params.get('code');
-  if (code) {
-    const { error } = await supabase.auth.exchangeCodeForSession(code);
-    return error ? describeError(error.message) : null;
-  }
+      const code = params.get('code');
+      if (code) {
+        const { error } = await supabase.auth.exchangeCodeForSession(code);
+        return error ? describeError(error.message) : null;
+      }
 
-  const accessToken = params.get('access_token');
-  const refreshToken = params.get('refresh_token');
-  if (!accessToken || !refreshToken) return null;
+      const accessToken = params.get('access_token');
+      const refreshToken = params.get('refresh_token');
+      if (!accessToken || !refreshToken) return null;
 
-  const { error } = await supabase.auth.setSession({
-    access_token: accessToken,
-    refresh_token: refreshToken,
-  });
-  return error ? describeError(error.message) : null;
+      const { error } = await supabase.auth.setSession({
+        access_token: accessToken,
+        refresh_token: refreshToken,
+      });
+      return error ? describeError(error.message) : null;
+    } catch {
+      return '로그인 처리 중 문제가 발생했습니다. 잠시 후 다시 시도해 주세요.';
+    }
+  })();
+
+  return pendingPromise;
 }
 
 /**
@@ -176,10 +185,14 @@ export async function signInWith(provider: SocialProvider): Promise<string | nul
   if (error) return describeError(error.message);
   if (!data.url) return `${name} 로그인 주소를 받지 못했습니다.`;
 
-  const result = await WebBrowser.openAuthSessionAsync(data.url, redirectTo);
-  if (result.type !== 'success') {
-    // 사용자가 창을 닫은 경우. 오류로 보지 않는다.
-    return null;
+  try {
+    const result = await WebBrowser.openAuthSessionAsync(data.url, redirectTo);
+    if (result.type !== 'success' || !result.url) {
+      // 사용자가 창을 닫은 경우. 오류로 보지 않는다.
+      return null;
+    }
+    return completeSignInFromUrl(result.url);
+  } catch {
+    return `${name} 로그인 창을 여는 중 문제가 발생했습니다. 다시 시도해 주세요.`;
   }
-  return completeSignInFromUrl(result.url);
 }
