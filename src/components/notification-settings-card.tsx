@@ -5,6 +5,7 @@ import { ThemedText } from '@/components/themed-text';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/screen';
 import { Segmented } from '@/components/ui/segmented';
+import { TimeDialPicker } from '@/components/ui/time-dial-picker';
 import { Radius, Spacing } from '@/constants/theme';
 import {
   useNotificationSettings,
@@ -16,7 +17,6 @@ import { type NotificationSettings } from '@/lib/reminders';
 
 type EditingTarget = 'briefing' | 'todos' | 'events' | 'habits' | null;
 
-const MINUTE_OPTIONS = [0, 10, 15, 20, 30, 40, 45, 50] as const;
 const LEAD_OPTIONS = [
   { value: 0, label: '정각' },
   { value: 5, label: '5분 전' },
@@ -264,10 +264,6 @@ function NotificationTimeModal({
   const [minute, setMinute] = useState(initialMinute);
   const [leadMinutes, setLeadMinutes] = useState(settings.eventLeadMinutes);
 
-  function stepHour(delta: number) {
-    setHour((prev) => (prev + delta + 24) % 24);
-  }
-
   function handleSave() {
     if (target === 'briefing') {
       onSave({ briefingHour: hour, briefingMinute: minute });
@@ -307,61 +303,22 @@ function NotificationTimeModal({
           ) : null}
 
           <View style={styles.pickerSection}>
-            <ThemedText type="small" themeColor="textSecondary">
-              {target === 'events' ? '하루 종일 일정 알림 시각' : '알림 시각'}
-            </ThemedText>
-            <View
-              style={[
-                styles.hourStepper,
-                { backgroundColor: theme.background, borderColor: theme.border },
-              ]}>
-              <Pressable
-                accessibilityRole="button"
-                accessibilityLabel="1시간 이전"
-                onPress={() => stepHour(-1)}
-                style={[styles.stepBtn, { backgroundColor: theme.backgroundElement }]}>
-                <ThemedText type="default">-</ThemedText>
-              </Pressable>
-              <ThemedText type="default" style={styles.timeReadout}>
+            <View style={styles.pickerHeader}>
+              <ThemedText type="small" themeColor="textSecondary">
+                {target === 'events' ? '하루 종일 일정 알림 시각' : '알림 시각'}
+              </ThemedText>
+              <ThemedText type="smallBold" themeColor="tint">
                 {timeLabel(hour, minute)}
               </ThemedText>
-              <Pressable
-                accessibilityRole="button"
-                accessibilityLabel="1시간 이후"
-                onPress={() => stepHour(1)}
-                style={[styles.stepBtn, { backgroundColor: theme.backgroundElement }]}>
-                <ThemedText type="default">+</ThemedText>
-              </Pressable>
             </View>
-          </View>
-
-          <View style={styles.pickerSection}>
-            <ThemedText type="small" themeColor="textSecondary">
-              분 선택
-            </ThemedText>
-            <View style={styles.minuteGrid}>
-              {MINUTE_OPTIONS.map((m) => {
-                const selected = minute === m;
-                return (
-                  <Pressable
-                    key={m}
-                    onPress={() => setMinute(m)}
-                    style={[
-                      styles.minuteChip,
-                      {
-                        backgroundColor: selected ? theme.tint : theme.background,
-                        borderColor: selected ? theme.tint : theme.border,
-                      },
-                    ]}>
-                    <ThemedText
-                      type="small"
-                      style={{ color: selected ? theme.onTint : theme.text }}>
-                      {String(m).padStart(2, '0')}분
-                    </ThemedText>
-                  </Pressable>
-                );
-              })}
-            </View>
+            <TimeDialPicker
+              hour={hour}
+              minute={minute}
+              onChange={(nextHour, nextMinute) => {
+                setHour(nextHour);
+                setMinute(nextMinute);
+              }}
+            />
           </View>
 
           <View style={styles.modalActions}>
@@ -423,35 +380,10 @@ const styles = StyleSheet.create({
   pickerSection: {
     gap: Spacing.two,
   },
-  hourStepper: {
+  pickerHeader: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    borderRadius: Radius.medium,
-    borderWidth: 1,
-    padding: Spacing.two,
-  },
-  stepBtn: {
-    width: 38,
-    height: 38,
-    borderRadius: Radius.full,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  timeReadout: {
-    fontWeight: 700,
-    fontSize: 17,
-  },
-  minuteGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: Spacing.two,
-  },
-  minuteChip: {
-    paddingHorizontal: Spacing.three - 4,
-    paddingVertical: Spacing.one + 2,
-    borderRadius: Radius.full,
-    borderWidth: 1,
   },
   modalActions: {
     flexDirection: 'row',
