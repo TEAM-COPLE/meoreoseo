@@ -34,13 +34,24 @@ type Props = PropsWithChildren<{
   onRefresh?: () => Promise<unknown> | void;
   /** 웹 데스크톱 넓은 화면에서 최대 너비를 넓힐지 여부 */
   wide?: boolean;
+  /** false 면 잠시 스크롤을 멈춘다. 상자를 끌어서 옮기는 동안 화면이 같이 움직이지 않게 할 때 쓴다. */
+  scrollEnabled?: boolean;
 }>;
 
 /**
  * 탭 화면의 공통 틀: 위쪽 제목 줄 + 스크롤되는 내용.
  * 제목 줄 오른쪽에서 테마를 바꾸거나 "설정" 화면으로 갈 수 있다.
  */
-export function Screen({ title, action, onBack, overlay, onRefresh, wide = false, children }: Props) {
+export function Screen({
+  title,
+  action,
+  onBack,
+  overlay,
+  onRefresh,
+  wide = false,
+  scrollEnabled = true,
+  children,
+}: Props) {
   const theme = useTheme();
   const { mode, resolvedScheme, setMode } = useThemeMode();
   const [themeOpen, setThemeOpen] = useState(false);
@@ -63,6 +74,7 @@ export function Screen({ title, action, onBack, overlay, onRefresh, wide = false
   return (
     <View style={[styles.root, { backgroundColor: theme.background }]}>
       <ScrollView
+        scrollEnabled={scrollEnabled}
         keyboardShouldPersistTaps="handled"
         refreshControl={
           onRefresh ? (

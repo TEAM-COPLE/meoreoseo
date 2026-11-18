@@ -100,6 +100,11 @@ export function useTodayLayout() {
     });
   }
 
+  /** 끌어서 옮긴 결과처럼, 새 순서를 통째로 저장한다. */
+  function setOrder(next: TodaySectionId[]) {
+    update((prev) => ({ ...prev, order: normalizeState({ ...prev, order: next }).order }));
+  }
+
   function toggleHidden(id: TodaySectionId) {
     update((prev) => ({
       ...prev,
@@ -127,6 +132,7 @@ export function useTodayLayout() {
     hidden: layout.hidden,
     collapsed: layout.collapsed,
     moveSection,
+    setOrder,
     toggleHidden,
     toggleCollapsed,
     resetLayout,
