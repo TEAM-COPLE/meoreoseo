@@ -1,4 +1,4 @@
-import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
+import { router, useFocusEffect, useLocalSearchParams, usePathname } from 'expo-router';
 import { useCallback, useMemo, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 
@@ -47,6 +47,8 @@ const READONLY_NOTICE =
   '구글 캘린더에서만 고칠 수 있는 일정이에요. (남이 보낸 초대, 공휴일처럼 보기만 되는 캘린더, 생일 등)';
 
 export default function CalendarScreen() {
+  const pathname = usePathname();
+  const isCalendarRoute = pathname === '/calendar';
   const { add, editId } = useLocalSearchParams<{ add?: string; editId?: string }>();
   const [selected, setSelected] = useState(todayISO);
   const [month, setMonth] = useState(() => yearMonthOf(selected));
@@ -67,9 +69,9 @@ export default function CalendarScreen() {
 
   const activeEditing: CalendarEvent | 'new' | null =
     editing ??
-    (add
+    (isCalendarRoute && add
       ? 'new'
-      : editId
+      : isCalendarRoute && editId
         ? ((events.data ?? []).find((e) => e.id === editId && !e.google_readonly) ?? null)
         : null);
 

@@ -49,14 +49,18 @@ export function WidgetSync() {
   const latestRef = useRef({
     todos: todosQuery.data ?? [],
     habitLogs: habitLogsQuery.data ?? new Map<string, Set<string>>(),
+    toggleTodoMutate: toggleTodo.mutate,
+    toggleHabitLogMutate: toggleHabitLog.mutate,
   });
 
   useEffect(() => {
     latestRef.current = {
       todos: todosQuery.data ?? [],
       habitLogs: habitLogsQuery.data ?? new Map<string, Set<string>>(),
+      toggleTodoMutate: toggleTodo.mutate,
+      toggleHabitLogMutate: toggleHabitLog.mutate,
     };
-  }, [todosQuery.data, habitLogsQuery.data]);
+  }, [todosQuery.data, habitLogsQuery.data, toggleTodo.mutate, toggleHabitLog.mutate]);
 
   useEffect(() => {
     if (!widgetsSupported) return;
@@ -64,18 +68,18 @@ export function WidgetSync() {
       try {
         loadWidgetsSync()({
           colorScheme,
-          todos: todosQuery.data ?? [],
-          events: eventsQuery.data ?? [],
-          notes: notesQuery.data ?? [],
-          habits: habitsQuery.data ?? [],
-          habitLogs: habitLogsQuery.data ?? new Map(),
-          transactions: transactionsQuery.data ?? [],
+          todos: todosQuery.data,
+          events: eventsQuery.data,
+          notes: notesQuery.data,
+          habits: habitsQuery.data,
+          habitLogs: habitLogsQuery.data,
+          transactions: transactionsQuery.data,
           monthlyBudget: budget,
         });
       } catch {
         // 위젯 동기화 중 오류가 나도 앱에는 영향을 주지 않는다.
       }
-    }, 600);
+    }, 400);
     return () => clearTimeout(timer);
   }, [
     colorScheme,
@@ -95,12 +99,12 @@ export function WidgetSync() {
       try {
         loadWidgetsSync()({
           colorScheme,
-          todos: todosQuery.data ?? [],
-          events: eventsQuery.data ?? [],
-          notes: notesQuery.data ?? [],
-          habits: habitsQuery.data ?? [],
-          habitLogs: habitLogsQuery.data ?? new Map(),
-          transactions: transactionsQuery.data ?? [],
+          todos: todosQuery.data,
+          events: eventsQuery.data,
+          notes: notesQuery.data,
+          habits: habitsQuery.data,
+          habitLogs: habitLogsQuery.data,
+          transactions: transactionsQuery.data,
           monthlyBudget: budget,
         });
       } catch {
@@ -131,7 +135,7 @@ export function WidgetSync() {
           const id = target.slice('toggle-todo:'.length);
           const todo = latestRef.current.todos.find((t) => t.id === id);
           if (todo) {
-            toggleTodo.mutate(todo);
+            latestRef.current.toggleTodoMutate(todo);
           }
           return;
         }
@@ -140,7 +144,7 @@ export function WidgetSync() {
           const habitId = target.slice('toggle-habit:'.length);
           const currentToday = todayISO();
           const done = latestRef.current.habitLogs.get(habitId)?.has(currentToday) ?? false;
-          toggleHabitLog.mutate({ habitId, date: currentToday, done });
+          latestRef.current.toggleHabitLogMutate({ habitId, date: currentToday, done });
           return;
         }
 
@@ -156,7 +160,7 @@ export function WidgetSync() {
       // Expo Go 등 위젯 이벤트가 없는 환경에서는 무시한다.
     }
     return () => sub?.remove();
-  }, [toggleTodo, toggleHabitLog]);
+  }, []);
 
   return null;
 }

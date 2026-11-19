@@ -46,10 +46,11 @@ function TodoWidgetLayout(props: TodoWidgetProps, environment: WidgetEnvironment
     const nextItems = props.items.map((item) =>
       item.id === id ? { ...item, done: !item.done } : item,
     );
-    const nextPending = nextItems.filter((item) => !item.done).length;
+    const toggled = nextItems.find((item) => item.id === id);
+    const delta = toggled ? (toggled.done ? -1 : 1) : 0;
     return {
       ...props,
-      pendingCount: nextPending,
+      pendingCount: Math.max(0, props.pendingCount + delta),
       items: nextItems,
     } as unknown as React.JSX.Element;
   }
