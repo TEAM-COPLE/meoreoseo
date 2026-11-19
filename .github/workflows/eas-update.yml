@@ -12,9 +12,11 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
+          cache: npm
       - run: npm ci
       - name: Run EAS Update
         env:
           EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
-        run: npx eas-cli@latest update --channel preview --environment preview --message "${{ github.event.head_commit.message || 'Manual preview update' }}" --non-interactive
+          UPDATE_MESSAGE: ${{ github.event.head_commit.message || 'Manual preview update' }}
+        run: npx eas-cli@latest update --channel preview --environment preview --message "$UPDATE_MESSAGE" --non-interactive
