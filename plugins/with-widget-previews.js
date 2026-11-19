@@ -348,13 +348,6 @@ module.exports = function withWidgetPreviews(config) {
         fs.writeFileSync(path.join(drawableDir, fileName), content);
       }
 
-      const packageName = modConfig.android?.package || 'com.meoreoseo.app';
-      const javaDir = path.join(
-        modConfig.modRequest.platformProjectRoot,
-        'app/src/main/java',
-        ...packageName.split('.'),
-      );
-
       for (const [widgetName, layoutXml] of Object.entries(PREVIEW_LAYOUTS)) {
         const snake = toAndroidResourceName(widgetName);
         const previewLayoutName = `widget_preview_${snake}`;
@@ -370,44 +363,6 @@ module.exports = function withWidgetPreviews(config) {
             );
             fs.writeFileSync(infoPath, infoXml);
           }
-        }
-
-        // open:/... 버튼 탭 시 앱이 백그라운드/종료 상태여도 딥링크로 포그라운드 실행되도록 Provider 를 보강한다.
-        const providerPath = path.join(javaDir, `${widgetName}Provider.kt`);
-        if (fs.existsSync(providerPath)) {
-          const providerSource = `package ${packageName}
-
-import android.content.Context
-import android.content.Intent
-import android.net.Uri
-import expo.modules.widgets.ExpoWidgetsAppWidgetProvider
-
-class ${widgetName}Provider : ExpoWidgetsAppWidgetProvider("${widgetName}") {
-  override fun onReceive(context: Context, intent: Intent) {
-    if (intent.action == "expo.modules.widgets.ACTION_WIDGET_INTERACTION") {
-      val target = intent.getStringExtra("expo.modules.widgets.extra.TARGET")
-      if (target != null && target.startsWith("open:")) {
-        val route = target.removePrefix("open:").trimStart('/')
-        val launchIntent = Intent(Intent.ACTION_VIEW, Uri.parse("meoreoseo://\$route")).apply {
-          setPackage(context.packageName)
-          addFlags(
-            Intent.FLAG_ACTIVITY_NEW_TASK or
-              Intent.FLAG_ACTIVITY_CLEAR_TOP or
-              Intent.FLAG_ACTIVITY_SINGLE_TOP
-          )
-        }
-        try {
-          context.startActivity(launchIntent)
-        } catch (_: Throwable) {
-        }
-        return
-      }
-    }
-    super.onReceive(context, intent)
-  }
-}
-`;
-          fs.writeFileSync(providerPath, providerSource);
         }
       }
 
