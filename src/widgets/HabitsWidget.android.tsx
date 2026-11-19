@@ -40,22 +40,6 @@ function HabitsWidgetLayout(props: HabitsWidgetProps, environment: WidgetEnviron
         warm: '#D9820B',
       };
 
-  const target = (environment as { target?: string }).target;
-  if (target && target.startsWith('toggle-habit:')) {
-    const id = target.slice('toggle-habit:'.length);
-    const nextItems = props.items.map((item) => {
-      if (item.id !== id) return item;
-      const nextDone = !item.done;
-      const nextStreak = nextDone ? item.streak + 1 : Math.max(0, item.streak - 1);
-      return { ...item, done: nextDone, streak: nextStreak };
-    });
-    return {
-      ...props,
-      doneCount: nextItems.filter((item) => item.done).length,
-      items: nextItems,
-    } as unknown as React.JSX.Element;
-  }
-
   return (
     <Column modifiers={[fillMaxSize(), background(c.bg), cornerRadius(18), paddingAll(14)]}>
       <Box modifiers={[fillMaxWidth()]}>
@@ -85,9 +69,11 @@ function HabitsWidgetLayout(props: HabitsWidgetProps, environment: WidgetEnviron
             colors={{ containerColor: c.tintSoft, contentColor: c.tint }}
             contentPadding={{ start: 9, top: 4, end: 9, bottom: 4 }}
             modifiers={[cornerRadius(99)]}>
-            <Text color={c.tint} style={{ fontSize: 11, fontWeight: '700' }}>
-              + 추가
-            </Text>
+            <Box contentAlignment="center">
+              <Text color={c.tint} style={{ fontSize: 11, fontWeight: '700' }}>
+                + 추가
+              </Text>
+            </Box>
           </Button>
         </Box>
       </Box>
@@ -100,9 +86,11 @@ function HabitsWidgetLayout(props: HabitsWidgetProps, environment: WidgetEnviron
           colors={{ containerColor: c.surface, contentColor: c.textSecondary }}
           contentPadding={{ start: 12, top: 12, end: 12, bottom: 12 }}
           modifiers={[fillMaxSize(), cornerRadius(12)]}>
-          <Text color={c.textSecondary} style={{ fontSize: 13, fontWeight: '500' }}>
-            등록된 습관이 없어요 · 눌러서 추가
-          </Text>
+          <Box contentAlignment="center" modifiers={[fillMaxSize()]}>
+            <Text color={c.textSecondary} style={{ fontSize: 13, fontWeight: '500' }}>
+              등록된 습관이 없어요 · 눌러서 추가
+            </Text>
+          </Box>
         </Button>
       ) : (
         <Column modifiers={[fillMaxWidth()]}>
@@ -110,7 +98,25 @@ function HabitsWidgetLayout(props: HabitsWidgetProps, environment: WidgetEnviron
             <Column key={item.id} modifiers={[fillMaxWidth()]}>
               {idx > 0 ? <Spacer modifiers={[height(6)]} /> : null}
               <Button
-                {...({ target: `toggle-habit:${item.id}` } as object)}
+                {...({
+                  target: `toggle-habit:${item.id}`,
+                  onClick: () => {
+                    const nextItems = props.items.map((h) => {
+                      if (h.id !== item.id) return h;
+                      const nextDone = !h.done;
+                      return {
+                        ...h,
+                        done: nextDone,
+                        streak: nextDone ? h.streak + 1 : Math.max(0, h.streak - 1),
+                      };
+                    });
+                    const delta = item.done ? -1 : 1;
+                    return {
+                      doneCount: Math.max(0, props.doneCount + delta),
+                      items: nextItems,
+                    };
+                  },
+                } as object)}
                 colors={{ containerColor: c.surface, contentColor: c.text }}
                 contentPadding={{ start: 10, top: 8, end: 10, bottom: 8 }}
                 modifiers={[fillMaxWidth(), cornerRadius(10)]}>

@@ -49,18 +49,24 @@ export default function HabitsScreen() {
   const [editing, setEditing] = useState<Habit | 'new' | null>(null);
   const [deleteError, setDeleteError] = useState<string | null>(null);
 
-  const activeEditing: Habit | 'new' | null =
-    editing ??
-    (add
-      ? 'new'
-      : editId
-        ? ((habits.data ?? []).find((h) => h.id === editId) ?? null)
-        : null);
+  const paramKey = add || editId ? `${add ?? ''}|${editId ?? ''}` : '';
+  const [dismissedParamKey, setDismissedParamKey] = useState('');
+  const paramEditing: Habit | 'new' | null =
+    paramKey && paramKey !== dismissedParamKey
+      ? add
+        ? 'new'
+        : editId
+          ? ((habits.data ?? []).find((h) => h.id === editId) ?? null)
+          : null
+      : null;
+
+  const activeEditing: Habit | 'new' | null = editing ?? paramEditing;
 
   function closeForm() {
     setEditing(null);
-    if (add || editId) {
-      router.setParams({ add: undefined, editId: undefined });
+    if (paramKey) {
+      setDismissedParamKey(paramKey);
+      router.setParams({ add: '', editId: '' });
     }
   }
 

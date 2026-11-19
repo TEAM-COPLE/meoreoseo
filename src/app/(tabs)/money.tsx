@@ -129,18 +129,24 @@ export default function MoneyScreen() {
     }
   }
 
-  const activeEditing: Transaction | 'new' | null =
-    editing ??
-    (isMoneyRoute && add
-      ? 'new'
-      : isMoneyRoute && editId
-        ? ((transactions.data ?? []).find((tx) => tx.id === editId) ?? null)
-        : null);
+  const paramKey = isMoneyRoute && (add || editId) ? `${add ?? ''}|${editId ?? ''}` : '';
+  const [dismissedParamKey, setDismissedParamKey] = useState('');
+  const paramEditing: Transaction | 'new' | null =
+    paramKey && paramKey !== dismissedParamKey
+      ? add
+        ? 'new'
+        : editId
+          ? ((transactions.data ?? []).find((tx) => tx.id === editId) ?? null)
+          : null
+      : null;
+
+  const activeEditing: Transaction | 'new' | null = editing ?? paramEditing;
 
   function closeForm() {
     setEditing(null);
-    if (add || editId) {
-      router.setParams({ add: undefined, editId: undefined });
+    if (paramKey) {
+      setDismissedParamKey(paramKey);
+      router.setParams({ add: '', editId: '' });
     }
   }
 
