@@ -1,6 +1,7 @@
 import { router } from 'expo-router';
-import { useEffect, useState, type PropsWithChildren, type ReactNode, type Ref } from 'react';
+import { useEffect, useRef, useState, type PropsWithChildren, type ReactNode, type Ref } from 'react';
 import {
+  Animated,
   Modal,
   Platform,
   Pressable,
@@ -75,6 +76,66 @@ export function Screen({
   const insets = useSafeAreaInsets();
   const bottomInset = onBack ? Spacing.four : BottomTabInset + Spacing.four;
   const maxWidth = wide && Platform.OS === 'web' && width >= 960 ? 1080 : MaxContentWidth;
+  const isNative = Platform.OS !== 'web';
+
+  // 모바일 전용 커스텀 플로팅 스크롤바 상태
+  const [viewportHeight, setViewportHeight] = useState(0);
+  const [contentHeight, setContentHeight] = useState(0);
+  const [thumbTranslateY] = useState(() => new Animated.Value(0));
+  const [scrollbarOpacity] = useState(() => new Animated.Value(0));
+  const hideTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const trackTop = insets.top + Spacing.two;
+  const trackBottom = insets.bottom + bottomInset + (overlay ? 76 : 0);
+  const trackHeight = Math.max(0, viewportHeight - trackTop - trackBottom);
+  const scrollableDistance = Math.max(0, contentHeight - viewportHeight);
+  const showCustomScrollbar = isNative && scrollableDistance > 24 && trackHeight > 48;
+  const thumbHeight = showCustomScrollbar
+    ? Math.max(32, Math.min(110, (viewportHeight / contentHeight) * trackHeight))
+    : 0;
+  const maxThumbOffset = Math.max(0, trackHeight - thumbHeight);
+
+  useEffect(() => {
+    return () => {
+      if (hideTimerRef.current) clearTimeout(hideTimerRef.current);
+    };
+  }, []);
+
+  function revealScrollbar() {
+    if (!showCustomScrollbar) return;
+    if (hideTimerRef.current) clearTimeout(hideTimerRef.current);
+    Animated.timing(scrollbarOpacity, {
+      toValue: 1,
+      duration: 120,
+      useNativeDriver: true,
+    }).start();
+    hideTimerRef.current = setTimeout(() => {
+      Animated.timing(scrollbarOpacity, {
+        toValue: 0,
+        duration: 380,
+        useNativeDriver: true,
+      }).start();
+    }, 750);
+  }
+
+  function handleInternalScroll(event: NativeSyntheticEvent<NativeScrollEvent>) {
+    onScroll?.(event);
+    if (!showCustomScrollbar) return;
+    const y = event.nativeEvent.contentOffset.y;
+    const ratio = scrollableDistance > 0 ? Math.min(1, Math.max(0, y / scrollableDistance)) : 0;
+    thumbTranslateY.setValue(ratio * maxThumbOffset);
+    revealScrollbar();
+  }
+
+  function handleInternalContentSizeChange(w: number, h: number) {
+    onContentSizeChange?.(w, h);
+    if (isNative) setContentHeight(h);
+  }
+
+  function handleInternalLayout(event: LayoutChangeEvent) {
+    onScrollLayout?.(event);
+    if (isNative) setViewportHeight(event.nativeEvent.layout.height);
+  }
 
   useEffect(() => {
     if (scrollEnabled) return;
@@ -97,10 +158,11 @@ export function Screen({
       <ScrollView
         ref={scrollRef}
         scrollEnabled={scrollEnabled}
-        onScroll={onScroll}
-        scrollEventThrottle={onScroll ? 16 : undefined}
-        onContentSizeChange={onContentSizeChange}
-        onLayout={onScrollLayout}
+        showsVerticalScrollIndicator={!isNative}
+        onScroll={isNative || onScroll ? handleInternalScroll : undefined}
+        scrollEventThrottle={isNative || onScroll ? 16 : undefined}
+        onContentSizeChange={handleInternalContentSizeChange}
+        onLayout={handleInternalLayout}
         keyboardShouldPersistTaps="handled"
         refreshControl={
           onRefresh ? (
@@ -172,6 +234,30 @@ export function Screen({
 
         {children}
       </ScrollView>
+
+      {showCustomScrollbar ? (
+        <Animated.View
+          pointerEvents="none"
+          style={[
+            styles.scrollbarTrack,
+            {
+              top: trackTop,
+              bottom: trackBottom,
+              opacity: scrollbarOpacity,
+            },
+          ]}>
+          <Animated.View
+            style={[
+              styles.scrollbarThumb,
+              {
+                height: thumbHeight,
+                backgroundColor: theme.tint,
+                transform: [{ translateY: thumbTranslateY }],
+              },
+            ]}
+          />
+        </Animated.View>
+      ) : null}
 
       {overlay ? (
         <View
@@ -392,6 +478,17 @@ export function Card({
 const styles = StyleSheet.create({
   root: {
     flex: 1,
+  },
+  scrollbarTrack: {
+    position: 'absolute',
+    right: 4,
+    width: 4,
+    borderRadius: Radius.full,
+  },
+  scrollbarThumb: {
+    width: 4,
+    borderRadius: Radius.full,
+    opacity: 0.55,
   },
   content: {
     width: '100%',
