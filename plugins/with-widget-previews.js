@@ -94,7 +94,7 @@ const PREVIEW_LAYOUTS = {
     android:layout_height="wrap_content"
     android:gravity="center_vertical"
     android:orientation="horizontal">
-    <View android:layout_width="8dp" android:layout_height="8dp" android:background="@drawable/widget_preview_dot_tint" />
+    <ImageView android:layout_width="8dp" android:layout_height="8dp" android:background="@drawable/widget_preview_dot_tint" />
     <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginStart="6dp" android:text="할 일" android:textColor="@color/widget_text" android:textSize="15sp" android:textStyle="bold" />
     <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginStart="6dp" android:background="@drawable/widget_preview_tint_pill" android:paddingHorizontal="7dp" android:paddingVertical="2dp" android:text="3개 남음" android:textColor="@color/widget_tint" android:textSize="11sp" android:textStyle="bold" />
   </LinearLayout>
@@ -120,7 +120,7 @@ const PREVIEW_LAYOUTS = {
   android:padding="14dp">
 
   <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:gravity="center_vertical" android:orientation="horizontal">
-    <View android:layout_width="8dp" android:layout_height="8dp" android:background="@drawable/widget_preview_dot_warm" />
+    <ImageView android:layout_width="8dp" android:layout_height="8dp" android:background="@drawable/widget_preview_dot_warm" />
     <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginStart="6dp" android:text="일정" android:textColor="@color/widget_text" android:textSize="15sp" android:textStyle="bold" />
     <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginStart="6dp" android:background="@drawable/widget_preview_tint_pill" android:paddingHorizontal="7dp" android:paddingVertical="2dp" android:text="2건" android:textColor="@color/widget_tint" android:textSize="11sp" android:textStyle="bold" />
   </LinearLayout>
@@ -145,7 +145,7 @@ const PREVIEW_LAYOUTS = {
   android:padding="14dp">
 
   <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:gravity="center_vertical" android:orientation="horizontal">
-    <View android:layout_width="8dp" android:layout_height="8dp" android:background="@drawable/widget_preview_dot_tint" />
+    <ImageView android:layout_width="8dp" android:layout_height="8dp" android:background="@drawable/widget_preview_dot_tint" />
     <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginStart="6dp" android:text="메모" android:textColor="@color/widget_text" android:textSize="15sp" android:textStyle="bold" />
     <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginStart="6dp" android:background="@drawable/widget_preview_tint_pill" android:paddingHorizontal="7dp" android:paddingVertical="2dp" android:text="2개" android:textColor="@color/widget_tint" android:textSize="11sp" android:textStyle="bold" />
   </LinearLayout>
@@ -170,7 +170,7 @@ const PREVIEW_LAYOUTS = {
   android:padding="14dp">
 
   <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:gravity="center_vertical" android:orientation="horizontal">
-    <View android:layout_width="8dp" android:layout_height="8dp" android:background="@drawable/widget_preview_dot_success" />
+    <ImageView android:layout_width="8dp" android:layout_height="8dp" android:background="@drawable/widget_preview_dot_success" />
     <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginStart="6dp" android:text="습관" android:textColor="@color/widget_text" android:textSize="15sp" android:textStyle="bold" />
     <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginStart="6dp" android:background="@drawable/widget_preview_tint_pill" android:paddingHorizontal="7dp" android:paddingVertical="2dp" android:text="2/3" android:textColor="@color/widget_tint" android:textSize="11sp" android:textStyle="bold" />
   </LinearLayout>
@@ -197,7 +197,7 @@ const PREVIEW_LAYOUTS = {
   android:padding="14dp">
 
   <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:gravity="center_vertical" android:orientation="horizontal">
-    <View android:layout_width="8dp" android:layout_height="8dp" android:background="@drawable/widget_preview_dot_tint" />
+    <ImageView android:layout_width="8dp" android:layout_height="8dp" android:background="@drawable/widget_preview_dot_tint" />
     <TextView android:layout_width="0dp" android:layout_height="wrap_content" android:layout_marginStart="6dp" android:layout_weight="1" android:text="이번 달 가계부" android:textColor="@color/widget_text" android:textSize="15sp" android:textStyle="bold" />
     <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:background="@drawable/widget_preview_tint_pill" android:paddingHorizontal="7dp" android:paddingVertical="2dp" android:text="오늘 14,500원" android:textColor="@color/widget_tint" android:textSize="11sp" android:textStyle="bold" />
   </LinearLayout>
@@ -225,7 +225,7 @@ const PREVIEW_LAYOUTS = {
   android:padding="14dp">
 
   <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:gravity="center_vertical" android:orientation="horizontal">
-    <View android:layout_width="8dp" android:layout_height="8dp" android:background="@drawable/widget_preview_dot_tint" />
+    <ImageView android:layout_width="8dp" android:layout_height="8dp" android:background="@drawable/widget_preview_dot_tint" />
     <TextView android:layout_width="0dp" android:layout_height="wrap_content" android:layout_marginStart="6dp" android:layout_weight="1" android:text="멀어서 · 오늘" android:textColor="@color/widget_text" android:textSize="15sp" android:textStyle="bold" />
     <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:background="@drawable/widget_preview_tint_pill" android:paddingHorizontal="7dp" android:paddingVertical="2dp" android:text="할 일 2 · 일정 2" android:textColor="@color/widget_tint" android:textSize="10sp" android:textStyle="bold" />
   </LinearLayout>
