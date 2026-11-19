@@ -248,7 +248,7 @@ export function AppLoadingScreen({ statusText }: { statusText?: string }) {
   const insets = useSafeAreaInsets();
   const isDark = resolvedScheme === 'dark';
 
-  const arcColor = isDark ? 'rgba(155, 138, 251, 0.11)' : 'rgba(99, 84, 234, 0.08)';
+  const arcColor = isDark ? 'rgba(255, 255, 255, 0.08)' : 'rgba(17, 17, 20, 0.07)';
   const cardBorder = theme.border;
 
   return (

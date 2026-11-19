@@ -354,9 +354,9 @@ export default function AppTabs() {
           style={[
             styles.dock,
             {
-              backgroundColor: colors.backgroundElement,
+              backgroundColor: scheme === "dark" ? "#0F0F12" : colors.backgroundElement,
               borderColor: colors.border,
-              shadowColor: scheme === "dark" ? "#000" : "#171626",
+              shadowColor: scheme === "dark" ? "#000000" : "#111114",
             },
           ]}
         >
@@ -364,7 +364,11 @@ export default function AppTabs() {
             <Animated.View
               style={[
                 styles.activePill,
-                { backgroundColor: colors.tintSoft },
+                {
+                  backgroundColor: scheme === "dark" ? "#1E1E24" : colors.tintSoft,
+                  borderColor: scheme === "dark" ? "#2C2C34" : "transparent",
+                  borderWidth: scheme === "dark" ? 1 : 0,
+                },
                 indicatorAnimatedStyle,
               ]}
             />
@@ -372,6 +376,7 @@ export default function AppTabs() {
 
           {TABS.map((tab, index) => {
             const selected = index === activeIndex;
+            const activeColor = scheme === "dark" ? "#FFFFFF" : colors.tint;
             return (
               <Pressable
                 key={tab.path}
@@ -390,18 +395,21 @@ export default function AppTabs() {
                     android: tab.md as never,
                   }}
                   size={20}
-                  tintColor={selected ? colors.tint : colors.textSecondary}
+                  tintColor={selected ? activeColor : colors.textSecondary}
                 />
                 <ThemedText
                   type="small"
                   style={[
                     styles.tabLabel,
-                    { color: selected ? colors.tint : colors.textSecondary },
+                    { color: selected ? activeColor : colors.textSecondary },
                     selected && styles.tabLabelSelected,
                   ]}
                 >
                   {tab.label}
                 </ThemedText>
+                {selected ? (
+                  <View style={[styles.activeDot, { backgroundColor: colors.tint }]} />
+                ) : null}
               </Pressable>
             );
           })}
@@ -468,13 +476,13 @@ const styles = StyleSheet.create({
     height: DOCK_HEIGHT,
     padding: DOCK_PADDING,
     borderRadius: Radius.full,
-    borderWidth: StyleSheet.hairlineWidth,
+    borderWidth: 1,
     flexDirection: "row",
     alignItems: "center",
     shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.12,
-    shadowRadius: 18,
-    elevation: 8,
+    shadowOpacity: 0.24,
+    shadowRadius: 20,
+    elevation: 10,
   },
   pillClip: {
     position: "absolute",
@@ -494,7 +502,7 @@ const styles = StyleSheet.create({
     height: "100%",
     alignItems: "center",
     justifyContent: "center",
-    gap: 3,
+    gap: 2,
   },
   tabPressed: {
     opacity: 0.7,
@@ -504,6 +512,12 @@ const styles = StyleSheet.create({
     lineHeight: 13,
   },
   tabLabelSelected: {
-    fontWeight: "600",
+    fontWeight: "700",
+  },
+  activeDot: {
+    width: 4,
+    height: 4,
+    borderRadius: 999,
+    marginTop: 1,
   },
 });

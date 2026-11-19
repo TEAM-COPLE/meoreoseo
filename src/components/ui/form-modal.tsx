@@ -3,7 +3,7 @@ import { KeyboardAvoidingView, Modal, ScrollView, StyleSheet, View } from 'react
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { ThemedText } from '@/components/themed-text';
-import { Radius, Spacing } from '@/constants/theme';
+import { Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 
 import { Button } from './button';
@@ -53,7 +53,10 @@ export function FormModal({
           ]}>
           <View
             accessibilityViewIsModal
-            style={[styles.card, { backgroundColor: theme.background, borderColor: theme.border }]}>
+            style={[
+              styles.card,
+              { backgroundColor: theme.backgroundElement, borderColor: theme.border },
+            ]}>
             <ThemedText type="default" style={styles.title}>
               {title}
             </ThemedText>
@@ -95,14 +98,14 @@ const styles = StyleSheet.create({
     paddingHorizontal: Spacing.three,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    backgroundColor: 'rgba(0, 0, 0, 0.78)',
   },
   card: {
     width: '100%',
     maxWidth: 480,
     maxHeight: '100%',
-    borderRadius: Radius.large,
-    borderWidth: StyleSheet.hairlineWidth,
+    borderRadius: 18,
+    borderWidth: 1,
     padding: Spacing.three,
     gap: Spacing.three,
   },

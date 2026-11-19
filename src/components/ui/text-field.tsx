@@ -54,7 +54,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: Spacing.three - 4,
     paddingVertical: Spacing.two,
     borderRadius: Radius.medium,
-    borderWidth: StyleSheet.hairlineWidth,
+    borderWidth: 1,
     fontSize: 16,
   },
 });

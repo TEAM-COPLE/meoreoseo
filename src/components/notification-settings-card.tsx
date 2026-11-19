@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Linking, Modal, Pressable, StyleSheet, Switch, View } from 'react-native';
+import { Linking, Modal, Platform, Pressable, StyleSheet, Switch, View } from 'react-native';
 
 import { ThemedText } from '@/components/themed-text';
 import { Button } from '@/components/ui/button';
@@ -11,7 +11,7 @@ import {
   useNotificationSettings,
   useSaveNotificationSettings,
 } from '@/hooks/use-notification-settings';
-import { useTheme } from '@/hooks/use-theme';
+import { useColorScheme, useTheme } from '@/hooks/use-theme';
 import { notificationsSupported, requestNotificationPermission } from '@/lib/notifications';
 import { type NotificationSettings } from '@/lib/reminders';
 
@@ -185,6 +185,11 @@ function Row({
   onEditTime?: () => void;
 }) {
   const theme = useTheme();
+  const isDark = useColorScheme() === 'dark';
+  const onThumbColor = isDark ? '#FFFFFF' : '#111114';
+  const offThumbColor = isDark ? '#A1A1AA' : '#FFFFFF';
+  const onTrackColor = isDark ? '#52525B' : '#C8C8D2';
+  const webSwitchProps = Platform.OS === 'web' ? ({ activeThumbColor: onThumbColor } as Record<string, string>) : {};
 
   return (
     <View style={styles.rowWrap}>
@@ -199,7 +204,10 @@ function Row({
           accessibilityLabel={label}
           value={value}
           onValueChange={onChange}
-          trackColor={{ true: theme.tint, false: theme.border }}
+          trackColor={{ true: onTrackColor, false: theme.border }}
+          thumbColor={value ? onThumbColor : offThumbColor}
+          ios_backgroundColor={theme.border}
+          {...webSwitchProps}
         />
       </View>
       {value && timeText && onEditTime ? (

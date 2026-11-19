@@ -6,16 +6,16 @@
     ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, Liberation Mono, Courier New, monospace;
   --font-rounded: 'SF Pro Rounded', 'Apple SD Gothic Neo', 'Malgun Gothic', sans-serif;
   --font-serif: Georgia, 'Times New Roman', serif;
-  --scrollbar-thumb: rgba(99, 84, 234, 0.24);
-  --scrollbar-thumb-hover: rgba(99, 84, 234, 0.48);
-  --scrollbar-thumb-active: rgba(99, 84, 234, 0.68);
+  --scrollbar-thumb: rgba(17, 17, 20, 0.22);
+  --scrollbar-thumb-hover: rgba(17, 17, 20, 0.42);
+  --scrollbar-thumb-active: rgba(17, 17, 20, 0.62);
 }
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --scrollbar-thumb: rgba(155, 138, 251, 0.26);
-    --scrollbar-thumb-hover: rgba(155, 138, 251, 0.48);
-    --scrollbar-thumb-active: rgba(155, 138, 251, 0.7);
+    --scrollbar-thumb: rgba(255, 255, 255, 0.22);
+    --scrollbar-thumb-hover: rgba(255, 255, 255, 0.42);
+    --scrollbar-thumb-active: rgba(255, 255, 255, 0.62);
   }
 }
 
