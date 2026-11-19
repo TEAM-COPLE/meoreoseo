@@ -25,12 +25,12 @@ import type {
 
 export type WidgetSyncInput = {
   colorScheme: WidgetColorScheme;
-  todos: Todo[];
-  events: CalendarEvent[];
-  notes: Note[];
-  habits: Habit[];
-  habitLogs: Map<string, Set<string>>;
-  transactions: Transaction[];
+  todos?: Todo[];
+  events?: CalendarEvent[];
+  notes?: Note[];
+  habits?: Habit[];
+  habitLogs?: Map<string, Set<string>>;
+  transactions?: Transaction[];
   monthlyBudget: number | null;
 };
 
@@ -58,7 +58,7 @@ function notePreview(body: string): string {
 }
 
 export function buildTodoWidgetProps(input: WidgetSyncInput, today = todayISO()): TodoWidgetProps {
-  const activeTodos = input.todos.filter((t) => !isWaitingRepeat(t, today));
+  const activeTodos = (input.todos ?? []).filter((t) => !isWaitingRepeat(t, today));
   const pending = activeTodos.filter((t) => !t.done);
   const doneTodayCount = activeTodos.filter((t) => t.done).length;
   const visible = [...pending, ...activeTodos.filter((t) => t.done)].slice(0, 6);
@@ -82,7 +82,7 @@ export function buildTodoWidgetProps(input: WidgetSyncInput, today = todayISO())
 }
 
 export function buildEventsWidgetProps(input: WidgetSyncInput, today = todayISO()): EventsWidgetProps {
-  const todayEvents = input.events.filter((e) => e.event_date === today);
+  const todayEvents = (input.events ?? []).filter((e) => e.event_date === today);
   return {
     colorScheme: input.colorScheme,
     dateLabel: formatDate(today),
@@ -97,10 +97,11 @@ export function buildEventsWidgetProps(input: WidgetSyncInput, today = todayISO(
 }
 
 export function buildNotesWidgetProps(input: WidgetSyncInput, today = todayISO()): NotesWidgetProps {
+  const notes = input.notes ?? [];
   return {
     colorScheme: input.colorScheme,
-    totalCount: input.notes.length,
-    items: input.notes.slice(0, 4).map((n) => ({
+    totalCount: notes.length,
+    items: notes.slice(0, 4).map((n) => ({
       id: n.id,
       title: n.title.trim() || '제목 없음',
       preview: notePreview(n.body),
@@ -111,9 +112,11 @@ export function buildNotesWidgetProps(input: WidgetSyncInput, today = todayISO()
 }
 
 export function buildHabitsWidgetProps(input: WidgetSyncInput, today = todayISO()): HabitsWidgetProps {
+  const habits = input.habits ?? [];
+  const habitLogs = input.habitLogs ?? new Map<string, Set<string>>();
   let doneCount = 0;
-  const items = input.habits.slice(0, 5).map((h) => {
-    const dates = input.habitLogs.get(h.id);
+  const items = habits.slice(0, 5).map((h) => {
+    const dates = habitLogs.get(h.id);
     const done = dates?.has(today) ?? false;
     if (done) doneCount += 1;
     return {
@@ -124,15 +127,15 @@ export function buildHabitsWidgetProps(input: WidgetSyncInput, today = todayISO(
     };
   });
 
-  const totalDoneCount = input.habits.reduce(
-    (acc, h) => acc + (input.habitLogs.get(h.id)?.has(today) ? 1 : 0),
+  const totalDoneCount = habits.reduce(
+    (acc, h) => acc + (habitLogs.get(h.id)?.has(today) ? 1 : 0),
     0,
   );
 
   return {
     colorScheme: input.colorScheme,
     doneCount: totalDoneCount || doneCount,
-    totalCount: input.habits.length,
+    totalCount: habits.length,
     items,
   };
 }
@@ -143,7 +146,7 @@ export function buildMoneyWidgetProps(input: WidgetSyncInput, today = todayISO()
   let income = 0;
   let todayExpense = 0;
 
-  for (const tx of input.transactions) {
+  for (const tx of input.transactions ?? []) {
     if (tx.kind === 'expense') {
       expense += tx.amount;
       if (tx.occurred_on === today) todayExpense += tx.amount;
@@ -226,15 +229,37 @@ export function buildDashboardWidgetProps(input: WidgetSyncInput, today = todayI
 
 export function syncAllWidgets(input: WidgetSyncInput): void {
   const today = todayISO();
-  // 위젯 하나가 실패해도 나머지 위젯과 앱에는 영향을 주지 않도록 하나씩 따로 보호한다.
-  const jobs: [string, () => void][] = [
-    ['todo', () => TodoWidget.updateSnapshot(buildTodoWidgetProps(input, today))],
-    ['events', () => EventsWidget.updateSnapshot(buildEventsWidgetProps(input, today))],
-    ['notes', () => NotesWidget.updateSnapshot(buildNotesWidgetProps(input, today))],
-    ['habits', () => HabitsWidget.updateSnapshot(buildHabitsWidgetProps(input, today))],
-    ['money', () => MoneyWidget.updateSnapshot(buildMoneyWidgetProps(input, today))],
-    ['dashboard', () => DashboardWidget.updateSnapshot(buildDashboardWidgetProps(input, today))],
-  ];
+  // 로딩 전(undefined) 데이터로 기존 위젯 내용을 덮어쓰지 않고, 준비된 위젯만 개별 보호하며 갱신한다.
+  const jobs: [string, () => void][] = [];
+  if (input.todos !== undefined) {
+    jobs.push(['todo', () => TodoWidget.updateSnapshot(buildTodoWidgetProps(input, today))]);
+  }
+  if (input.events !== undefined) {
+    jobs.push(['events', () => EventsWidget.updateSnapshot(buildEventsWidgetProps(input, today))]);
+  }
+  if (input.notes !== undefined) {
+    jobs.push(['notes', () => NotesWidget.updateSnapshot(buildNotesWidgetProps(input, today))]);
+  }
+  if (input.habits !== undefined && input.habitLogs !== undefined) {
+    jobs.push(['habits', () => HabitsWidget.updateSnapshot(buildHabitsWidgetProps(input, today))]);
+  }
+  if (input.transactions !== undefined) {
+    jobs.push(['money', () => MoneyWidget.updateSnapshot(buildMoneyWidgetProps(input, today))]);
+  }
+  if (
+    input.todos !== undefined &&
+    input.events !== undefined &&
+    input.notes !== undefined &&
+    input.habits !== undefined &&
+    input.habitLogs !== undefined &&
+    input.transactions !== undefined
+  ) {
+    jobs.push([
+      'dashboard',
+      () => DashboardWidget.updateSnapshot(buildDashboardWidgetProps(input, today)),
+    ]);
+  }
+
   for (const [, run] of jobs) {
     try {
       run();

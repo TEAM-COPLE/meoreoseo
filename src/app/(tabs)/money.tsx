@@ -1,4 +1,4 @@
-import { router, useLocalSearchParams } from 'expo-router';
+import { router, useLocalSearchParams, usePathname } from 'expo-router';
 import { useDeferredValue, useMemo, useRef, useState } from 'react';
 import { Platform, Pressable, StyleSheet, View, type ViewStyle } from 'react-native';
 
@@ -69,6 +69,8 @@ function expenseByCategory(items: Transaction[]): { category: string; total: num
 }
 
 export default function MoneyScreen() {
+  const pathname = usePathname();
+  const isMoneyRoute = pathname === '/money';
   const { add, editId } = useLocalSearchParams<{ add?: string; editId?: string }>();
   const theme = useTheme();
   const [month, setMonth] = useState(() => yearMonthOf(todayISO()));
@@ -129,9 +131,9 @@ export default function MoneyScreen() {
 
   const activeEditing: Transaction | 'new' | null =
     editing ??
-    (add
+    (isMoneyRoute && add
       ? 'new'
-      : editId
+      : isMoneyRoute && editId
         ? ((transactions.data ?? []).find((tx) => tx.id === editId) ?? null)
         : null);
 

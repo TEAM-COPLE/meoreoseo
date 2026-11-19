@@ -1,4 +1,4 @@
-import { router, useLocalSearchParams } from 'expo-router';
+import { router, useLocalSearchParams, usePathname } from 'expo-router';
 import { useDeferredValue, useRef, useState } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 
@@ -52,6 +52,8 @@ const PRIORITY_FILTERS = [
 ] as const;
 
 export default function TodosScreen() {
+  const pathname = usePathname();
+  const isTodosRoute = pathname === '/todos';
   const { add, editId } = useLocalSearchParams<{ add?: string; editId?: string }>();
   const todos = useTodos();
   const toggle = useToggleTodo();
@@ -75,9 +77,9 @@ export default function TodosScreen() {
 
   const activeEditing: Todo | 'new' | null =
     editing ??
-    (add
+    (isTodosRoute && add
       ? 'new'
-      : editId
+      : isTodosRoute && editId
         ? ((todos.data ?? []).find((t) => t.id === editId) ?? null)
         : null);
 
