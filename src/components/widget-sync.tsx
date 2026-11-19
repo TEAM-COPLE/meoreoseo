@@ -1,7 +1,7 @@
 import { requireOptionalNativeModule } from 'expo';
 import { router, type Href } from 'expo-router';
 import { useEffect, useRef } from 'react';
-import { AppState, Platform } from 'react-native';
+import { AppState, Linking, Platform } from 'react-native';
 
 import { useMonthlyBudget } from '@/hooks/use-budget';
 import { useEvents } from '@/hooks/use-events';
@@ -145,8 +145,11 @@ export function WidgetSync() {
         }
 
         if (target.startsWith('open:')) {
-          const route = target.slice('open:'.length) as Href;
-          router.push(route);
+          const route = target.slice('open:'.length);
+          const deepLink = `meoreoseo://${route.replace(/^\/+/, '')}`;
+          Linking.openURL(deepLink).catch(() => {
+            router.push(route as Href);
+          });
         }
       });
     } catch {

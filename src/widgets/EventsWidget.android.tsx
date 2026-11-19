@@ -40,36 +40,39 @@ function EventsWidgetLayout(props: EventsWidgetProps, environment: WidgetEnviron
 
   return (
     <Column modifiers={[fillMaxSize(), background(c.bg), cornerRadius(18), paddingAll(14)]}>
-      <Row verticalAlignment="center" modifiers={[fillMaxWidth()]}>
-        <Button
-          {...({ target: 'open:/calendar' } as object)}
-          colors={{ containerColor: c.bg, contentColor: c.text }}
-          contentPadding={{ start: 0, top: 0, end: 0, bottom: 0 }}>
-          <Row verticalAlignment="center">
-            <Box modifiers={[size(8, 8), background(c.warm), cornerRadius(99)]} />
-            <Spacer modifiers={[width(6)]} />
-            <Text color={c.text} style={{ fontSize: 15, fontWeight: '700' }}>
-              일정
-            </Text>
-            <Spacer modifiers={[width(6)]} />
-            <Box modifiers={[background(c.tintSoft), cornerRadius(99), padding(7, 2, 7, 2)]}>
-              <Text color={c.tint} style={{ fontSize: 11, fontWeight: '600' }}>
-                {`${props.totalCount}건`}
+      <Box modifiers={[fillMaxWidth()]}>
+        <Box contentAlignment="centerStart" modifiers={[fillMaxWidth()]}>
+          <Button
+            {...({ target: 'open:/calendar' } as object)}
+            colors={{ containerColor: c.bg, contentColor: c.text }}
+            contentPadding={{ start: 0, top: 0, end: 0, bottom: 0 }}>
+            <Row verticalAlignment="center">
+              <Box modifiers={[size(8, 8), background(c.warm), cornerRadius(99)]} />
+              <Spacer modifiers={[width(6)]} />
+              <Text color={c.text} style={{ fontSize: 15, fontWeight: '700' }}>
+                일정
               </Text>
-            </Box>
-          </Row>
-        </Button>
-        <Spacer />
-        <Button
-          {...({ target: 'open:/calendar?add=1' } as object)}
-          colors={{ containerColor: c.tintSoft, contentColor: c.tint }}
-          contentPadding={{ start: 9, top: 4, end: 9, bottom: 4 }}
-          modifiers={[cornerRadius(99)]}>
-          <Text color={c.tint} style={{ fontSize: 11, fontWeight: '700' }}>
-            + 추가
-          </Text>
-        </Button>
-      </Row>
+              <Spacer modifiers={[width(6)]} />
+              <Box modifiers={[background(c.tintSoft), cornerRadius(99), padding(7, 2, 7, 2)]}>
+                <Text color={c.tint} style={{ fontSize: 11, fontWeight: '600' }}>
+                  {`${props.totalCount}건`}
+                </Text>
+              </Box>
+            </Row>
+          </Button>
+        </Box>
+        <Box contentAlignment="centerEnd" modifiers={[fillMaxWidth()]}>
+          <Button
+            {...({ target: 'open:/calendar?add=1' } as object)}
+            colors={{ containerColor: c.tintSoft, contentColor: c.tint }}
+            contentPadding={{ start: 9, top: 4, end: 9, bottom: 4 }}
+            modifiers={[cornerRadius(99)]}>
+            <Text color={c.tint} style={{ fontSize: 11, fontWeight: '700' }}>
+              + 추가
+            </Text>
+          </Button>
+        </Box>
+      </Box>
 
       <Spacer modifiers={[height(10)]} />
 

@@ -58,36 +58,39 @@ function HabitsWidgetLayout(props: HabitsWidgetProps, environment: WidgetEnviron
 
   return (
     <Column modifiers={[fillMaxSize(), background(c.bg), cornerRadius(18), paddingAll(14)]}>
-      <Row verticalAlignment="center" modifiers={[fillMaxWidth()]}>
-        <Button
-          {...({ target: 'open:/habits' } as object)}
-          colors={{ containerColor: c.bg, contentColor: c.text }}
-          contentPadding={{ start: 0, top: 0, end: 0, bottom: 0 }}>
-          <Row verticalAlignment="center">
-            <Box modifiers={[size(8, 8), background(c.success), cornerRadius(99)]} />
-            <Spacer modifiers={[width(6)]} />
-            <Text color={c.text} style={{ fontSize: 15, fontWeight: '700' }}>
-              습관
-            </Text>
-            <Spacer modifiers={[width(6)]} />
-            <Box modifiers={[background(c.tintSoft), cornerRadius(99), padding(7, 2, 7, 2)]}>
-              <Text color={c.tint} style={{ fontSize: 11, fontWeight: '600' }}>
-                {`${props.doneCount}/${props.totalCount}`}
+      <Box modifiers={[fillMaxWidth()]}>
+        <Box contentAlignment="centerStart" modifiers={[fillMaxWidth()]}>
+          <Button
+            {...({ target: 'open:/habits' } as object)}
+            colors={{ containerColor: c.bg, contentColor: c.text }}
+            contentPadding={{ start: 0, top: 0, end: 0, bottom: 0 }}>
+            <Row verticalAlignment="center">
+              <Box modifiers={[size(8, 8), background(c.success), cornerRadius(99)]} />
+              <Spacer modifiers={[width(6)]} />
+              <Text color={c.text} style={{ fontSize: 15, fontWeight: '700' }}>
+                습관
               </Text>
-            </Box>
-          </Row>
-        </Button>
-        <Spacer />
-        <Button
-          {...({ target: 'open:/habits?add=1' } as object)}
-          colors={{ containerColor: c.tintSoft, contentColor: c.tint }}
-          contentPadding={{ start: 9, top: 4, end: 9, bottom: 4 }}
-          modifiers={[cornerRadius(99)]}>
-          <Text color={c.tint} style={{ fontSize: 11, fontWeight: '700' }}>
-            + 추가
-          </Text>
-        </Button>
-      </Row>
+              <Spacer modifiers={[width(6)]} />
+              <Box modifiers={[background(c.tintSoft), cornerRadius(99), padding(7, 2, 7, 2)]}>
+                <Text color={c.tint} style={{ fontSize: 11, fontWeight: '600' }}>
+                  {`${props.doneCount}/${props.totalCount}`}
+                </Text>
+              </Box>
+            </Row>
+          </Button>
+        </Box>
+        <Box contentAlignment="centerEnd" modifiers={[fillMaxWidth()]}>
+          <Button
+            {...({ target: 'open:/habits?add=1' } as object)}
+            colors={{ containerColor: c.tintSoft, contentColor: c.tint }}
+            contentPadding={{ start: 9, top: 4, end: 9, bottom: 4 }}
+            modifiers={[cornerRadius(99)]}>
+            <Text color={c.tint} style={{ fontSize: 11, fontWeight: '700' }}>
+              + 추가
+            </Text>
+          </Button>
+        </Box>
+      </Box>
 
       <Spacer modifiers={[height(10)]} />
 
@@ -111,39 +114,44 @@ function HabitsWidgetLayout(props: HabitsWidgetProps, environment: WidgetEnviron
                 colors={{ containerColor: c.surface, contentColor: c.text }}
                 contentPadding={{ start: 10, top: 8, end: 10, bottom: 8 }}
                 modifiers={[fillMaxWidth(), cornerRadius(10)]}>
-                <Row verticalAlignment="center" modifiers={[fillMaxWidth()]}>
-                  <Box
-                    contentAlignment="center"
-                    modifiers={[
-                      size(18, 18),
-                      background(item.done ? c.success : c.bg),
-                      cornerRadius(99),
-                    ]}>
-                    <Text
-                      color={item.done ? '#FFFFFF' : c.textSecondary}
-                      style={{ fontSize: 11, fontWeight: '700' }}>
-                      {item.done ? '✓' : ''}
-                    </Text>
+                <Box modifiers={[fillMaxWidth()]}>
+                  <Box contentAlignment="centerStart" modifiers={[fillMaxWidth(), padding(0, 0, item.streak > 0 ? 52 : 0, 0)]}>
+                    <Row verticalAlignment="center">
+                      <Box
+                        contentAlignment="center"
+                        modifiers={[
+                          size(18, 18),
+                          background(item.done ? c.success : c.bg),
+                          cornerRadius(99),
+                        ]}>
+                        <Text
+                          color={item.done ? '#FFFFFF' : c.textSecondary}
+                          style={{ fontSize: 11, fontWeight: '700' }}>
+                          {item.done ? '✓' : ''}
+                        </Text>
+                      </Box>
+                      <Spacer modifiers={[width(8)]} />
+                      <Text
+                        color={item.done ? c.textSecondary : c.text}
+                        maxLines={1}
+                        overflow="ellipsis"
+                        style={{
+                          fontSize: 13,
+                          fontWeight: '500',
+                          textDecoration: item.done ? 'lineThrough' : 'none',
+                        }}>
+                        {item.name}
+                      </Text>
+                    </Row>
                   </Box>
-                  <Spacer modifiers={[width(8)]} />
-                  <Text
-                    color={item.done ? c.textSecondary : c.text}
-                    maxLines={1}
-                    overflow="ellipsis"
-                    style={{
-                      fontSize: 13,
-                      fontWeight: '500',
-                      textDecoration: item.done ? 'lineThrough' : 'none',
-                    }}>
-                    {item.name}
-                  </Text>
-                  <Spacer />
                   {item.streak > 0 ? (
-                    <Text color={c.warm} style={{ fontSize: 11, fontWeight: '600' }}>
-                      {`🔥 ${item.streak}일`}
-                    </Text>
+                    <Box contentAlignment="centerEnd" modifiers={[fillMaxWidth()]}>
+                      <Text color={c.warm} style={{ fontSize: 11, fontWeight: '600' }}>
+                        {`🔥 ${item.streak}일`}
+                      </Text>
+                    </Box>
                   ) : null}
-                </Row>
+                </Box>
               </Button>
             </Column>
           ))}
