@@ -60,16 +60,23 @@ export function WidgetSync() {
 
   useEffect(() => {
     if (!widgetsSupported) return;
-    loadWidgetsSync()({
-      colorScheme,
-      todos: todosQuery.data ?? [],
-      events: eventsQuery.data ?? [],
-      notes: notesQuery.data ?? [],
-      habits: habitsQuery.data ?? [],
-      habitLogs: habitLogsQuery.data ?? new Map(),
-      transactions: transactionsQuery.data ?? [],
-      monthlyBudget: budget,
-    });
+    const timer = setTimeout(() => {
+      try {
+        loadWidgetsSync()({
+          colorScheme,
+          todos: todosQuery.data ?? [],
+          events: eventsQuery.data ?? [],
+          notes: notesQuery.data ?? [],
+          habits: habitsQuery.data ?? [],
+          habitLogs: habitLogsQuery.data ?? new Map(),
+          transactions: transactionsQuery.data ?? [],
+          monthlyBudget: budget,
+        });
+      } catch {
+        // 위젯 동기화 중 오류가 나도 앱에는 영향을 주지 않는다.
+      }
+    }, 600);
+    return () => clearTimeout(timer);
   }, [
     colorScheme,
     todosQuery.data,
@@ -85,16 +92,20 @@ export function WidgetSync() {
     if (!widgetsSupported) return;
     const appStateSub = AppState.addEventListener('change', (state) => {
       if (state !== 'active') return;
-      loadWidgetsSync()({
-        colorScheme,
-        todos: todosQuery.data ?? [],
-        events: eventsQuery.data ?? [],
-        notes: notesQuery.data ?? [],
-        habits: habitsQuery.data ?? [],
-        habitLogs: habitLogsQuery.data ?? new Map(),
-        transactions: transactionsQuery.data ?? [],
-        monthlyBudget: budget,
-      });
+      try {
+        loadWidgetsSync()({
+          colorScheme,
+          todos: todosQuery.data ?? [],
+          events: eventsQuery.data ?? [],
+          notes: notesQuery.data ?? [],
+          habits: habitsQuery.data ?? [],
+          habitLogs: habitLogsQuery.data ?? new Map(),
+          transactions: transactionsQuery.data ?? [],
+          monthlyBudget: budget,
+        });
+      } catch {
+        // 위젯 동기화 중 오류가 나도 앱에는 영향을 주지 않는다.
+      }
     });
     return () => appStateSub.remove();
   }, [
