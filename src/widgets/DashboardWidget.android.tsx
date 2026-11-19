@@ -225,7 +225,7 @@ function DashboardWidgetLayout(props: DashboardWidgetProps, environment: WidgetE
       <Row modifiers={[fillMaxWidth()]}>
         <Button
           {...({
-            target: props.latestNote ? `open:/note/${props.latestNote.id}` : 'open:/notes',
+            target: props.latestNote.id ? `open:/note/${props.latestNote.id}` : 'open:/notes',
           } as object)}
           colors={{ containerColor: c.surface, contentColor: c.text }}
           contentPadding={{ start: 10, top: 8, end: 10, bottom: 8 }}
@@ -236,11 +236,11 @@ function DashboardWidgetLayout(props: DashboardWidgetProps, environment: WidgetE
             </Text>
             <Spacer modifiers={[height(2)]} />
             <Text
-              color={props.latestNote ? c.text : c.textSecondary}
+              color={props.latestNote.id ? c.text : c.textSecondary}
               maxLines={1}
               overflow="ellipsis"
               style={{ fontSize: 11, fontWeight: '600' }}>
-              {props.latestNote
+              {props.latestNote.id
                 ? (props.latestNote.pinned ? `📌 ${props.latestNote.title}` : props.latestNote.title)
                 : '작성된 메모 없음'}
             </Text>

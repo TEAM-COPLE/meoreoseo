@@ -34,8 +34,8 @@ export type WidgetSyncInput = {
   monthlyBudget: number | null;
 };
 
-function shortDueLabel(dueDate: string | null, today: string): { label: string | null; isOverdue: boolean } {
-  if (!dueDate) return { label: null, isOverdue: false };
+function shortDueLabel(dueDate: string | null, today: string): { label: string; isOverdue: boolean } {
+  if (!dueDate) return { label: '', isOverdue: false };
   if (dueDate < today) return { label: '지남', isOverdue: true };
   if (dueDate === today) return { label: '오늘', isOverdue: false };
   const parts = dueDate.split('-');
@@ -152,8 +152,8 @@ export function buildMoneyWidgetProps(input: WidgetSyncInput, today = todayISO()
     }
   }
 
-  let budgetLabel: string | null = null;
-  let budgetProgress: number | null = null;
+  let budgetLabel = '';
+  let budgetProgress = -1;
   let isOverBudget = false;
 
   if (input.monthlyBudget && input.monthlyBudget > 0) {
@@ -217,7 +217,7 @@ export function buildDashboardWidgetProps(input: WidgetSyncInput, today = todayI
           preview: noteProps.items[0].preview,
           pinned: noteProps.items[0].pinned,
         }
-      : null,
+      : { id: '', title: '', preview: '', pinned: false },
     moneyMonthExpenseLabel: moneyProps.expenseLabel,
     moneyTodayExpenseLabel: moneyProps.todayExpenseLabel,
     moneyBudgetLabel: moneyProps.budgetLabel,
