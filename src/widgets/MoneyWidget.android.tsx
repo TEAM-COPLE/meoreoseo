@@ -113,7 +113,7 @@ function MoneyWidgetLayout(props: MoneyWidgetProps, environment: WidgetEnvironme
                 style={{ fontSize: 11, fontWeight: '600' }}>
                 {props.budgetLabel}
               </Text>
-              {props.budgetProgress !== null ? (
+              {props.budgetProgress >= 0 ? (
                 <Column modifiers={[fillMaxWidth()]}>
                   <Spacer modifiers={[height(4)]} />
                   <LinearProgressIndicator

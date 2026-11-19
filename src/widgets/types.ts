@@ -3,7 +3,7 @@ export type WidgetColorScheme = 'light' | 'dark';
 export type TodoWidgetItem = {
   id: string;
   title: string;
-  dueLabel: string | null;
+  dueLabel: string;
   isOverdue: boolean;
   done: boolean;
 };
@@ -64,8 +64,9 @@ export type MoneyWidgetProps = {
   expenseLabel: string;
   incomeLabel: string;
   todayExpenseLabel: string;
-  budgetLabel: string | null;
-  budgetProgress: number | null;
+  budgetLabel: string;
+  /** 0~1 범위, 예산 미설정 시 -1 (Android Kotlin 브리지가 null 을 허용하지 않음) */
+  budgetProgress: number;
   isOverBudget: boolean;
 };
 
@@ -79,10 +80,11 @@ export type DashboardWidgetProps = {
   habitDoneCount: number;
   habitTotalCount: number;
   habits: { id: string; name: string; done: boolean; streak: number }[];
-  latestNote: { id: string; title: string; preview: string; pinned: boolean } | null;
+  /** 메모가 없으면 id 가 빈 문자열('') */
+  latestNote: { id: string; title: string; preview: string; pinned: boolean };
   moneyMonthExpenseLabel: string;
   moneyTodayExpenseLabel: string;
-  moneyBudgetLabel: string | null;
+  moneyBudgetLabel: string;
 };
 
 /**
@@ -97,7 +99,7 @@ export const INITIAL_TODO_WIDGET_PROPS: TodoWidgetProps = {
   items: [
     { id: 'preview-1', title: '장보기 (우유, 계란)', dueLabel: '오늘', isOverdue: false, done: false },
     { id: 'preview-2', title: '회의 자료 정리하기', dueLabel: '오늘', isOverdue: false, done: false },
-    { id: 'preview-3', title: '운동 30분', dueLabel: null, isOverdue: false, done: true },
+    { id: 'preview-3', title: '운동 30분', dueLabel: '', isOverdue: false, done: true },
   ],
 };
 

@@ -229,7 +229,7 @@ function DashboardWidgetLayout(props: DashboardWidgetProps, environment: WidgetE
       <HStack spacing={6}>
         <Link
           destination={
-            props.latestNote ? `meoreoseo://note/${props.latestNote.id}` : 'meoreoseo://notes'
+            props.latestNote.id ? `meoreoseo://note/${props.latestNote.id}` : 'meoreoseo://notes'
           }>
           <VStack
             alignment="leading"
@@ -246,9 +246,9 @@ function DashboardWidgetLayout(props: DashboardWidgetProps, environment: WidgetE
             <Text
               modifiers={[
                 font({ size: 11, weight: 'semibold' }),
-                foregroundStyle(props.latestNote ? c.text : c.textSecondary),
+                foregroundStyle(props.latestNote.id ? c.text : c.textSecondary),
               ]}>
-              {props.latestNote
+              {props.latestNote.id
                 ? props.latestNote.pinned
                   ? `📌 ${props.latestNote.title}`
                   : props.latestNote.title
