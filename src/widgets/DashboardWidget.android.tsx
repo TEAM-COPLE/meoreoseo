@@ -77,26 +77,29 @@ function DashboardWidgetLayout(props: DashboardWidgetProps, environment: WidgetE
   return (
     <Column modifiers={[fillMaxSize(), background(c.bg), cornerRadius(18), paddingAll(14)]}>
       {/* 헤더 */}
-      <Row verticalAlignment="center" modifiers={[fillMaxWidth()]}>
-        <Button
-          {...({ target: 'open:/' } as object)}
-          colors={{ containerColor: c.bg, contentColor: c.text }}
-          contentPadding={{ start: 0, top: 0, end: 0, bottom: 0 }}>
-          <Row verticalAlignment="center">
-            <Box modifiers={[size(8, 8), background(c.tint), cornerRadius(99)]} />
-            <Spacer modifiers={[width(6)]} />
-            <Text color={c.text} style={{ fontSize: 15, fontWeight: '700' }}>
-              {`멀어서 · ${props.dateLabel}`}
-            </Text>
-          </Row>
-        </Button>
-        <Spacer />
-        <Box modifiers={[background(c.tintSoft), cornerRadius(99), padding(7, 2, 7, 2)]}>
-          <Text color={c.tint} style={{ fontSize: 10, fontWeight: '600' }}>
-            {`할 일 ${props.todoPendingCount} · 일정 ${props.eventCount}`}
-          </Text>
+      <Box modifiers={[fillMaxWidth()]}>
+        <Box contentAlignment="centerStart" modifiers={[fillMaxWidth()]}>
+          <Button
+            {...({ target: 'open:/' } as object)}
+            colors={{ containerColor: c.bg, contentColor: c.text }}
+            contentPadding={{ start: 0, top: 0, end: 0, bottom: 0 }}>
+            <Row verticalAlignment="center">
+              <Box modifiers={[size(8, 8), background(c.tint), cornerRadius(99)]} />
+              <Spacer modifiers={[width(6)]} />
+              <Text color={c.text} style={{ fontSize: 15, fontWeight: '700' }}>
+                {`멀어서 · ${props.dateLabel}`}
+              </Text>
+            </Row>
+          </Button>
         </Box>
-      </Row>
+        <Box contentAlignment="centerEnd" modifiers={[fillMaxWidth()]}>
+          <Box modifiers={[background(c.tintSoft), cornerRadius(99), padding(7, 2, 7, 2)]}>
+            <Text color={c.tint} style={{ fontSize: 10, fontWeight: '600' }}>
+              {`할 일 ${props.todoPendingCount} · 일정 ${props.eventCount}`}
+            </Text>
+          </Box>
+        </Box>
+      </Box>
 
       <Spacer modifiers={[height(8)]} />
 
@@ -152,15 +155,18 @@ function DashboardWidgetLayout(props: DashboardWidgetProps, environment: WidgetE
           colors={{ containerColor: c.surface, contentColor: c.tint }}
           contentPadding={{ start: 0, top: 0, end: 0, bottom: 0 }}
           modifiers={[fillMaxWidth()]}>
-          <Row verticalAlignment="center" modifiers={[fillMaxWidth()]}>
-            <Text color={c.tint} style={{ fontSize: 11, fontWeight: '700' }}>
-              할 일
-            </Text>
-            <Spacer />
-            <Text color={c.textSecondary} style={{ fontSize: 10, fontWeight: '500' }}>
-              {`${props.todoPendingCount}개 남음`}
-            </Text>
-          </Row>
+          <Box modifiers={[fillMaxWidth()]}>
+            <Box contentAlignment="centerStart" modifiers={[fillMaxWidth()]}>
+              <Text color={c.tint} style={{ fontSize: 11, fontWeight: '700' }}>
+                할 일
+              </Text>
+            </Box>
+            <Box contentAlignment="centerEnd" modifiers={[fillMaxWidth()]}>
+              <Text color={c.textSecondary} style={{ fontSize: 10, fontWeight: '500' }}>
+                {`${props.todoPendingCount}개 남음`}
+              </Text>
+            </Box>
+          </Box>
         </Button>
         <Spacer modifiers={[height(4)]} />
         {props.todos.length === 0 ? (
@@ -261,7 +267,7 @@ function DashboardWidgetLayout(props: DashboardWidgetProps, environment: WidgetE
 
       <Spacer modifiers={[height(6)]} />
 
-      {/* 메모 & 가계부 */}
+      {/* 메모 */}
       <Button
         {...({
           target: props.latestNote.id ? `open:/note/${props.latestNote.id}` : 'open:/notes',
@@ -290,24 +296,30 @@ function DashboardWidgetLayout(props: DashboardWidgetProps, environment: WidgetE
 
       <Spacer modifiers={[height(6)]} />
 
+      {/* 가계부 */}
       <Button
         {...({ target: 'open:/money' } as object)}
         colors={{ containerColor: c.surface, contentColor: c.text }}
         contentPadding={{ start: 10, top: 8, end: 10, bottom: 8 }}
         modifiers={[fillMaxWidth(), cornerRadius(10)]}>
-        <Row verticalAlignment="center" modifiers={[fillMaxWidth()]}>
-          <Text color={c.danger} style={{ fontSize: 11, fontWeight: '700' }}>
-            가계부
-          </Text>
-          <Spacer modifiers={[width(8)]} />
-          <Text color={c.text} style={{ fontSize: 12, fontWeight: '600' }}>
-            {`이번 달 ${props.moneyMonthExpenseLabel}`}
-          </Text>
-          <Spacer />
-          <Text color={c.textSecondary} style={{ fontSize: 11, fontWeight: '500' }}>
-            {`오늘 ${props.moneyTodayExpenseLabel}`}
-          </Text>
-        </Row>
+        <Box modifiers={[fillMaxWidth()]}>
+          <Box contentAlignment="centerStart" modifiers={[fillMaxWidth(), padding(0, 0, 88, 0)]}>
+            <Row verticalAlignment="center">
+              <Text color={c.danger} style={{ fontSize: 11, fontWeight: '700' }}>
+                가계부
+              </Text>
+              <Spacer modifiers={[width(8)]} />
+              <Text color={c.text} maxLines={1} overflow="ellipsis" style={{ fontSize: 12, fontWeight: '600' }}>
+                {`이번 달 ${props.moneyMonthExpenseLabel}`}
+              </Text>
+            </Row>
+          </Box>
+          <Box contentAlignment="centerEnd" modifiers={[fillMaxWidth()]}>
+            <Text color={c.textSecondary} style={{ fontSize: 11, fontWeight: '500' }}>
+              {`오늘 ${props.moneyTodayExpenseLabel}`}
+            </Text>
+          </Box>
+        </Box>
       </Button>
     </Column>
   );
