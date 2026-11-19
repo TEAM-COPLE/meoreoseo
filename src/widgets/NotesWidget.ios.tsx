@@ -47,27 +47,38 @@ function NotesWidgetLayout(props: NotesWidgetProps, environment: WidgetEnvironme
         containerBackground(c.bg, 'widget'),
         widgetURL('meoreoseo://notes'),
       ]}>
-      <Link destination="meoreoseo://notes">
-        <HStack spacing={6}>
-          <Text modifiers={[font({ size: 15, weight: 'bold' }), foregroundStyle(c.text)]}>
-            메모
-          </Text>
+      <HStack spacing={6}>
+        <Link destination="meoreoseo://notes">
+          <HStack spacing={6}>
+            <Text modifiers={[font({ size: 15, weight: 'bold' }), foregroundStyle(c.text)]}>
+              메모
+            </Text>
+            <Text
+              modifiers={[
+                font({ size: 11, weight: 'semibold' }),
+                foregroundStyle(c.tint),
+                padding({ horizontal: 7, vertical: 2 }),
+                background(c.tintSoft),
+                cornerRadius(99),
+              ]}>
+              {`${props.totalCount}개`}
+            </Text>
+          </HStack>
+        </Link>
+        <Spacer />
+        <Link destination="meoreoseo://note/new">
           <Text
             modifiers={[
-              font({ size: 11, weight: 'semibold' }),
+              font({ size: 11, weight: 'bold' }),
               foregroundStyle(c.tint),
-              padding({ horizontal: 7, vertical: 2 }),
+              padding({ horizontal: 9, vertical: 4 }),
               background(c.tintSoft),
               cornerRadius(99),
             ]}>
-            {`${props.totalCount}개`}
+            + 새 메모
           </Text>
-          <Spacer />
-          <Text modifiers={[font({ size: 11, weight: 'semibold' }), foregroundStyle(c.tint)]}>
-            전체 보기
-          </Text>
-        </HStack>
-      </Link>
+        </Link>
+      </HStack>
 
       {props.items.length === 0 ? (
         <VStack
