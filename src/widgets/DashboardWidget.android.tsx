@@ -42,38 +42,6 @@ function DashboardWidgetLayout(props: DashboardWidgetProps, environment: WidgetE
         danger: '#D92D46',
       };
 
-  const target = (environment as { target?: string }).target;
-  if (target && target.startsWith('toggle-todo:')) {
-    const id = target.slice('toggle-todo:'.length);
-    const nextTodos = props.todos.map((item) =>
-      item.id === id ? { ...item, done: !item.done } : item,
-    );
-    const delta = nextTodos.find((t) => t.id === id)?.done ? -1 : 1;
-    return {
-      ...props,
-      todoPendingCount: Math.max(0, props.todoPendingCount + delta),
-      todos: nextTodos,
-    } as unknown as React.JSX.Element;
-  }
-  if (target && target.startsWith('toggle-habit:')) {
-    const id = target.slice('toggle-habit:'.length);
-    const nextHabits = props.habits.map((item) => {
-      if (item.id !== id) return item;
-      const nextDone = !item.done;
-      return {
-        ...item,
-        done: nextDone,
-        streak: nextDone ? item.streak + 1 : Math.max(0, item.streak - 1),
-      };
-    });
-    const delta = nextHabits.find((h) => h.id === id)?.done ? 1 : -1;
-    return {
-      ...props,
-      habitDoneCount: Math.max(0, props.habitDoneCount + delta),
-      habits: nextHabits,
-    } as unknown as React.JSX.Element;
-  }
-
   return (
     <Column modifiers={[fillMaxSize(), background(c.bg), cornerRadius(18), paddingAll(14)]}>
       {/* 헤더 */}
@@ -110,9 +78,11 @@ function DashboardWidgetLayout(props: DashboardWidgetProps, environment: WidgetE
           colors={{ containerColor: c.tintSoft, contentColor: c.tint }}
           contentPadding={{ start: 8, top: 4, end: 8, bottom: 4 }}
           modifiers={[cornerRadius(99)]}>
-          <Text color={c.tint} style={{ fontSize: 10, fontWeight: '700' }}>
-            + 할 일
-          </Text>
+          <Box contentAlignment="center">
+            <Text color={c.tint} style={{ fontSize: 10, fontWeight: '700' }}>
+              + 할 일
+            </Text>
+          </Box>
         </Button>
         <Spacer modifiers={[width(5)]} />
         <Button
@@ -120,9 +90,11 @@ function DashboardWidgetLayout(props: DashboardWidgetProps, environment: WidgetE
           colors={{ containerColor: c.tintSoft, contentColor: c.tint }}
           contentPadding={{ start: 8, top: 4, end: 8, bottom: 4 }}
           modifiers={[cornerRadius(99)]}>
-          <Text color={c.tint} style={{ fontSize: 10, fontWeight: '700' }}>
-            + 일정
-          </Text>
+          <Box contentAlignment="center">
+            <Text color={c.tint} style={{ fontSize: 10, fontWeight: '700' }}>
+              + 일정
+            </Text>
+          </Box>
         </Button>
         <Spacer modifiers={[width(5)]} />
         <Button
@@ -130,9 +102,11 @@ function DashboardWidgetLayout(props: DashboardWidgetProps, environment: WidgetE
           colors={{ containerColor: c.tintSoft, contentColor: c.tint }}
           contentPadding={{ start: 8, top: 4, end: 8, bottom: 4 }}
           modifiers={[cornerRadius(99)]}>
-          <Text color={c.tint} style={{ fontSize: 10, fontWeight: '700' }}>
-            + 메모
-          </Text>
+          <Box contentAlignment="center">
+            <Text color={c.tint} style={{ fontSize: 10, fontWeight: '700' }}>
+              + 메모
+            </Text>
+          </Box>
         </Button>
         <Spacer modifiers={[width(5)]} />
         <Button
@@ -140,9 +114,11 @@ function DashboardWidgetLayout(props: DashboardWidgetProps, environment: WidgetE
           colors={{ containerColor: c.tintSoft, contentColor: c.tint }}
           contentPadding={{ start: 8, top: 4, end: 8, bottom: 4 }}
           modifiers={[cornerRadius(99)]}>
-          <Text color={c.tint} style={{ fontSize: 10, fontWeight: '700' }}>
-            + 지출
-          </Text>
+          <Box contentAlignment="center">
+            <Text color={c.tint} style={{ fontSize: 10, fontWeight: '700' }}>
+              + 지출
+            </Text>
+          </Box>
         </Button>
       </Row>
 
@@ -177,7 +153,19 @@ function DashboardWidgetLayout(props: DashboardWidgetProps, environment: WidgetE
           props.todos.slice(0, 2).map((todo) => (
             <Button
               key={todo.id}
-              {...({ target: `toggle-todo:${todo.id}` } as object)}
+              {...({
+                target: `toggle-todo:${todo.id}`,
+                onClick: () => {
+                  const nextTodos = props.todos.map((item) =>
+                    item.id === todo.id ? { ...item, done: !item.done } : item,
+                  );
+                  const delta = todo.done ? 1 : -1;
+                  return {
+                    todoPendingCount: Math.max(0, props.todoPendingCount + delta),
+                    todos: nextTodos,
+                  };
+                },
+              } as object)}
               colors={{ containerColor: c.surface, contentColor: c.text }}
               contentPadding={{ start: 0, top: 3, end: 0, bottom: 3 }}
               modifiers={[fillMaxWidth()]}>
@@ -244,6 +232,26 @@ function DashboardWidgetLayout(props: DashboardWidgetProps, environment: WidgetE
       <Button
         {...({
           target: props.habits.length > 0 ? `toggle-habit:${props.habits[0].id}` : 'open:/habits',
+          onClick:
+            props.habits.length > 0
+              ? () => {
+                  const first = props.habits[0];
+                  const nextHabits = props.habits.map((item) => {
+                    if (item.id !== first.id) return item;
+                    const nextDone = !item.done;
+                    return {
+                      ...item,
+                      done: nextDone,
+                      streak: nextDone ? item.streak + 1 : Math.max(0, item.streak - 1),
+                    };
+                  });
+                  const delta = first.done ? -1 : 1;
+                  return {
+                    habitDoneCount: Math.max(0, props.habitDoneCount + delta),
+                    habits: nextHabits,
+                  };
+                }
+              : undefined,
         } as object)}
         colors={{ containerColor: c.surface, contentColor: c.text }}
         contentPadding={{ start: 10, top: 8, end: 10, bottom: 8 }}

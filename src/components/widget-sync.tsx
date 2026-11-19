@@ -149,11 +149,17 @@ export function WidgetSync() {
         }
 
         if (target.startsWith('open:')) {
-          const route = target.slice('open:'.length);
+          const rawRoute = target.slice('open:'.length);
+          const nonce = Date.now();
+          let route = rawRoute;
+          if (rawRoute === '/note/new') {
+            route = `/note/new?t=${nonce}`;
+          } else if (rawRoute.includes('add=1')) {
+            route = rawRoute.replace('add=1', `add=${nonce}`);
+          }
           const deepLink = `meoreoseo://${route.replace(/^\/+/, '')}`;
-          Linking.openURL(deepLink).catch(() => {
-            router.push(route as Href);
-          });
+          router.push(route as Href);
+          Linking.openURL(deepLink).catch(() => {});
         }
       });
     } catch {

@@ -40,21 +40,6 @@ function TodoWidgetLayout(props: TodoWidgetProps, environment: WidgetEnvironment
         dangerSoft: '#FFF0F2',
       };
 
-  const target = (environment as { target?: string }).target;
-  if (target && target.startsWith('toggle-todo:')) {
-    const id = target.slice('toggle-todo:'.length);
-    const nextItems = props.items.map((item) =>
-      item.id === id ? { ...item, done: !item.done } : item,
-    );
-    const toggled = nextItems.find((item) => item.id === id);
-    const delta = toggled ? (toggled.done ? -1 : 1) : 0;
-    return {
-      ...props,
-      pendingCount: Math.max(0, props.pendingCount + delta),
-      items: nextItems,
-    } as unknown as React.JSX.Element;
-  }
-
   return (
     <Column modifiers={[fillMaxSize(), background(c.bg), cornerRadius(18), paddingAll(14)]}>
       <Box modifiers={[fillMaxWidth()]}>
@@ -84,9 +69,11 @@ function TodoWidgetLayout(props: TodoWidgetProps, environment: WidgetEnvironment
             colors={{ containerColor: c.tintSoft, contentColor: c.tint }}
             contentPadding={{ start: 9, top: 4, end: 9, bottom: 4 }}
             modifiers={[cornerRadius(99)]}>
-            <Text color={c.tint} style={{ fontSize: 11, fontWeight: '700' }}>
-              + 추가
-            </Text>
+            <Box contentAlignment="center">
+              <Text color={c.tint} style={{ fontSize: 11, fontWeight: '700' }}>
+                + 추가
+              </Text>
+            </Box>
           </Button>
         </Box>
       </Box>
@@ -99,9 +86,11 @@ function TodoWidgetLayout(props: TodoWidgetProps, environment: WidgetEnvironment
           colors={{ containerColor: c.surface, contentColor: c.textSecondary }}
           contentPadding={{ start: 12, top: 12, end: 12, bottom: 12 }}
           modifiers={[fillMaxSize(), cornerRadius(12)]}>
-          <Text color={c.textSecondary} style={{ fontSize: 13, fontWeight: '500' }}>
-            남은 할 일이 없어요 · 눌러서 추가
-          </Text>
+          <Box contentAlignment="center" modifiers={[fillMaxSize()]}>
+            <Text color={c.textSecondary} style={{ fontSize: 13, fontWeight: '500' }}>
+              남은 할 일이 없어요 · 눌러서 추가
+            </Text>
+          </Box>
         </Button>
       ) : (
         <Column modifiers={[fillMaxWidth()]}>
@@ -109,7 +98,19 @@ function TodoWidgetLayout(props: TodoWidgetProps, environment: WidgetEnvironment
             <Column key={item.id} modifiers={[fillMaxWidth()]}>
               {idx > 0 ? <Spacer modifiers={[height(6)]} /> : null}
               <Button
-                {...({ target: `toggle-todo:${item.id}` } as object)}
+                {...({
+                  target: `toggle-todo:${item.id}`,
+                  onClick: () => {
+                    const nextItems = props.items.map((t) =>
+                      t.id === item.id ? { ...t, done: !t.done } : t,
+                    );
+                    const delta = item.done ? 1 : -1;
+                    return {
+                      pendingCount: Math.max(0, props.pendingCount + delta),
+                      items: nextItems,
+                    };
+                  },
+                } as object)}
                 colors={{ containerColor: c.surface, contentColor: c.text }}
                 contentPadding={{ start: 10, top: 8, end: 10, bottom: 8 }}
                 modifiers={[fillMaxWidth(), cornerRadius(10)]}>

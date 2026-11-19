@@ -67,18 +67,24 @@ export default function CalendarScreen() {
   // 캘린더 화면을 열 때마다 구글 캘린더에서 바뀐 일정을 받아 온다(연결된 경우에만).
   useFocusEffect(useCallback(() => requestGoogleSync(300), []));
 
-  const activeEditing: CalendarEvent | 'new' | null =
-    editing ??
-    (isCalendarRoute && add
-      ? 'new'
-      : isCalendarRoute && editId
-        ? ((events.data ?? []).find((e) => e.id === editId && !e.google_readonly) ?? null)
-        : null);
+  const paramKey = isCalendarRoute && (add || editId) ? `${add ?? ''}|${editId ?? ''}` : '';
+  const [dismissedParamKey, setDismissedParamKey] = useState('');
+  const paramEditing: CalendarEvent | 'new' | null =
+    paramKey && paramKey !== dismissedParamKey
+      ? add
+        ? 'new'
+        : editId
+          ? ((events.data ?? []).find((e) => e.id === editId && !e.google_readonly) ?? null)
+          : null
+      : null;
+
+  const activeEditing: CalendarEvent | 'new' | null = editing ?? paramEditing;
 
   function closeForm() {
     setEditing(null);
-    if (add || editId) {
-      router.setParams({ add: undefined, editId: undefined });
+    if (paramKey) {
+      setDismissedParamKey(paramKey);
+      router.setParams({ add: '', editId: '' });
     }
   }
   const eventsByDate = useMemo(() => {

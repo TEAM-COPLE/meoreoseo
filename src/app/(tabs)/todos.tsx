@@ -75,18 +75,24 @@ export default function TodosScreen() {
 
   useWebSearchShortcut(() => searchRef.current?.focus());
 
-  const activeEditing: Todo | 'new' | null =
-    editing ??
-    (isTodosRoute && add
-      ? 'new'
-      : isTodosRoute && editId
-        ? ((todos.data ?? []).find((t) => t.id === editId) ?? null)
-        : null);
+  const paramKey = isTodosRoute && (add || editId) ? `${add ?? ''}|${editId ?? ''}` : '';
+  const [dismissedParamKey, setDismissedParamKey] = useState('');
+  const paramEditing: Todo | 'new' | null =
+    paramKey && paramKey !== dismissedParamKey
+      ? add
+        ? 'new'
+        : editId
+          ? ((todos.data ?? []).find((t) => t.id === editId) ?? null)
+          : null
+      : null;
+
+  const activeEditing: Todo | 'new' | null = editing ?? paramEditing;
 
   function closeForm() {
     setEditing(null);
-    if (add || editId) {
-      router.setParams({ add: undefined, editId: undefined });
+    if (paramKey) {
+      setDismissedParamKey(paramKey);
+      router.setParams({ add: '', editId: '' });
     }
   }
 

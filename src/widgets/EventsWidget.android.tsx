@@ -67,9 +67,11 @@ function EventsWidgetLayout(props: EventsWidgetProps, environment: WidgetEnviron
             colors={{ containerColor: c.tintSoft, contentColor: c.tint }}
             contentPadding={{ start: 9, top: 4, end: 9, bottom: 4 }}
             modifiers={[cornerRadius(99)]}>
-            <Text color={c.tint} style={{ fontSize: 11, fontWeight: '700' }}>
-              + 추가
-            </Text>
+            <Box contentAlignment="center">
+              <Text color={c.tint} style={{ fontSize: 11, fontWeight: '700' }}>
+                + 추가
+              </Text>
+            </Box>
           </Button>
         </Box>
       </Box>
