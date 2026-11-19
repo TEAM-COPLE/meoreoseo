@@ -12,6 +12,7 @@ import { useEffect, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 
+import { Colors } from '@/constants/theme';
 import { ThemeModeProvider, useColorScheme } from '@/hooks/use-theme';
 import { NotificationSync } from '@/components/notification-sync';
 import { SafeBoundary } from '@/components/safe-boundary';
@@ -69,6 +70,32 @@ export default function RootLayout() {
   );
 }
 
+const AMOLED_DARK_THEME = {
+  ...DarkTheme,
+  colors: {
+    ...DarkTheme.colors,
+    primary: Colors.dark.tint,
+    background: Colors.dark.background,
+    card: '#0A0A0C',
+    text: Colors.dark.text,
+    border: Colors.dark.border,
+    notification: Colors.dark.tint,
+  },
+};
+
+const CLEAN_LIGHT_THEME = {
+  ...DefaultTheme,
+  colors: {
+    ...DefaultTheme.colors,
+    primary: Colors.light.tint,
+    background: Colors.light.background,
+    card: Colors.light.backgroundElement,
+    text: Colors.light.text,
+    border: Colors.light.border,
+    notification: Colors.light.tint,
+  },
+};
+
 function ThemedRootNavigator() {
   const colorScheme = useColorScheme();
   const { session, isDevMode, loading } = useAuth();
@@ -81,7 +108,7 @@ function ThemedRootNavigator() {
   }, [loading]);
 
   return (
-    <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
+    <ThemeProvider value={colorScheme === 'dark' ? AMOLED_DARK_THEME : CLEAN_LIGHT_THEME}>
       <StatusBar style={colorScheme === 'dark' ? 'light' : 'dark'} />
       {/* 로그인된 상태에서 휴대폰의 예약 알림과 홈 화면 위젯을 데이터와 맞춘다. 화면에는 보이지 않는다.
           로그인·첫 화면 전환이 끝난 뒤에 시작해, 실행 직후 부담과 충돌을 줄인다. */}
@@ -155,17 +182,17 @@ const fallbackStyles = StyleSheet.create({
     justifyContent: 'center',
     padding: 24,
     gap: 12,
-    backgroundColor: '#14131E',
+    backgroundColor: '#000000',
   },
   title: {
     fontSize: 18,
     fontWeight: '700',
-    color: '#F5F5FA',
+    color: '#FFFFFF',
     textAlign: 'center',
   },
   message: {
     fontSize: 13,
-    color: '#8F8FA8',
+    color: '#8B8B96',
     textAlign: 'center',
   },
   button: {
@@ -173,10 +200,10 @@ const fallbackStyles = StyleSheet.create({
     paddingHorizontal: 20,
     paddingVertical: 10,
     borderRadius: 999,
-    backgroundColor: '#9B8AFB',
+    backgroundColor: '#FFFFFF',
   },
   buttonText: {
-    color: '#100F1C',
-    fontWeight: '600',
+    color: '#000000',
+    fontWeight: '700',
   },
 });

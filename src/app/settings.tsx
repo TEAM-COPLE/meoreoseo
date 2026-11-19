@@ -17,8 +17,8 @@ import { queryClient } from "@/lib/query";
 import { supabase } from "@/lib/supabase";
 
 const THEME_OPTIONS: readonly { value: ThemeMode; label: string }[] = [
-  { value: "light", label: "라이트" },
   { value: "dark", label: "다크" },
+  { value: "light", label: "라이트" },
   { value: "system", label: "기기 설정 따름" },
 ];
 

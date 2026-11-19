@@ -61,7 +61,9 @@ export function Button({
       {loading ? (
         <ActivityIndicator color={color} />
       ) : (
-        <ThemedText type={size === 'small' ? 'smallBold' : 'default'} style={{ color }}>
+        <ThemedText
+          type={size === 'small' ? 'smallBold' : 'default'}
+          style={[{ color }, variant === 'primary' && styles.primaryLabel]}>
           {label}
         </ThemedText>
       )}
@@ -81,5 +83,8 @@ const styles = StyleSheet.create({
     minHeight: 34,
     paddingHorizontal: Spacing.three - 2,
     borderRadius: Radius.full,
+  },
+  primaryLabel: {
+    fontWeight: '700',
   },
 });

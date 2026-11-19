@@ -293,7 +293,7 @@ export default function MoneyScreen() {
       {categories.length > 0 ? (
         <Card>
           <ThemedText type="smallBold">분류별 지출</ThemedText>
-          {categories.map(({ category, total }) => (
+          {categories.map(({ category, total }, idx) => (
             <View key={category} style={styles.categoryRow}>
               <ThemedText type="small" style={styles.categoryName}>
                 {category}
@@ -303,7 +303,7 @@ export default function MoneyScreen() {
                   style={[
                     styles.barFill,
                     {
-                      backgroundColor: theme.tint,
+                      backgroundColor: idx === 0 ? theme.tint : theme.accentWarm,
                       width: `${expense > 0 ? Math.min(100, Math.max(0, (total / expense) * 100)) : 0}%`,
                     },
                   ]}
@@ -335,7 +335,7 @@ export default function MoneyScreen() {
             {formatDate(group.date)}
           </ThemedText>
           <Card>
-            {group.items.map((item) => {
+            {group.items.map((item, idx) => {
               const selected = multi.isSelected(item.id);
               return (
                 <Pressable
@@ -360,6 +360,11 @@ export default function MoneyScreen() {
                   }}
                   style={({ pressed }) => [
                     styles.itemRow,
+                    idx > 0 && {
+                      borderTopWidth: StyleSheet.hairlineWidth,
+                      borderTopColor: theme.border,
+                      paddingTop: Spacing.two + 2,
+                    },
                     isSelecting && Platform.OS === 'web' && styles.noSelect,
                     selected && {
                       backgroundColor: theme.tintSoft,

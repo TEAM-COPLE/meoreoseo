@@ -20,6 +20,7 @@ export function classifyWeather(code: number, isDay: boolean): WeatherKind {
 export type WeatherAtmosphere = {
   kind: WeatherKind;
   background: string;
+  gradient: string;
   border: string;
   glowPrimary: string;
   glowSecondary: string;
@@ -28,43 +29,49 @@ export type WeatherAtmosphere = {
 
 const LIGHT_PALETTE: Record<WeatherKind, Omit<WeatherAtmosphere, 'kind'>> = {
   'clear-day': {
-    background: '#EDF5FF',
-    border: '#C2DCFF',
+    background: '#DCEEFF',
+    gradient: 'linear-gradient(135deg, #DCEEFF 0%, #BFE0FF 55%, #FFF0D1 100%)',
+    border: '#B8D8FC',
     glowPrimary: 'rgba(251, 191, 36, 0.28)',
     glowSecondary: 'rgba(59, 130, 246, 0.14)',
     particle: 'rgba(245, 158, 11, 0.35)',
   },
   'clear-night': {
-    background: '#EFEBFD',
-    border: '#D3C9FA',
+    background: '#E4E2FB',
+    gradient: 'linear-gradient(135deg, #E4E2FB 0%, #D4D0FA 55%, #E9E1FC 100%)',
+    border: '#C9C2F7',
     glowPrimary: 'rgba(99, 102, 241, 0.18)',
     glowSecondary: 'rgba(167, 139, 250, 0.14)',
     particle: 'rgba(99, 102, 241, 0.35)',
   },
   cloudy: {
-    background: '#EEF2F7',
-    border: '#D5DEE9',
+    background: '#E8EDF4',
+    gradient: 'linear-gradient(135deg, #ECF0F6 0%, #DCE3EE 55%, #CFD8E6 100%)',
+    border: '#C8D3E3',
     glowPrimary: 'rgba(148, 163, 184, 0.24)',
     glowSecondary: 'rgba(100, 116, 139, 0.14)',
     particle: 'rgba(100, 116, 139, 0.22)',
   },
   rain: {
-    background: '#E7F3FC',
-    border: '#B8DCF8',
+    background: '#D8ECFA',
+    gradient: 'linear-gradient(135deg, #DCEFFA 0%, #C2E0F7 55%, #B2D4F0 100%)',
+    border: '#A9D2F2',
     glowPrimary: 'rgba(14, 165, 233, 0.20)',
     glowSecondary: 'rgba(56, 189, 248, 0.14)',
     particle: 'rgba(14, 165, 233, 0.36)',
   },
   snow: {
-    background: '#EFF8FF',
-    border: '#C6E5FC',
+    background: '#EAF6FF',
+    gradient: 'linear-gradient(135deg, #F0F9FF 0%, #D8EEFC 55%, #C6E3FA 100%)',
+    border: '#B9DDF8',
     glowPrimary: 'rgba(186, 230, 253, 0.45)',
     glowSecondary: 'rgba(125, 211, 252, 0.22)',
     particle: 'rgba(56, 189, 248, 0.38)',
   },
   storm: {
-    background: '#EFEAFB',
-    border: '#CFC0FA',
+    background: '#E6DFF9',
+    gradient: 'linear-gradient(135deg, #E8E1FA 0%, #D5C8F5 55%, #EADBF0 100%)',
+    border: '#C7B6F2',
     glowPrimary: 'rgba(139, 92, 246, 0.22)',
     glowSecondary: 'rgba(245, 158, 11, 0.18)',
     particle: 'rgba(139, 92, 246, 0.36)',
@@ -73,46 +80,52 @@ const LIGHT_PALETTE: Record<WeatherKind, Omit<WeatherAtmosphere, 'kind'>> = {
 
 const DARK_PALETTE: Record<WeatherKind, Omit<WeatherAtmosphere, 'kind'>> = {
   'clear-day': {
-    background: '#1C243D',
-    border: 'rgba(251, 191, 36, 0.35)',
-    glowPrimary: 'rgba(251, 191, 36, 0.22)',
-    glowSecondary: 'rgba(96, 165, 250, 0.16)',
-    particle: 'rgba(253, 224, 71, 0.45)',
+    background: '#133E7C',
+    gradient: 'linear-gradient(135deg, #0D2F6B 0%, #1652A8 55%, #277BD6 100%)',
+    border: 'rgba(96, 165, 250, 0.38)',
+    glowPrimary: 'rgba(251, 191, 36, 0.26)',
+    glowSecondary: 'rgba(56, 189, 248, 0.18)',
+    particle: 'rgba(253, 224, 71, 0.55)',
   },
   'clear-night': {
-    background: '#181832',
+    background: '#11163A',
+    gradient: 'linear-gradient(135deg, #070B22 0%, #141B47 55%, #27225E 100%)',
     border: 'rgba(165, 180, 252, 0.28)',
-    glowPrimary: 'rgba(129, 140, 248, 0.20)',
+    glowPrimary: 'rgba(129, 140, 248, 0.22)',
     glowSecondary: 'rgba(196, 181, 253, 0.14)',
-    particle: 'rgba(224, 231, 255, 0.55)',
+    particle: 'rgba(224, 231, 255, 0.65)',
   },
   cloudy: {
-    background: '#212636',
-    border: '#353D52',
-    glowPrimary: 'rgba(148, 163, 184, 0.16)',
-    glowSecondary: 'rgba(100, 116, 139, 0.12)',
-    particle: 'rgba(203, 213, 225, 0.25)',
+    background: '#232B3A',
+    gradient: 'linear-gradient(135deg, #171D28 0%, #2A3345 55%, #3E4B61 100%)',
+    border: 'rgba(148, 163, 184, 0.30)',
+    glowPrimary: 'rgba(203, 213, 225, 0.16)',
+    glowSecondary: 'rgba(100, 116, 139, 0.14)',
+    particle: 'rgba(226, 232, 240, 0.30)',
   },
   rain: {
-    background: '#16243A',
-    border: 'rgba(56, 189, 248, 0.30)',
-    glowPrimary: 'rgba(56, 189, 248, 0.18)',
-    glowSecondary: 'rgba(37, 99, 235, 0.15)',
-    particle: 'rgba(125, 211, 252, 0.48)',
+    background: '#122B46',
+    gradient: 'linear-gradient(135deg, #0A182B 0%, #133354 55%, #1F5178 100%)',
+    border: 'rgba(56, 189, 248, 0.32)',
+    glowPrimary: 'rgba(56, 189, 248, 0.20)',
+    glowSecondary: 'rgba(37, 99, 235, 0.16)',
+    particle: 'rgba(147, 197, 253, 0.52)',
   },
   snow: {
-    background: '#1B283C',
-    border: 'rgba(186, 230, 253, 0.30)',
-    glowPrimary: 'rgba(224, 242, 254, 0.18)',
-    glowSecondary: 'rgba(125, 211, 252, 0.14)',
-    particle: 'rgba(240, 249, 255, 0.65)',
+    background: '#213D5B',
+    gradient: 'linear-gradient(135deg, #15273B 0%, #26486B 55%, #3C6E99 100%)',
+    border: 'rgba(186, 230, 253, 0.34)',
+    glowPrimary: 'rgba(224, 242, 254, 0.22)',
+    glowSecondary: 'rgba(125, 211, 252, 0.16)',
+    particle: 'rgba(240, 249, 255, 0.72)',
   },
   storm: {
-    background: '#211938',
+    background: '#231640',
+    gradient: 'linear-gradient(135deg, #120C24 0%, #2A194C 52%, #44235E 100%)',
     border: 'rgba(167, 139, 250, 0.36)',
     glowPrimary: 'rgba(167, 139, 250, 0.24)',
-    glowSecondary: 'rgba(250, 204, 21, 0.16)',
-    particle: 'rgba(196, 181, 253, 0.50)',
+    glowSecondary: 'rgba(250, 204, 21, 0.18)',
+    particle: 'rgba(250, 204, 21, 0.55)',
   },
 };
 
@@ -140,20 +153,26 @@ const PARTICLE_SLOTS = [
 export function WeatherBackdrop({ code, isDay }: { code: number; isDay: boolean }) {
   const { resolvedScheme } = useThemeMode();
   const atmosphere = getWeatherAtmosphere(code, isDay, resolvedScheme);
+  const hasParticles =
+    atmosphere.kind === 'rain' ||
+    atmosphere.kind === 'snow' ||
+    atmosphere.kind === 'clear-night' ||
+    atmosphere.kind === 'storm';
   const [pulse] = useState(() => new Animated.Value(0));
 
   useEffect(() => {
+    if (!hasParticles) return;
     const loop = Animated.loop(
       Animated.sequence([
         Animated.timing(pulse, {
           toValue: 1,
-          duration: 2400,
+          duration: 2800,
           easing: Easing.inOut(Easing.ease),
           useNativeDriver: USE_NATIVE_DRIVER,
         }),
         Animated.timing(pulse, {
           toValue: 0,
-          duration: 2400,
+          duration: 2800,
           easing: Easing.inOut(Easing.ease),
           useNativeDriver: USE_NATIVE_DRIVER,
         }),
@@ -161,63 +180,45 @@ export function WeatherBackdrop({ code, isDay }: { code: number; isDay: boolean 
     );
     loop.start();
     return () => loop.stop();
-  }, [pulse]);
+  }, [hasParticles, pulse]);
 
-  const orbScale = pulse.interpolate({ inputRange: [0, 1], outputRange: [1, 1.12] });
   const driftY = pulse.interpolate({
     inputRange: [0, 1],
-    outputRange: atmosphere.kind === 'rain' ? [-6, 10] : [-4, 6],
+    outputRange: atmosphere.kind === 'rain' ? [-4, 8] : [-3, 5],
   });
   const particleOpacity = pulse.interpolate({
     inputRange: [0, 0.5, 1],
-    outputRange: [0.35, 0.9, 0.35],
+    outputRange: [0.3, 0.75, 0.3],
   });
 
   return (
-    <View pointerEvents="none" style={styles.root}>
-      <Animated.View
-        style={[
-          styles.orbPrimary,
-          {
-            backgroundColor: atmosphere.glowPrimary,
-            transform: [{ scale: orbScale }],
-          },
-        ]}
-      />
-      <View
-        style={[
-          styles.orbSecondary,
-          {
-            backgroundColor: atmosphere.glowSecondary,
-          },
-        ]}
-      />
-
-      {(atmosphere.kind === 'rain' ||
-        atmosphere.kind === 'snow' ||
-        atmosphere.kind === 'clear-night' ||
-        atmosphere.kind === 'storm') &&
-        PARTICLE_SLOTS.map((slot, idx) => (
-          <Animated.View
-            key={idx}
-            style={[
-              atmosphere.kind === 'rain' || atmosphere.kind === 'storm'
-                ? styles.rainStreak
-                : styles.dot,
-              {
-                left: slot.left,
-                top: slot.top,
-                width:
-                  atmosphere.kind === 'rain' || atmosphere.kind === 'storm' ? 2 : slot.size,
-                height:
-                  atmosphere.kind === 'rain' || atmosphere.kind === 'storm' ? 14 : slot.size,
-                backgroundColor: atmosphere.particle,
-                opacity: particleOpacity,
-                transform: [{ translateY: driftY }, { rotate: atmosphere.kind === 'rain' ? '14deg' : '0deg' }],
-              },
-            ]}
-          />
-        ))}
+    <View pointerEvents="none" style={[styles.root, { backgroundImage: atmosphere.gradient }]}>
+      {hasParticles
+        ? PARTICLE_SLOTS.map((slot, idx) => (
+            <Animated.View
+              key={idx}
+              style={[
+                atmosphere.kind === 'rain' || atmosphere.kind === 'storm'
+                  ? styles.rainStreak
+                  : styles.dot,
+                {
+                  left: slot.left,
+                  top: slot.top,
+                  width:
+                    atmosphere.kind === 'rain' || atmosphere.kind === 'storm' ? 2 : slot.size,
+                  height:
+                    atmosphere.kind === 'rain' || atmosphere.kind === 'storm' ? 14 : slot.size,
+                  backgroundColor: atmosphere.particle,
+                  opacity: particleOpacity,
+                  transform: [
+                    { translateY: driftY },
+                    { rotate: atmosphere.kind === 'rain' ? '14deg' : '0deg' },
+                  ],
+                },
+              ]}
+            />
+          ))
+        : null}
     </View>
   );
 }
@@ -230,22 +231,6 @@ const styles = StyleSheet.create({
     bottom: 0,
     left: 0,
     overflow: 'hidden',
-  },
-  orbPrimary: {
-    position: 'absolute',
-    width: 170,
-    height: 170,
-    borderRadius: 999,
-    top: -48,
-    right: -28,
-  },
-  orbSecondary: {
-    position: 'absolute',
-    width: 140,
-    height: 140,
-    borderRadius: 999,
-    bottom: -54,
-    left: -32,
   },
   rainStreak: {
     position: 'absolute',

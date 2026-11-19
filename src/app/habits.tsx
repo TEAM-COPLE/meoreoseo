@@ -228,7 +228,7 @@ export default function HabitsScreen() {
                     style={[
                       styles.weekBarFill,
                       {
-                        backgroundColor: entry.day === today ? theme.tint : theme.success,
+                        backgroundColor: entry.day === today ? theme.tint : theme.accentWarm,
                         height: `${Math.round(entry.ratio * 100)}%`,
                       },
                     ]}
@@ -287,9 +287,18 @@ export default function HabitsScreen() {
                       <ThemedText type="default">{habit.name}</ThemedText>
                     </Pressable>
                   )}
-                  <ThemedText type="small" themeColor={streak > 0 ? 'tint' : 'textSecondary'}>
-                    {streak > 0 ? `${streak}일 연속` : '오늘부터 시작'}
-                  </ThemedText>
+                  <View
+                    style={[
+                      styles.streakPill,
+                      { backgroundColor: streak > 0 ? theme.tintSoft : theme.backgroundSelected },
+                    ]}>
+                    <ThemedText
+                      type="smallBold"
+                      themeColor={streak > 0 ? 'tint' : 'textSecondary'}
+                      style={styles.streakPillText}>
+                      {streak > 0 ? `${streak}일 연속` : '오늘부터 시작'}
+                    </ThemedText>
+                  </View>
                   {!isSelecting ? (
                     <Pressable
                       accessibilityRole="button"
@@ -446,6 +455,16 @@ const styles = StyleSheet.create({
   name: {
     flex: 1,
   },
+  streakPill: {
+    paddingHorizontal: Spacing.two + 2,
+    paddingVertical: 3,
+    borderRadius: Radius.full,
+  },
+  streakPillText: {
+    fontSize: 12,
+    lineHeight: 16,
+    fontVariant: ['tabular-nums'],
+  },
   deletePill: {
     paddingHorizontal: Spacing.two + 2,
     paddingVertical: Spacing.one,
@@ -473,12 +492,12 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
   },
   rateTrack: {
-    height: 8,
+    height: 6,
     borderRadius: Radius.full,
     overflow: 'hidden',
   },
   rateFill: {
-    height: 8,
+    height: 6,
     borderRadius: Radius.full,
   },
   weekBars: {

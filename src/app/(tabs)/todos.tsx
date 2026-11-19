@@ -13,9 +13,10 @@ import { Card, ListStatus, Screen } from '@/components/ui/screen';
 import { Segmented } from '@/components/ui/segmented';
 import { SelectionBar, SelectionHeaderActions, SelectionIndicator } from '@/components/ui/selection-bar';
 import { TextField, type TextFieldRef } from '@/components/ui/text-field';
-import { Spacing } from '@/constants/theme';
+import { Radius, Spacing } from '@/constants/theme';
 import { hasSelectionModifier, useMultiSelect } from '@/hooks/use-multi-select';
 import { useTagColorOf, useTagMap, useTags } from '@/hooks/use-tags';
+import { useTheme } from '@/hooks/use-theme';
 import { useWebSearchShortcut } from '@/hooks/use-web-shortcut';
 import {
   useDeleteTodo,
@@ -55,6 +56,7 @@ export default function TodosScreen() {
   const pathname = usePathname();
   const isTodosRoute = pathname === '/todos';
   const { add, editId } = useLocalSearchParams<{ add?: string; editId?: string }>();
+  const theme = useTheme();
   const todos = useTodos();
   const toggle = useToggleTodo();
   const removeMany = useDeleteTodos();
@@ -66,6 +68,7 @@ export default function TodosScreen() {
   // 'all': 모든 할 일, 그 밖에는 고른 태그의 id
   const [tagFilter, setTagFilter] = useState<string>('all');
   const [priorityFilter, setPriorityFilter] = useState<number>(-1);
+  const [filtersOpen, setFiltersOpen] = useState(false);
   const [query, setQuery] = useState('');
   const deferredQuery = useDeferredValue(query);
   const searchRef = useRef<TextFieldRef | null>(null);
@@ -290,15 +293,74 @@ export default function TodosScreen() {
           />
         ) : undefined
       }>
-      <Segmented options={FILTERS} value={filter} onChange={changeFilter} />
-      <Segmented
-        options={PRIORITY_FILTERS}
-        value={priorityFilter}
-        onChange={(next) => {
-          setPriorityFilter(next);
-          multi.clear();
-        }}
-      />
+      <View style={styles.filterBar}>
+        <Segmented options={FILTERS} value={filter} onChange={changeFilter} />
+        {(() => {
+          const activeCount =
+            (priorityFilter !== -1 ? 1 : 0) + (activeTagFilter !== 'all' ? 1 : 0);
+          const highlighted = filtersOpen || activeCount > 0;
+          return (
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="상세 필터 열기"
+              accessibilityState={{ expanded: filtersOpen }}
+              onPress={() => setFiltersOpen((prev) => !prev)}
+              style={({ pressed }) => [
+                styles.filterToggle,
+                {
+                  backgroundColor: highlighted ? theme.tint : theme.backgroundElement,
+                  borderColor: highlighted ? theme.tint : theme.border,
+                  opacity: pressed ? 0.75 : 1,
+                },
+              ]}>
+              <ThemedText
+                type="smallBold"
+                style={{ color: highlighted ? theme.onTint : theme.text }}>
+                {activeCount > 0 ? `필터 ${activeCount}` : '필터'} {filtersOpen ? '▴' : '▾'}
+              </ThemedText>
+            </Pressable>
+          );
+        })()}
+      </View>
+
+      {filtersOpen ? (
+        <Card>
+          <View style={styles.filterPanelHeader}>
+            <ThemedText type="smallBold">상세 필터</ThemedText>
+            {priorityFilter !== -1 || activeTagFilter !== 'all' ? (
+              <Pressable
+                accessibilityRole="button"
+                hitSlop={8}
+                onPress={() => {
+                  setPriorityFilter(-1);
+                  changeTagFilter('all');
+                }}>
+                <ThemedText type="small" themeColor="textSecondary">
+                  초기화
+                </ThemedText>
+              </Pressable>
+            ) : null}
+          </View>
+          <Segmented
+            label="중요도"
+            options={PRIORITY_FILTERS}
+            value={priorityFilter}
+            onChange={(next) => {
+              setPriorityFilter(next);
+              multi.clear();
+            }}
+          />
+          {tagFilterOptions.length > 1 ? (
+            <Segmented
+              label="태그"
+              options={tagFilterOptions}
+              value={activeTagFilter}
+              onChange={changeTagFilter}
+            />
+          ) : null}
+        </Card>
+      ) : null}
+
       <TextField
         inputRef={searchRef}
         label="검색"
@@ -307,14 +369,6 @@ export default function TodosScreen() {
         onChangeText={setQuery}
         returnKeyType="search"
       />
-      {tagFilterOptions.length > 1 ? (
-        <Segmented
-          label="태그로 보기"
-          options={tagFilterOptions}
-          value={activeTagFilter}
-          onChange={changeTagFilter}
-        />
-      ) : null}
 
       {bulkError ? (
         <ThemedText type="small" themeColor="danger">
@@ -504,6 +558,26 @@ function periodHint(startDate: string | null, dueDate: string | null): string {
 }
 
 const styles = StyleSheet.create({
+  filterBar: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: Spacing.two,
+  },
+  filterToggle: {
+    minHeight: 36,
+    paddingHorizontal: Spacing.three - 2,
+    borderRadius: Radius.full,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  filterPanelHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
   // 태그 색 띠
   tagged: {
     borderLeftWidth: 6,

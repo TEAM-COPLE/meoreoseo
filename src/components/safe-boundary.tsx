@@ -62,12 +62,12 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 17,
     fontWeight: '700',
-    color: '#6B6C84',
+    color: '#FFFFFF',
     textAlign: 'center',
   },
   message: {
     fontSize: 13,
-    color: '#8F8FA8',
+    color: '#8B8B96',
     textAlign: 'center',
   },
   button: {
@@ -75,10 +75,10 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     paddingVertical: 10,
     borderRadius: 999,
-    backgroundColor: '#6354EA',
+    backgroundColor: '#FFFFFF',
   },
   buttonText: {
-    color: '#FFFFFF',
-    fontWeight: '600',
+    color: '#000000',
+    fontWeight: '700',
   },
 });

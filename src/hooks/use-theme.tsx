@@ -26,7 +26,7 @@ function isThemeMode(value: string | null): value is ThemeMode {
 
 export function ThemeModeProvider({ children }: PropsWithChildren) {
   const systemScheme = useSystemColorScheme();
-  const [mode, setModeState] = useState<ThemeMode>('system');
+  const [mode, setModeState] = useState<ThemeMode>('dark');
 
   useEffect(() => {
     AsyncStorage.getItem(STORAGE_KEY)

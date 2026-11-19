@@ -1,5 +1,5 @@
 import { Image } from 'expo-image';
-import { Link } from 'expo-router';
+import { Link, usePathname } from 'expo-router';
 import {
   TabList,
   TabSlot,
@@ -8,10 +8,10 @@ import {
   type TabListProps,
   type TabTriggerSlotProps,
 } from 'expo-router/ui';
-import { Pressable, StyleSheet, View, type PressableProps } from 'react-native';
+import { Pressable, StyleSheet, useWindowDimensions, View, type PressableProps } from 'react-native';
 
 import { MaxContentWidth, Radius, Spacing } from '@/constants/theme';
-import { useTheme } from '@/hooks/use-theme';
+import { useColorScheme, useTheme } from '@/hooks/use-theme';
 
 import { ThemedText } from './themed-text';
 
@@ -45,6 +45,8 @@ export default function AppTabs() {
 
 function TabButton({ children, isFocused, ...props }: TabTriggerSlotProps) {
   const theme = useTheme();
+  const scheme = useColorScheme();
+  const isDark = scheme === 'dark';
 
   return (
     <Pressable
@@ -52,12 +54,16 @@ function TabButton({ children, isFocused, ...props }: TabTriggerSlotProps) {
       {...(props as PressableProps)}
       style={({ pressed }) => [
         styles.tabButton,
-        { backgroundColor: isFocused ? theme.tintSoft : 'transparent' },
+        {
+          backgroundColor: isFocused ? (isDark ? '#1E1E24' : theme.tintSoft) : 'transparent',
+          borderColor: isFocused && isDark ? '#2C2C34' : 'transparent',
+          borderWidth: 1,
+        },
         pressed && styles.pressed,
       ]}>
       <ThemedText
         type={isFocused ? 'smallBold' : 'small'}
-        themeColor={isFocused ? 'tint' : 'textSecondary'}>
+        themeColor={isFocused ? (isDark ? 'text' : 'tint') : 'textSecondary'}>
         {children}
       </ThemedText>
     </Pressable>
@@ -66,15 +72,22 @@ function TabButton({ children, isFocused, ...props }: TabTriggerSlotProps) {
 
 function TabBar(props: TabListProps) {
   const theme = useTheme();
+  const scheme = useColorScheme();
+  const pathname = usePathname();
+  const { width } = useWindowDimensions();
+  const barMaxWidth = pathname === '/' && width >= 960 ? 1080 : MaxContentWidth;
 
   return (
     <View
       {...props}
       style={[
         styles.bar,
-        { backgroundColor: theme.backgroundElement, borderBottomColor: theme.border },
+        {
+          backgroundColor: scheme === 'dark' ? '#0A0A0C' : theme.backgroundElement,
+          borderBottomColor: theme.border,
+        },
       ]}>
-      <View style={styles.barInner}>
+      <View style={[styles.barInner, { maxWidth: barMaxWidth }]}>
         <HomeLogo />
         <View style={styles.tabs}>{props.children}</View>
       </View>
@@ -109,13 +122,13 @@ const styles = StyleSheet.create({
   },
   bar: {
     borderBottomWidth: StyleSheet.hairlineWidth,
-    paddingHorizontal: Spacing.three,
     paddingVertical: Spacing.two,
     alignItems: 'center',
   },
   barInner: {
     width: '100%',
     maxWidth: MaxContentWidth,
+    paddingHorizontal: Spacing.three,
     flexDirection: 'row',
     flexWrap: 'wrap',
     alignItems: 'center',

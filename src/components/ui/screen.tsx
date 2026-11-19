@@ -1,32 +1,43 @@
-import { router } from 'expo-router';
-import { useEffect, useRef, useState, type PropsWithChildren, type ReactNode, type Ref } from 'react';
+import { router } from "expo-router";
 import {
-  Animated,
-  Modal,
-  Platform,
-  Pressable,
-  RefreshControl,
-  ScrollView,
-  StyleSheet,
-  useWindowDimensions,
-  View,
-  type GestureResponderEvent,
-  type LayoutChangeEvent,
-  type NativeScrollEvent,
-  type NativeSyntheticEvent,
-  type ScrollViewInstance,
-  type StyleProp,
-  type ViewStyle,
-} from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
+    useEffect,
+    useRef,
+    useState,
+    type PropsWithChildren,
+    type ReactNode,
+    type Ref,
+} from "react";
+import {
+    Animated,
+    Platform,
+    Pressable,
+    RefreshControl,
+    ScrollView,
+    StyleSheet,
+    useWindowDimensions,
+    View,
+    type GestureResponderEvent,
+    type LayoutChangeEvent,
+    type NativeScrollEvent,
+    type NativeSyntheticEvent,
+    type ScrollViewInstance,
+    type StyleProp,
+    type ViewStyle,
+} from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-import { ThemedText } from '@/components/themed-text';
-import { BottomTabInset, MaxContentWidth, Radius, Spacing } from '@/constants/theme';
-import { useTheme, useThemeMode, type ThemeMode } from '@/hooks/use-theme';
-import { setSwipeLocked } from '@/lib/swipe-navigation';
+import { ThemedText } from "@/components/themed-text";
+import {
+    BottomTabInset,
+    MaxContentWidth,
+    Radius,
+    Spacing,
+} from "@/constants/theme";
+import { useTheme, useThemeMode } from "@/hooks/use-theme";
+import { setSwipeLocked } from "@/lib/swipe-navigation";
 
-import { Button } from './button';
-import { SkeletonList } from './loading-animation';
+import { Button } from "./button";
+import { SkeletonList } from "./loading-animation";
 
 type Props = PropsWithChildren<{
   title: string;
@@ -69,14 +80,13 @@ export function Screen({
   children,
 }: Props) {
   const theme = useTheme();
-  const { mode, resolvedScheme, setMode } = useThemeMode();
-  const [themeOpen, setThemeOpen] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const { width } = useWindowDimensions();
   const insets = useSafeAreaInsets();
   const bottomInset = onBack ? Spacing.four : BottomTabInset + Spacing.four;
-  const maxWidth = wide && Platform.OS === 'web' && width >= 960 ? 1080 : MaxContentWidth;
-  const isNative = Platform.OS !== 'web';
+  const maxWidth =
+    wide && Platform.OS === "web" && width >= 960 ? 1080 : MaxContentWidth;
+  const isNative = Platform.OS !== "web";
 
   // 모바일 전용 커스텀 플로팅 스크롤바 상태
   const [viewportHeight, setViewportHeight] = useState(0);
@@ -89,9 +99,13 @@ export function Screen({
   const trackBottom = insets.bottom + bottomInset + (overlay ? 76 : 0);
   const trackHeight = Math.max(0, viewportHeight - trackTop - trackBottom);
   const scrollableDistance = Math.max(0, contentHeight - viewportHeight);
-  const showCustomScrollbar = isNative && scrollableDistance > 24 && trackHeight > 48;
+  const showCustomScrollbar =
+    isNative && scrollableDistance > 24 && trackHeight > 48;
   const thumbHeight = showCustomScrollbar
-    ? Math.max(32, Math.min(110, (viewportHeight / contentHeight) * trackHeight))
+    ? Math.max(
+        32,
+        Math.min(110, (viewportHeight / contentHeight) * trackHeight),
+      )
     : 0;
   const maxThumbOffset = Math.max(0, trackHeight - thumbHeight);
 
@@ -118,11 +132,16 @@ export function Screen({
     }, 750);
   }
 
-  function handleInternalScroll(event: NativeSyntheticEvent<NativeScrollEvent>) {
+  function handleInternalScroll(
+    event: NativeSyntheticEvent<NativeScrollEvent>,
+  ) {
     onScroll?.(event);
     if (!showCustomScrollbar) return;
     const y = event.nativeEvent.contentOffset.y;
-    const ratio = scrollableDistance > 0 ? Math.min(1, Math.max(0, y / scrollableDistance)) : 0;
+    const ratio =
+      scrollableDistance > 0
+        ? Math.min(1, Math.max(0, y / scrollableDistance))
+        : 0;
     thumbTranslateY.setValue(ratio * maxThumbOffset);
     revealScrollbar();
   }
@@ -181,7 +200,8 @@ export function Screen({
             paddingTop: insets.top + Spacing.three,
             paddingBottom: insets.bottom + bottomInset + (overlay ? 76 : 0),
           },
-        ]}>
+        ]}
+      >
         <View style={styles.header}>
           {onBack ? (
             <Pressable
@@ -191,8 +211,12 @@ export function Screen({
               onPress={onBack}
               style={({ pressed }) => [
                 styles.back,
-                { backgroundColor: theme.backgroundElement, opacity: pressed ? 0.7 : 1 },
-              ]}>
+                {
+                  backgroundColor: theme.backgroundElement,
+                  opacity: pressed ? 0.7 : 1,
+                },
+              ]}
+            >
               <ThemedText type="default">‹</ThemedText>
             </Pressable>
           ) : null}
@@ -202,32 +226,18 @@ export function Screen({
           {action}
           <Pressable
             accessibilityRole="button"
-            accessibilityLabel="테마 선택"
-            hitSlop={8}
-            onPress={() => setThemeOpen(true)}
-            style={({ pressed }) => [
-              styles.account,
-              {
-                backgroundColor: theme.backgroundElement,
-                borderColor: theme.border,
-                opacity: pressed ? 0.7 : 1,
-              },
-            ]}>
-            <ThemedText type="small">테마</ThemedText>
-          </Pressable>
-          <Pressable
-            accessibilityRole="button"
             accessibilityLabel="설정"
             hitSlop={8}
-            onPress={() => router.push('/settings')}
+            onPress={() => router.push("/settings")}
             style={({ pressed }) => [
               styles.account,
               {
-                backgroundColor: theme.backgroundElement,
+                backgroundColor: theme.background,
                 borderColor: theme.border,
                 opacity: pressed ? 0.7 : 1,
               },
-            ]}>
+            ]}
+          >
             <ThemedText type="small">설정</ThemedText>
           </Pressable>
         </View>
@@ -245,7 +255,8 @@ export function Screen({
               bottom: trackBottom,
               opacity: scrollbarOpacity,
             },
-          ]}>
+          ]}
+        >
           <Animated.View
             style={[
               styles.scrollbarThumb,
@@ -265,114 +276,16 @@ export function Screen({
           style={[
             styles.overlayContainer,
             {
-              bottom: insets.bottom + (onBack ? Spacing.three : BottomTabInset + Spacing.two),
+              bottom:
+                insets.bottom +
+                (onBack ? Spacing.three : BottomTabInset + Spacing.two),
             },
-          ]}>
+          ]}
+        >
           <View style={styles.overlayInner}>{overlay}</View>
         </View>
       ) : null}
-
-      <ThemePickerModal
-        visible={themeOpen}
-        mode={mode}
-        resolvedScheme={resolvedScheme}
-        onSelect={(next) => {
-          setMode(next);
-          setThemeOpen(false);
-        }}
-        onClose={() => setThemeOpen(false)}
-      />
     </View>
-  );
-}
-
-const THEME_OPTIONS: readonly { value: ThemeMode; label: string; description: string }[] = [
-  { value: 'light', label: '라이트 테마', description: '밝고 선명한 화면' },
-  { value: 'dark', label: '다크 테마', description: '눈이 편안한 어두운 화면' },
-  { value: 'system', label: '기기 설정 따르기', description: '시스템 화면 모드에 맞춤' },
-];
-
-function ThemePickerModal({
-  visible,
-  mode,
-  resolvedScheme,
-  onSelect,
-  onClose,
-}: {
-  visible: boolean;
-  mode: ThemeMode;
-  resolvedScheme: 'light' | 'dark';
-  onSelect: (next: ThemeMode) => void;
-  onClose: () => void;
-}) {
-  const theme = useTheme();
-
-  return (
-    <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
-      <Pressable
-        accessibilityRole="button"
-        accessibilityLabel="테마 선택 창 닫기"
-        onPress={onClose}
-        style={styles.modalBackdrop}>
-        <Pressable
-          onPress={(e) => e.stopPropagation()}
-          style={[
-            styles.modalCard,
-            {
-              backgroundColor: theme.backgroundElement,
-              borderColor: theme.border,
-            },
-          ]}>
-          <View style={styles.modalHeader}>
-            <ThemedText type="default" style={styles.modalTitle}>
-              화면 테마
-            </ThemedText>
-            <ThemedText type="small" themeColor="textSecondary">
-              현재 {resolvedScheme === 'dark' ? '다크' : '라이트'} 테마 적용 중
-            </ThemedText>
-          </View>
-
-          <View style={styles.modalOptions}>
-            {THEME_OPTIONS.map((option) => {
-              const selected = mode === option.value;
-              return (
-                <Pressable
-                  key={option.value}
-                  accessibilityRole="radio"
-                  accessibilityState={{ selected }}
-                  onPress={() => onSelect(option.value)}
-                  style={({ pressed }) => [
-                    styles.themeOption,
-                    {
-                      backgroundColor: selected ? theme.tintSoft : theme.background,
-                      borderColor: selected ? theme.tint : theme.border,
-                      opacity: pressed ? 0.8 : 1,
-                    },
-                  ]}>
-                  <View style={styles.themeOptionText}>
-                    <ThemedText
-                      type="smallBold"
-                      style={{ color: selected ? theme.tint : theme.text }}>
-                      {option.label}
-                    </ThemedText>
-                    <ThemedText type="small" themeColor="textSecondary">
-                      {option.description}
-                    </ThemedText>
-                  </View>
-                  {selected ? (
-                    <ThemedText type="smallBold" style={{ color: theme.tint }}>
-                      ✓
-                    </ThemedText>
-                  ) : null}
-                </Pressable>
-              );
-            })}
-          </View>
-
-          <Button label="닫기" variant="secondary" size="small" onPress={onClose} />
-        </Pressable>
-      </Pressable>
-    </Modal>
   );
 }
 
@@ -399,14 +312,23 @@ export function ListStatus({
         <ThemedText type="small" themeColor="danger" style={styles.centered}>
           불러오지 못했습니다. 다시 시도해 주세요.
         </ThemedText>
-        <Button label="다시 시도" variant="secondary" size="small" onPress={onRetry} />
+        <Button
+          label="다시 시도"
+          variant="secondary"
+          size="small"
+          onPress={onRetry}
+        />
       </View>
     );
   }
   if (empty) {
     return (
       <View style={styles.status}>
-        <ThemedText type="small" themeColor="textSecondary" style={styles.centered}>
+        <ThemedText
+          type="small"
+          themeColor="textSecondary"
+          style={styles.centered}
+        >
           {emptyText}
         </ThemedText>
       </View>
@@ -438,16 +360,21 @@ export function Card({
 }>) {
   const theme = useTheme();
   const { resolvedScheme } = useThemeMode();
-  const isLight = resolvedScheme === 'light';
+  const isLight = resolvedScheme === "light";
   const baseStyle = [
     styles.card,
     {
-      backgroundColor: selected || highlight ? theme.tintSoft : theme.backgroundElement,
-      borderColor: selected ? theme.tint : highlight ? theme.tint : theme.border,
+      backgroundColor:
+        selected || highlight ? theme.tintSoft : theme.backgroundElement,
+      borderColor: selected
+        ? theme.tint
+        : highlight
+          ? theme.tint
+          : theme.border,
       borderWidth: selected ? 1.5 : 1,
     },
     isLight && styles.cardShadowLight,
-    selecting && Platform.OS === 'web' && styles.noSelect,
+    selecting && Platform.OS === "web" && styles.noSelect,
     style,
   ];
 
@@ -469,7 +396,8 @@ export function Card({
           backgroundColor: selected ? theme.tintSoft : theme.backgroundSelected,
           opacity: selected ? 0.9 : 1,
         },
-      ]}>
+      ]}
+    >
       {children}
     </Pressable>
   );
@@ -480,7 +408,7 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   scrollbarTrack: {
-    position: 'absolute',
+    position: "absolute",
     right: 4,
     width: 4,
     borderRadius: Radius.full,
@@ -491,54 +419,55 @@ const styles = StyleSheet.create({
     opacity: 0.55,
   },
   content: {
-    width: '100%',
+    width: "100%",
     maxWidth: MaxContentWidth,
-    alignSelf: 'center',
+    alignSelf: "center",
     paddingHorizontal: Spacing.three,
     gap: Spacing.three,
   },
   header: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
     gap: Spacing.two,
   },
   title: {
     flex: 1,
-    fontSize: 26,
-    lineHeight: 34,
+    fontSize: 25,
+    lineHeight: 32,
     fontWeight: 700,
+    letterSpacing: -0.5,
   },
   back: {
     width: 34,
     height: 34,
     borderRadius: Radius.full,
-    alignItems: 'center',
-    justifyContent: 'center',
+    alignItems: "center",
+    justifyContent: "center",
   },
   account: {
     minHeight: 34,
     paddingHorizontal: Spacing.three - 2,
     borderRadius: Radius.full,
     borderWidth: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
+    alignItems: "center",
+    justifyContent: "center",
   },
   status: {
     paddingVertical: Spacing.five,
-    alignItems: 'center',
+    alignItems: "center",
     gap: Spacing.three,
   },
   centered: {
-    textAlign: 'center',
+    textAlign: "center",
   },
   card: {
-    borderRadius: Radius.large,
+    borderRadius: 16,
     borderWidth: 1,
     padding: Spacing.three,
-    gap: Spacing.two,
+    gap: Spacing.two + 2,
   },
   cardShadowLight: {
-    shadowColor: '#171626',
+    shadowColor: "#111114",
     shadowOpacity: 0.045,
     shadowRadius: 12,
     shadowOffset: { width: 0, height: 4 },
@@ -546,55 +475,18 @@ const styles = StyleSheet.create({
   },
   // userSelect 는 웹 전용이라 RN ViewStyle 타입에 없어 캐스팅한다.
   noSelect: {
-    userSelect: 'none',
+    userSelect: "none",
   } as ViewStyle,
   overlayContainer: {
-    position: 'absolute',
+    position: "absolute",
     left: 0,
     right: 0,
     zIndex: 20,
   },
   overlayInner: {
-    width: '100%',
+    width: "100%",
     maxWidth: MaxContentWidth,
-    alignSelf: 'center',
+    alignSelf: "center",
     paddingHorizontal: Spacing.three,
-  },
-  modalBackdrop: {
-    flex: 1,
-    backgroundColor: 'rgba(10, 10, 18, 0.56)',
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: Spacing.three,
-  },
-  modalCard: {
-    width: '100%',
-    maxWidth: 360,
-    borderRadius: Radius.large,
-    borderWidth: 1,
-    padding: Spacing.three,
-    gap: Spacing.three,
-  },
-  modalHeader: {
-    gap: Spacing.half,
-  },
-  modalTitle: {
-    fontWeight: 700,
-    fontSize: 18,
-  },
-  modalOptions: {
-    gap: Spacing.two,
-  },
-  themeOption: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: Spacing.three,
-    paddingVertical: Spacing.two + 2,
-    borderRadius: Radius.medium,
-    borderWidth: 1.5,
-  },
-  themeOptionText: {
-    gap: Spacing.half,
   },
 });
