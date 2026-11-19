@@ -58,41 +58,49 @@ function HabitsWidgetLayout(props: HabitsWidgetProps, environment: WidgetEnviron
 
   return (
     <Column modifiers={[fillMaxSize(), background(c.bg), cornerRadius(18), paddingAll(14)]}>
-      <Button
-        {...({ target: 'open:/habits' } as object)}
-        colors={{ containerColor: c.bg, contentColor: c.text }}
-        contentPadding={{ start: 0, top: 0, end: 0, bottom: 0 }}
-        modifiers={[fillMaxWidth()]}>
-        <Row verticalAlignment="center" modifiers={[fillMaxWidth()]}>
-          <Box modifiers={[size(8, 8), background(c.success), cornerRadius(99)]} />
-          <Spacer modifiers={[width(6)]} />
-          <Text color={c.text} style={{ fontSize: 15, fontWeight: '700' }}>
-            습관
-          </Text>
-          <Spacer modifiers={[width(6)]} />
-          <Box modifiers={[background(c.tintSoft), cornerRadius(99), padding(7, 2, 7, 2)]}>
-            <Text color={c.tint} style={{ fontSize: 11, fontWeight: '600' }}>
-              {`${props.doneCount}/${props.totalCount}`}
+      <Row verticalAlignment="center" modifiers={[fillMaxWidth()]}>
+        <Button
+          {...({ target: 'open:/habits' } as object)}
+          colors={{ containerColor: c.bg, contentColor: c.text }}
+          contentPadding={{ start: 0, top: 0, end: 0, bottom: 0 }}>
+          <Row verticalAlignment="center">
+            <Box modifiers={[size(8, 8), background(c.success), cornerRadius(99)]} />
+            <Spacer modifiers={[width(6)]} />
+            <Text color={c.text} style={{ fontSize: 15, fontWeight: '700' }}>
+              습관
             </Text>
-          </Box>
-          <Spacer />
-          <Text color={c.tint} style={{ fontSize: 11, fontWeight: '600' }}>
-            관리
+            <Spacer modifiers={[width(6)]} />
+            <Box modifiers={[background(c.tintSoft), cornerRadius(99), padding(7, 2, 7, 2)]}>
+              <Text color={c.tint} style={{ fontSize: 11, fontWeight: '600' }}>
+                {`${props.doneCount}/${props.totalCount}`}
+              </Text>
+            </Box>
+          </Row>
+        </Button>
+        <Spacer />
+        <Button
+          {...({ target: 'open:/habits?add=1' } as object)}
+          colors={{ containerColor: c.tintSoft, contentColor: c.tint }}
+          contentPadding={{ start: 9, top: 4, end: 9, bottom: 4 }}
+          modifiers={[cornerRadius(99)]}>
+          <Text color={c.tint} style={{ fontSize: 11, fontWeight: '700' }}>
+            + 추가
           </Text>
-        </Row>
-      </Button>
+        </Button>
+      </Row>
 
       <Spacer modifiers={[height(10)]} />
 
       {props.items.length === 0 ? (
-        <Column
-          verticalArrangement="center"
-          horizontalAlignment="center"
-          modifiers={[fillMaxSize(), background(c.surface), cornerRadius(12), paddingAll(12)]}>
+        <Button
+          {...({ target: 'open:/habits?add=1' } as object)}
+          colors={{ containerColor: c.surface, contentColor: c.textSecondary }}
+          contentPadding={{ start: 12, top: 12, end: 12, bottom: 12 }}
+          modifiers={[fillMaxSize(), cornerRadius(12)]}>
           <Text color={c.textSecondary} style={{ fontSize: 13, fontWeight: '500' }}>
-            등록된 습관이 없어요
+            등록된 습관이 없어요 · 눌러서 추가
           </Text>
-        </Column>
+        </Button>
       ) : (
         <Column modifiers={[fillMaxWidth()]}>
           {props.items.slice(0, 4).map((item, idx) => (

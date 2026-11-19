@@ -13,7 +13,6 @@ import {
   fillMaxSize,
   fillMaxWidth,
   height,
-  padding,
   paddingAll,
   size,
   width,
@@ -50,84 +49,94 @@ function MoneyWidgetLayout(props: MoneyWidgetProps, environment: WidgetEnvironme
 
   return (
     <Column modifiers={[fillMaxSize(), background(c.bg), cornerRadius(18), paddingAll(14)]}>
-      <Button
-        {...({ target: 'open:/money' } as object)}
-        colors={{ containerColor: c.bg, contentColor: c.text }}
-        contentPadding={{ start: 0, top: 0, end: 0, bottom: 0 }}
-        modifiers={[fillMaxSize()]}>
-        <Column modifiers={[fillMaxSize()]}>
-          <Row verticalAlignment="center" modifiers={[fillMaxWidth()]}>
+      <Row verticalAlignment="center" modifiers={[fillMaxWidth()]}>
+        <Button
+          {...({ target: 'open:/money' } as object)}
+          colors={{ containerColor: c.bg, contentColor: c.text }}
+          contentPadding={{ start: 0, top: 0, end: 0, bottom: 0 }}>
+          <Row verticalAlignment="center">
             <Box modifiers={[size(8, 8), background(c.tint), cornerRadius(99)]} />
             <Spacer modifiers={[width(6)]} />
             <Text color={c.text} style={{ fontSize: 15, fontWeight: '700' }}>
               {props.monthLabel}
             </Text>
-            <Spacer />
-            <Box modifiers={[background(c.tintSoft), cornerRadius(99), padding(7, 2, 7, 2)]}>
-              <Text color={c.tint} style={{ fontSize: 11, fontWeight: '600' }}>
-                {`오늘 ${props.todayExpenseLabel}`}
-              </Text>
-            </Box>
           </Row>
+        </Button>
+        <Spacer />
+        <Button
+          {...({ target: 'open:/money?add=1' } as object)}
+          colors={{ containerColor: c.tintSoft, contentColor: c.tint }}
+          contentPadding={{ start: 9, top: 4, end: 9, bottom: 4 }}
+          modifiers={[cornerRadius(99)]}>
+          <Text color={c.tint} style={{ fontSize: 11, fontWeight: '700' }}>
+            + 기록
+          </Text>
+        </Button>
+      </Row>
 
-          <Spacer modifiers={[height(10)]} />
+      <Spacer modifiers={[height(10)]} />
 
-          <Row verticalAlignment="center" modifiers={[fillMaxWidth()]}>
-            <Column
-              modifiers={[
-                background(c.surface),
-                cornerRadius(12),
-                paddingAll(10),
-              ]}>
-              <Text color={c.textSecondary} style={{ fontSize: 11, fontWeight: '500' }}>
-                지출
-              </Text>
-              <Spacer modifiers={[height(2)]} />
-              <Text color={c.danger} style={{ fontSize: 15, fontWeight: '700' }}>
-                {props.expenseLabel}
-              </Text>
-            </Column>
-            <Spacer modifiers={[width(8)]} />
-            <Column
-              modifiers={[
-                fillMaxWidth(),
-                background(c.surface),
-                cornerRadius(12),
-                paddingAll(10),
-              ]}>
-              <Text color={c.textSecondary} style={{ fontSize: 11, fontWeight: '500' }}>
-                수입
-              </Text>
-              <Spacer modifiers={[height(2)]} />
-              <Text color={c.success} style={{ fontSize: 15, fontWeight: '700' }}>
-                {props.incomeLabel}
-              </Text>
-            </Column>
-          </Row>
-
-          {props.budgetLabel ? (
-            <Column modifiers={[fillMaxWidth()]}>
-              <Spacer modifiers={[height(10)]} />
-              <Text
-                color={props.isOverBudget ? c.danger : c.textSecondary}
-                style={{ fontSize: 11, fontWeight: '600' }}>
-                {props.budgetLabel}
-              </Text>
-              {props.budgetProgress >= 0 ? (
-                <Column modifiers={[fillMaxWidth()]}>
-                  <Spacer modifiers={[height(4)]} />
-                  <LinearProgressIndicator
-                    progress={props.budgetProgress}
-                    color={props.isOverBudget ? c.danger : c.tint}
-                    trackColor={c.surface}
-                    modifiers={[fillMaxWidth(), height(6), cornerRadius(99)]}
-                  />
-                </Column>
-              ) : null}
-            </Column>
-          ) : null}
-        </Column>
+      <Button
+        {...({ target: 'open:/money' } as object)}
+        colors={{ containerColor: c.surface, contentColor: c.text }}
+        contentPadding={{ start: 12, top: 9, end: 12, bottom: 9 }}
+        modifiers={[fillMaxWidth(), cornerRadius(10)]}>
+        <Row verticalAlignment="center" modifiers={[fillMaxWidth()]}>
+          <Text color={c.textSecondary} style={{ fontSize: 12, fontWeight: '600' }}>
+            지출
+          </Text>
+          <Spacer />
+          <Text color={c.danger} style={{ fontSize: 14, fontWeight: '700' }}>
+            {props.expenseLabel}
+          </Text>
+        </Row>
       </Button>
+
+      <Spacer modifiers={[height(6)]} />
+
+      <Button
+        {...({ target: 'open:/money' } as object)}
+        colors={{ containerColor: c.surface, contentColor: c.text }}
+        contentPadding={{ start: 12, top: 9, end: 12, bottom: 9 }}
+        modifiers={[fillMaxWidth(), cornerRadius(10)]}>
+        <Row verticalAlignment="center" modifiers={[fillMaxWidth()]}>
+          <Text color={c.textSecondary} style={{ fontSize: 12, fontWeight: '600' }}>
+            수입
+          </Text>
+          <Spacer />
+          <Text color={c.success} style={{ fontSize: 14, fontWeight: '700' }}>
+            {props.incomeLabel}
+          </Text>
+        </Row>
+      </Button>
+
+      <Spacer modifiers={[height(8)]} />
+
+      <Row verticalAlignment="center" modifiers={[fillMaxWidth()]}>
+        <Text
+          color={props.isOverBudget ? c.danger : c.textSecondary}
+          maxLines={1}
+          overflow="ellipsis"
+          style={{ fontSize: 11, fontWeight: '600' }}>
+          {props.budgetLabel || '이번 달 요약'}
+        </Text>
+        <Spacer />
+        <Text color={c.tint} style={{ fontSize: 11, fontWeight: '600' }}>
+          {`오늘 ${props.todayExpenseLabel}`}
+        </Text>
+      </Row>
+
+      {props.budgetProgress >= 0 ? (
+        <Column modifiers={[fillMaxWidth()]}>
+          <Spacer modifiers={[height(5)]} />
+          <LinearProgressIndicator
+            progress={props.budgetProgress}
+            color={props.isOverBudget ? c.danger : c.tint}
+            trackColor={c.surface}
+            modifiers={[fillMaxWidth(), height(6), cornerRadius(99)]}
+          />
+        </Column>
+      ) : null}
     </Column>
   );
 }

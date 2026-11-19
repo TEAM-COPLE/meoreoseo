@@ -1,4 +1,4 @@
-import { HStack, ProgressView, Spacer, Text, VStack } from "@expo/ui/swift-ui";
+import { HStack, Link, ProgressView, Spacer, Text, VStack } from "@expo/ui/swift-ui";
 import {
     background,
     containerBackground,
@@ -61,24 +61,24 @@ function MoneyWidgetLayout(
       <HStack spacing={6}>
         <Text
           modifiers={[
-            font({ size: 15, weight: "bold" }),
+            font({ size: 15, weight: 'bold' }),
             foregroundStyle(c.text),
-          ]}
-        >
+          ]}>
           {props.monthLabel}
         </Text>
         <Spacer />
-        <Text
-          modifiers={[
-            font({ size: 11, weight: "semibold" }),
-            foregroundStyle(c.tint),
-            padding({ horizontal: 7, vertical: 2 }),
-            background(c.tintSoft),
-            cornerRadius(99),
-          ]}
-        >
-          {`오늘 ${props.todayExpenseLabel}`}
-        </Text>
+        <Link destination="meoreoseo://money?add=1">
+          <Text
+            modifiers={[
+              font({ size: 11, weight: 'bold' }),
+              foregroundStyle(c.tint),
+              padding({ horizontal: 9, vertical: 4 }),
+              background(c.tintSoft),
+              cornerRadius(99),
+            ]}>
+            + 기록
+          </Text>
+        </Link>
       </HStack>
 
       <HStack spacing={8}>

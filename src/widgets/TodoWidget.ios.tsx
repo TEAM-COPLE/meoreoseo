@@ -66,27 +66,38 @@ function TodoWidgetLayout(props: TodoWidgetProps, environment: WidgetEnvironment
         containerBackground(c.bg, 'widget'),
         widgetURL('meoreoseo://todos'),
       ]}>
-      <Link destination="meoreoseo://todos">
-        <HStack spacing={6}>
-          <Text modifiers={[font({ size: 15, weight: 'bold' }), foregroundStyle(c.text)]}>
-            할 일
-          </Text>
+      <HStack spacing={6}>
+        <Link destination="meoreoseo://todos">
+          <HStack spacing={6}>
+            <Text modifiers={[font({ size: 15, weight: 'bold' }), foregroundStyle(c.text)]}>
+              할 일
+            </Text>
+            <Text
+              modifiers={[
+                font({ size: 11, weight: 'semibold' }),
+                foregroundStyle(c.tint),
+                padding({ horizontal: 7, vertical: 2 }),
+                background(c.tintSoft),
+                cornerRadius(99),
+              ]}>
+              {`${props.pendingCount}개 남음`}
+            </Text>
+          </HStack>
+        </Link>
+        <Spacer />
+        <Link destination="meoreoseo://todos?add=1">
           <Text
             modifiers={[
-              font({ size: 11, weight: 'semibold' }),
+              font({ size: 11, weight: 'bold' }),
               foregroundStyle(c.tint),
-              padding({ horizontal: 7, vertical: 2 }),
+              padding({ horizontal: 9, vertical: 4 }),
               background(c.tintSoft),
               cornerRadius(99),
             ]}>
-            {`${props.pendingCount}개 남음`}
+            + 추가
           </Text>
-          <Spacer />
-          <Text modifiers={[font({ size: 11 }), foregroundStyle(c.textSecondary)]}>
-            {props.dateLabel}
-          </Text>
-        </HStack>
-      </Link>
+        </Link>
+      </HStack>
 
       {props.items.length === 0 ? (
         <VStack

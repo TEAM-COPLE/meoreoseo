@@ -63,6 +63,34 @@ const DRAWABLES = {
   <corners android:radius="99dp" />
 </shape>
 `,
+  'widget_preview_check_empty.xml': `<?xml version="1.0" encoding="utf-8"?>
+<shape xmlns:android="http://schemas.android.com/apk/res/android" android:shape="rectangle">
+  <solid android:color="@color/widget_bg" />
+  <corners android:radius="6dp" />
+</shape>
+`,
+  'widget_preview_check_done.xml': `<?xml version="1.0" encoding="utf-8"?>
+<shape xmlns:android="http://schemas.android.com/apk/res/android" android:shape="rectangle">
+  <solid android:color="@color/widget_tint" />
+  <corners android:radius="6dp" />
+</shape>
+`,
+  'widget_preview_circle_done.xml': `<?xml version="1.0" encoding="utf-8"?>
+<shape xmlns:android="http://schemas.android.com/apk/res/android" android:shape="oval">
+  <solid android:color="@color/widget_success" />
+</shape>
+`,
+  'widget_preview_circle_empty.xml': `<?xml version="1.0" encoding="utf-8"?>
+<shape xmlns:android="http://schemas.android.com/apk/res/android" android:shape="oval">
+  <solid android:color="@color/widget_bg" />
+</shape>
+`,
+  'widget_preview_bar_tint.xml': `<?xml version="1.0" encoding="utf-8"?>
+<shape xmlns:android="http://schemas.android.com/apk/res/android" android:shape="rectangle">
+  <solid android:color="@color/widget_tint" />
+  <corners android:radius="99dp" />
+</shape>
+`,
   'widget_preview_dot_tint.xml': `<?xml version="1.0" encoding="utf-8"?>
 <shape xmlns:android="http://schemas.android.com/apk/res/android" android:shape="oval">
   <solid android:color="@color/widget_tint" />
@@ -97,17 +125,19 @@ const PREVIEW_LAYOUTS = {
     <ImageView android:layout_width="8dp" android:layout_height="8dp" android:background="@drawable/widget_preview_dot_tint" />
     <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginStart="6dp" android:text="할 일" android:textColor="@color/widget_text" android:textSize="15sp" android:textStyle="bold" />
     <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginStart="6dp" android:background="@drawable/widget_preview_tint_pill" android:paddingHorizontal="7dp" android:paddingVertical="2dp" android:text="3개 남음" android:textColor="@color/widget_tint" android:textSize="11sp" android:textStyle="bold" />
+    <TextView android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" />
+    <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:background="@drawable/widget_preview_tint_pill" android:paddingHorizontal="9dp" android:paddingVertical="4dp" android:text="+ 추가" android:textColor="@color/widget_tint" android:textSize="11sp" android:textStyle="bold" />
   </LinearLayout>
 
   <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="10dp" android:background="@drawable/widget_preview_surface" android:gravity="center_vertical" android:orientation="horizontal" android:paddingHorizontal="10dp" android:paddingVertical="8dp">
-    <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="☐" android:textColor="@color/widget_text_secondary" android:textSize="13sp" />
-    <TextView android:layout_width="0dp" android:layout_height="wrap_content" android:layout_marginStart="8dp" android:layout_weight="1" android:text="장보기 (우유, 계란)" android:textColor="@color/widget_text" android:textSize="13sp" />
-    <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="오늘" android:textColor="@color/widget_tint" android:textSize="10sp" android:textStyle="bold" />
+    <TextView android:layout_width="18dp" android:layout_height="18dp" android:background="@drawable/widget_preview_check_empty" android:gravity="center" android:text="" android:textSize="11sp" />
+    <TextView android:layout_width="0dp" android:layout_height="wrap_content" android:layout_marginStart="8dp" android:layout_weight="1" android:maxLines="1" android:text="장보기 (우유, 계란)" android:textColor="@color/widget_text" android:textSize="13sp" />
+    <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:background="@drawable/widget_preview_tint_pill" android:paddingHorizontal="6dp" android:paddingVertical="2dp" android:text="오늘" android:textColor="@color/widget_tint" android:textSize="10sp" android:textStyle="bold" />
   </LinearLayout>
 
   <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="6dp" android:background="@drawable/widget_preview_surface" android:gravity="center_vertical" android:orientation="horizontal" android:paddingHorizontal="10dp" android:paddingVertical="8dp">
-    <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="☐" android:textColor="@color/widget_text_secondary" android:textSize="13sp" />
-    <TextView android:layout_width="0dp" android:layout_height="wrap_content" android:layout_marginStart="8dp" android:layout_weight="1" android:text="회의 자료 정리하기" android:textColor="@color/widget_text" android:textSize="13sp" />
+    <TextView android:layout_width="18dp" android:layout_height="18dp" android:background="@drawable/widget_preview_check_done" android:gravity="center" android:text="✓" android:textColor="#FFFFFF" android:textSize="11sp" android:textStyle="bold" />
+    <TextView android:layout_width="0dp" android:layout_height="wrap_content" android:layout_marginStart="8dp" android:layout_weight="1" android:maxLines="1" android:text="운동 30분" android:textColor="@color/widget_text_secondary" android:textSize="13sp" />
   </LinearLayout>
 </LinearLayout>
 `,
@@ -123,16 +153,24 @@ const PREVIEW_LAYOUTS = {
     <ImageView android:layout_width="8dp" android:layout_height="8dp" android:background="@drawable/widget_preview_dot_warm" />
     <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginStart="6dp" android:text="일정" android:textColor="@color/widget_text" android:textSize="15sp" android:textStyle="bold" />
     <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginStart="6dp" android:background="@drawable/widget_preview_tint_pill" android:paddingHorizontal="7dp" android:paddingVertical="2dp" android:text="2건" android:textColor="@color/widget_tint" android:textSize="11sp" android:textStyle="bold" />
+    <TextView android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" />
+    <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:background="@drawable/widget_preview_tint_pill" android:paddingHorizontal="9dp" android:paddingVertical="4dp" android:text="+ 추가" android:textColor="@color/widget_tint" android:textSize="11sp" android:textStyle="bold" />
   </LinearLayout>
 
-  <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="10dp" android:background="@drawable/widget_preview_surface" android:orientation="vertical" android:paddingHorizontal="10dp" android:paddingVertical="8dp">
-    <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="팀 주간 미팅" android:textColor="@color/widget_text" android:textSize="13sp" android:textStyle="bold" />
-    <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="10:00 – 11:00" android:textColor="@color/widget_text_secondary" android:textSize="11sp" />
+  <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="10dp" android:background="@drawable/widget_preview_surface" android:gravity="center_vertical" android:orientation="horizontal" android:paddingHorizontal="10dp" android:paddingVertical="8dp">
+    <ImageView android:layout_width="3dp" android:layout_height="24dp" android:background="@drawable/widget_preview_bar_tint" />
+    <LinearLayout android:layout_width="0dp" android:layout_height="wrap_content" android:layout_marginStart="8dp" android:layout_weight="1" android:orientation="vertical">
+      <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="팀 주간 미팅" android:textColor="@color/widget_text" android:textSize="13sp" android:textStyle="bold" />
+      <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="10:00 – 11:00" android:textColor="@color/widget_text_secondary" android:textSize="11sp" />
+    </LinearLayout>
   </LinearLayout>
 
-  <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="6dp" android:background="@drawable/widget_preview_surface" android:orientation="vertical" android:paddingHorizontal="10dp" android:paddingVertical="8dp">
-    <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="치과 예약" android:textColor="@color/widget_text" android:textSize="13sp" android:textStyle="bold" />
-    <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="15:30" android:textColor="@color/widget_text_secondary" android:textSize="11sp" />
+  <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="6dp" android:background="@drawable/widget_preview_surface" android:gravity="center_vertical" android:orientation="horizontal" android:paddingHorizontal="10dp" android:paddingVertical="8dp">
+    <ImageView android:layout_width="3dp" android:layout_height="24dp" android:background="@drawable/widget_preview_bar_tint" />
+    <LinearLayout android:layout_width="0dp" android:layout_height="wrap_content" android:layout_marginStart="8dp" android:layout_weight="1" android:orientation="vertical">
+      <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="치과 예약" android:textColor="@color/widget_text" android:textSize="13sp" android:textStyle="bold" />
+      <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="15:30" android:textColor="@color/widget_text_secondary" android:textSize="11sp" />
+    </LinearLayout>
   </LinearLayout>
 </LinearLayout>
 `,
@@ -148,16 +186,24 @@ const PREVIEW_LAYOUTS = {
     <ImageView android:layout_width="8dp" android:layout_height="8dp" android:background="@drawable/widget_preview_dot_tint" />
     <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginStart="6dp" android:text="메모" android:textColor="@color/widget_text" android:textSize="15sp" android:textStyle="bold" />
     <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginStart="6dp" android:background="@drawable/widget_preview_tint_pill" android:paddingHorizontal="7dp" android:paddingVertical="2dp" android:text="2개" android:textColor="@color/widget_tint" android:textSize="11sp" android:textStyle="bold" />
+    <TextView android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" />
+    <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:background="@drawable/widget_preview_tint_pill" android:paddingHorizontal="9dp" android:paddingVertical="4dp" android:text="+ 새 메모" android:textColor="@color/widget_tint" android:textSize="11sp" android:textStyle="bold" />
   </LinearLayout>
 
   <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="10dp" android:background="@drawable/widget_preview_surface" android:orientation="vertical" android:paddingHorizontal="10dp" android:paddingVertical="8dp">
-    <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="📌 이번 주 목표" android:textColor="@color/widget_text" android:textSize="13sp" android:textStyle="bold" />
-    <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="매일 물 2L 마시기, 책 20페이지 읽기" android:textColor="@color/widget_text_secondary" android:textSize="11sp" />
+    <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="horizontal">
+      <TextView android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:maxLines="1" android:text="📌 이번 주 목표" android:textColor="@color/widget_text" android:textSize="13sp" android:textStyle="bold" />
+      <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="오늘" android:textColor="@color/widget_text_secondary" android:textSize="10sp" />
+    </LinearLayout>
+    <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:maxLines="1" android:text="매일 물 2L 마시기, 책 20페이지 읽기" android:textColor="@color/widget_text_secondary" android:textSize="11sp" />
   </LinearLayout>
 
   <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="6dp" android:background="@drawable/widget_preview_surface" android:orientation="vertical" android:paddingHorizontal="10dp" android:paddingVertical="8dp">
-    <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="아이디어 메모" android:textColor="@color/widget_text" android:textSize="13sp" android:textStyle="bold" />
-    <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="주말 나들이 준비물 체크리스트" android:textColor="@color/widget_text_secondary" android:textSize="11sp" />
+    <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="horizontal">
+      <TextView android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:maxLines="1" android:text="아이디어 메모" android:textColor="@color/widget_text" android:textSize="13sp" android:textStyle="bold" />
+      <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="어제" android:textColor="@color/widget_text_secondary" android:textSize="10sp" />
+    </LinearLayout>
+    <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:maxLines="1" android:text="주말 나들이 준비물 체크리스트" android:textColor="@color/widget_text_secondary" android:textSize="11sp" />
   </LinearLayout>
 </LinearLayout>
 `,
@@ -173,17 +219,19 @@ const PREVIEW_LAYOUTS = {
     <ImageView android:layout_width="8dp" android:layout_height="8dp" android:background="@drawable/widget_preview_dot_success" />
     <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginStart="6dp" android:text="습관" android:textColor="@color/widget_text" android:textSize="15sp" android:textStyle="bold" />
     <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginStart="6dp" android:background="@drawable/widget_preview_tint_pill" android:paddingHorizontal="7dp" android:paddingVertical="2dp" android:text="2/3" android:textColor="@color/widget_tint" android:textSize="11sp" android:textStyle="bold" />
+    <TextView android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" />
+    <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:background="@drawable/widget_preview_tint_pill" android:paddingHorizontal="9dp" android:paddingVertical="4dp" android:text="+ 추가" android:textColor="@color/widget_tint" android:textSize="11sp" android:textStyle="bold" />
   </LinearLayout>
 
   <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="10dp" android:background="@drawable/widget_preview_surface" android:gravity="center_vertical" android:orientation="horizontal" android:paddingHorizontal="10dp" android:paddingVertical="8dp">
-    <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="✓" android:textColor="@color/widget_success" android:textSize="13sp" android:textStyle="bold" />
-    <TextView android:layout_width="0dp" android:layout_height="wrap_content" android:layout_marginStart="8dp" android:layout_weight="1" android:text="아침 스트레칭" android:textColor="@color/widget_text_secondary" android:textSize="13sp" />
+    <TextView android:layout_width="18dp" android:layout_height="18dp" android:background="@drawable/widget_preview_circle_done" android:gravity="center" android:text="✓" android:textColor="#FFFFFF" android:textSize="11sp" android:textStyle="bold" />
+    <TextView android:layout_width="0dp" android:layout_height="wrap_content" android:layout_marginStart="8dp" android:layout_weight="1" android:maxLines="1" android:text="아침 스트레칭" android:textColor="@color/widget_text_secondary" android:textSize="13sp" />
     <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="🔥 7일" android:textColor="@color/widget_warm" android:textSize="11sp" android:textStyle="bold" />
   </LinearLayout>
 
   <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="6dp" android:background="@drawable/widget_preview_surface" android:gravity="center_vertical" android:orientation="horizontal" android:paddingHorizontal="10dp" android:paddingVertical="8dp">
-    <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="○" android:textColor="@color/widget_text_secondary" android:textSize="13sp" />
-    <TextView android:layout_width="0dp" android:layout_height="wrap_content" android:layout_marginStart="8dp" android:layout_weight="1" android:text="영단어 10개" android:textColor="@color/widget_text" android:textSize="13sp" />
+    <TextView android:layout_width="18dp" android:layout_height="18dp" android:background="@drawable/widget_preview_circle_empty" android:gravity="center" android:text="" android:textSize="11sp" />
+    <TextView android:layout_width="0dp" android:layout_height="wrap_content" android:layout_marginStart="8dp" android:layout_weight="1" android:maxLines="1" android:text="영단어 10개" android:textColor="@color/widget_text" android:textSize="13sp" />
     <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="🔥 4일" android:textColor="@color/widget_warm" android:textSize="11sp" android:textStyle="bold" />
   </LinearLayout>
 </LinearLayout>
@@ -199,21 +247,28 @@ const PREVIEW_LAYOUTS = {
   <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:gravity="center_vertical" android:orientation="horizontal">
     <ImageView android:layout_width="8dp" android:layout_height="8dp" android:background="@drawable/widget_preview_dot_tint" />
     <TextView android:layout_width="0dp" android:layout_height="wrap_content" android:layout_marginStart="6dp" android:layout_weight="1" android:text="이번 달 가계부" android:textColor="@color/widget_text" android:textSize="15sp" android:textStyle="bold" />
-    <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:background="@drawable/widget_preview_tint_pill" android:paddingHorizontal="7dp" android:paddingVertical="2dp" android:text="오늘 14,500원" android:textColor="@color/widget_tint" android:textSize="11sp" android:textStyle="bold" />
+    <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:background="@drawable/widget_preview_tint_pill" android:paddingHorizontal="9dp" android:paddingVertical="4dp" android:text="+ 기록" android:textColor="@color/widget_tint" android:textSize="11sp" android:textStyle="bold" />
   </LinearLayout>
 
-  <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="10dp" android:orientation="horizontal">
-    <LinearLayout android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:background="@drawable/widget_preview_surface" android:orientation="vertical" android:padding="10dp">
-      <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="지출" android:textColor="@color/widget_text_secondary" android:textSize="11sp" />
-      <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="428,000원" android:textColor="@color/widget_danger" android:textSize="14sp" android:textStyle="bold" />
-    </LinearLayout>
-    <LinearLayout android:layout_width="0dp" android:layout_height="wrap_content" android:layout_marginStart="8dp" android:layout_weight="1" android:background="@drawable/widget_preview_surface" android:orientation="vertical" android:padding="10dp">
-      <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="수입" android:textColor="@color/widget_text_secondary" android:textSize="11sp" />
-      <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="2,800,000원" android:textColor="@color/widget_success" android:textSize="14sp" android:textStyle="bold" />
-    </LinearLayout>
+  <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="10dp" android:background="@drawable/widget_preview_surface" android:gravity="center_vertical" android:orientation="horizontal" android:paddingHorizontal="12dp" android:paddingVertical="9dp">
+    <TextView android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:text="지출" android:textColor="@color/widget_text_secondary" android:textSize="12sp" android:textStyle="bold" />
+    <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="428,000원" android:textColor="@color/widget_danger" android:textSize="14sp" android:textStyle="bold" />
   </LinearLayout>
 
-  <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginTop="8dp" android:text="남은 예산 372,000원" android:textColor="@color/widget_text_secondary" android:textSize="11sp" android:textStyle="bold" />
+  <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="6dp" android:background="@drawable/widget_preview_surface" android:gravity="center_vertical" android:orientation="horizontal" android:paddingHorizontal="12dp" android:paddingVertical="9dp">
+    <TextView android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:text="수입" android:textColor="@color/widget_text_secondary" android:textSize="12sp" android:textStyle="bold" />
+    <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="2,800,000원" android:textColor="@color/widget_success" android:textSize="14sp" android:textStyle="bold" />
+  </LinearLayout>
+
+  <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="8dp" android:orientation="horizontal">
+    <TextView android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:text="남은 예산 372,000원" android:textColor="@color/widget_text_secondary" android:textSize="11sp" android:textStyle="bold" />
+    <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="오늘 14,500원" android:textColor="@color/widget_tint" android:textSize="11sp" android:textStyle="bold" />
+  </LinearLayout>
+
+  <LinearLayout android:layout_width="match_parent" android:layout_height="6dp" android:layout_marginTop="5dp" android:background="@drawable/widget_preview_surface" android:orientation="horizontal">
+    <ImageView android:layout_width="0dp" android:layout_height="match_parent" android:layout_weight="54" android:background="@drawable/widget_preview_bar_tint" />
+    <ImageView android:layout_width="0dp" android:layout_height="match_parent" android:layout_weight="46" />
+  </LinearLayout>
 </LinearLayout>
 `,
   DashboardWidget: `<?xml version="1.0" encoding="utf-8"?>
@@ -230,32 +285,41 @@ const PREVIEW_LAYOUTS = {
     <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:background="@drawable/widget_preview_tint_pill" android:paddingHorizontal="7dp" android:paddingVertical="2dp" android:text="할 일 2 · 일정 2" android:textColor="@color/widget_tint" android:textSize="10sp" android:textStyle="bold" />
   </LinearLayout>
 
+  <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="8dp" android:orientation="horizontal">
+    <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:background="@drawable/widget_preview_tint_pill" android:paddingHorizontal="8dp" android:paddingVertical="4dp" android:text="+ 할 일" android:textColor="@color/widget_tint" android:textSize="10sp" android:textStyle="bold" />
+    <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginStart="5dp" android:background="@drawable/widget_preview_tint_pill" android:paddingHorizontal="8dp" android:paddingVertical="4dp" android:text="+ 일정" android:textColor="@color/widget_tint" android:textSize="10sp" android:textStyle="bold" />
+    <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginStart="5dp" android:background="@drawable/widget_preview_tint_pill" android:paddingHorizontal="8dp" android:paddingVertical="4dp" android:text="+ 메모" android:textColor="@color/widget_tint" android:textSize="10sp" android:textStyle="bold" />
+    <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginStart="5dp" android:background="@drawable/widget_preview_tint_pill" android:paddingHorizontal="8dp" android:paddingVertical="4dp" android:text="+ 지출" android:textColor="@color/widget_tint" android:textSize="10sp" android:textStyle="bold" />
+  </LinearLayout>
+
   <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="8dp" android:background="@drawable/widget_preview_surface" android:orientation="vertical" android:padding="10dp">
-    <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="할 일" android:textColor="@color/widget_tint" android:textSize="11sp" android:textStyle="bold" />
-    <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginTop="3dp" android:text="☐ 장보기 (우유, 계란)" android:textColor="@color/widget_text" android:textSize="12sp" />
-    <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="☐ 회의 자료 정리" android:textColor="@color/widget_text" android:textSize="12sp" />
+    <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="horizontal">
+      <TextView android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:text="할 일" android:textColor="@color/widget_tint" android:textSize="11sp" android:textStyle="bold" />
+      <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="2개 남음" android:textColor="@color/widget_text_secondary" android:textSize="10sp" />
+    </LinearLayout>
+    <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginTop="4dp" android:text="☐ 장보기 (우유, 계란)" android:textColor="@color/widget_text" android:textSize="12sp" />
+    <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginTop="2dp" android:text="☐ 회의 자료 정리" android:textColor="@color/widget_text" android:textSize="12sp" />
   </LinearLayout>
 
-  <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="6dp" android:orientation="horizontal">
-    <LinearLayout android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:background="@drawable/widget_preview_surface" android:orientation="vertical" android:padding="8dp">
-      <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="일정 (2)" android:textColor="@color/widget_warm" android:textSize="11sp" android:textStyle="bold" />
-      <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="10:00 팀 주간 미팅" android:textColor="@color/widget_text" android:textSize="11sp" />
-    </LinearLayout>
-    <LinearLayout android:layout_width="0dp" android:layout_height="wrap_content" android:layout_marginStart="6dp" android:layout_weight="1" android:background="@drawable/widget_preview_surface" android:orientation="vertical" android:padding="8dp">
-      <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="습관 (2/3)" android:textColor="@color/widget_success" android:textSize="11sp" android:textStyle="bold" />
-      <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="✓ 아침 스트레칭" android:textColor="@color/widget_text" android:textSize="11sp" />
-    </LinearLayout>
+  <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="6dp" android:background="@drawable/widget_preview_surface" android:gravity="center_vertical" android:orientation="horizontal" android:paddingHorizontal="10dp" android:paddingVertical="8dp">
+    <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="일정 (2)" android:textColor="@color/widget_warm" android:textSize="11sp" android:textStyle="bold" />
+    <TextView android:layout_width="0dp" android:layout_height="wrap_content" android:layout_marginStart="8dp" android:layout_weight="1" android:maxLines="1" android:text="10:00 팀 주간 미팅" android:textColor="@color/widget_text" android:textSize="12sp" />
   </LinearLayout>
 
-  <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="6dp" android:orientation="horizontal">
-    <LinearLayout android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:background="@drawable/widget_preview_surface" android:orientation="vertical" android:padding="8dp">
-      <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="메모" android:textColor="@color/widget_tint" android:textSize="11sp" android:textStyle="bold" />
-      <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="📌 이번 주 목표" android:textColor="@color/widget_text" android:textSize="11sp" />
-    </LinearLayout>
-    <LinearLayout android:layout_width="0dp" android:layout_height="wrap_content" android:layout_marginStart="6dp" android:layout_weight="1" android:background="@drawable/widget_preview_surface" android:orientation="vertical" android:padding="8dp">
-      <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="가계부" android:textColor="@color/widget_danger" android:textSize="11sp" android:textStyle="bold" />
-      <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="이번 달 428,000원" android:textColor="@color/widget_text" android:textSize="11sp" />
-    </LinearLayout>
+  <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="6dp" android:background="@drawable/widget_preview_surface" android:gravity="center_vertical" android:orientation="horizontal" android:paddingHorizontal="10dp" android:paddingVertical="8dp">
+    <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="습관 (2/3)" android:textColor="@color/widget_success" android:textSize="11sp" android:textStyle="bold" />
+    <TextView android:layout_width="0dp" android:layout_height="wrap_content" android:layout_marginStart="8dp" android:layout_weight="1" android:maxLines="1" android:text="✓ 아침 스트레칭" android:textColor="@color/widget_text" android:textSize="12sp" />
+  </LinearLayout>
+
+  <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="6dp" android:background="@drawable/widget_preview_surface" android:gravity="center_vertical" android:orientation="horizontal" android:paddingHorizontal="10dp" android:paddingVertical="8dp">
+    <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="메모" android:textColor="@color/widget_tint" android:textSize="11sp" android:textStyle="bold" />
+    <TextView android:layout_width="0dp" android:layout_height="wrap_content" android:layout_marginStart="8dp" android:layout_weight="1" android:maxLines="1" android:text="📌 이번 주 목표" android:textColor="@color/widget_text" android:textSize="12sp" />
+  </LinearLayout>
+
+  <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="6dp" android:background="@drawable/widget_preview_surface" android:gravity="center_vertical" android:orientation="horizontal" android:paddingHorizontal="10dp" android:paddingVertical="8dp">
+    <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="가계부" android:textColor="@color/widget_danger" android:textSize="11sp" android:textStyle="bold" />
+    <TextView android:layout_width="0dp" android:layout_height="wrap_content" android:layout_marginStart="8dp" android:layout_weight="1" android:maxLines="1" android:text="이번 달 428,000원" android:textColor="@color/widget_text" android:textSize="12sp" android:textStyle="bold" />
+    <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="오늘 14,500원" android:textColor="@color/widget_text_secondary" android:textSize="11sp" />
   </LinearLayout>
 </LinearLayout>
 `,
