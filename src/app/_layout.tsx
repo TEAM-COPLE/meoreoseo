@@ -131,6 +131,8 @@ function ThemedRootNavigator() {
             <Stack.Screen name="note/[id]" />
             {/* 습관 관리. 오늘 화면에서 연다. */}
             <Stack.Screen name="habits" />
+            {/* 하루 루틴 관리. 오늘 화면에서 연다. */}
+            <Stack.Screen name="routines" />
             <Stack.Screen
               name="settings"
               options={{ headerShown: true, title: '설정', headerBackTitle: '뒤로' }}

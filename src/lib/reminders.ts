@@ -1,6 +1,7 @@
 import type { Tables } from './database.types';
 import { addDays, formatDate, formatTime, parseISODate, toISODate } from './dates';
 import { todoStartOf } from './repeat';
+import { routineHourMinute, routinesForDate, routineTimeLabel, type Routine } from './routines';
 import type { DayForecast } from './weather';
 import { describeWeather, formatTemperature } from './weather-format';
 
@@ -28,6 +29,8 @@ export type NotificationSettings = {
   /** 아침 브리핑 시각 (시: 0~23, 분: 0~59) */
   briefingHour: number;
   briefingMinute: number;
+  /** 하루 루틴: 루틴마다 정한 시각에 알림. "아침 브리핑" 루틴이 있으면 위의 아침 브리핑 대신 그 시각에 보낸다. */
+  routines: boolean;
   /** 할 일 마감일 알림 시각 */
   todoHour: number;
   todoMinute: number;
@@ -63,6 +66,7 @@ export const DEFAULT_SETTINGS: NotificationSettings = {
   briefing: true,
   briefingHour: BRIEFING_HOUR,
   briefingMinute: 0,
+  routines: true,
   todoHour: MORNING_HOUR,
   todoMinute: 0,
   habitHour: HABIT_HOUR,
@@ -77,6 +81,10 @@ export const EVENT_DAYS_AHEAD = 30;
 const HABIT_DAYS_AHEAD = 14;
 /** 한 번에 예약하는 알림의 최대 개수. 가까운 것부터 채운다. */
 const MAX_REMINDERS = 60;
+/** 루틴 알림을 며칠 치 미리 예약해 둘지. 앱을 열 때마다 다시 채워진다. */
+const ROUTINE_DAYS_AHEAD = 7;
+/** 루틴 알림의 최대 개수. 다른 알림(위의 60개)과 따로 센다. */
+const MAX_ROUTINE_REMINDERS = 100;
 
 /** 예약할 알림 하나 */
 export type Reminder = {
@@ -94,6 +102,10 @@ export type ReminderData = {
   habitsDoneToday: number;
   /** 날씨 예보. 아직 못 받았거나 실패했으면 비워 두고, 브리핑에서 날씨 줄만 뺀다. */
   forecast?: { city: string; days: DayForecast[] } | null;
+  /** 하루 루틴. 아직 못 받았으면 비워 둔다. */
+  routines?: Pick<Routine, 'id' | 'title' | 'time_of_day' | 'weekdays' | 'kind' | 'notify' | 'created_at'>[];
+  /** 오늘 이미 완료한 루틴의 id. 오늘 완료한 루틴은 알리지 않는다. */
+  routinesDoneToday?: ReadonlySet<string>;
 };
 
 /** 브리핑 알림의 날씨 한 줄. 예: "🌧️ 광명 5°/9° 비 · 비 60% ☂️ 우산 챙기세요" */
@@ -106,7 +118,14 @@ function weatherLine(city: string, day: DayForecast): string {
 }
 
 /** 그날 아침 브리핑 알림의 내용을 만든다. */
-function briefingFor(date: string, data: ReminderData, hour: number, minute: number): Reminder {
+function briefingFor(
+  date: string,
+  data: ReminderData,
+  hour: number,
+  minute: number,
+  title = '좋은 아침이에요',
+  extraLine?: string,
+): Reminder {
   const lines: string[] = [];
 
   const day = data.forecast?.days.find((item) => item.date === date);
@@ -134,10 +153,11 @@ function briefingFor(date: string, data: ReminderData, hour: number, minute: num
   }
 
   if (todos.length === 0 && events.length === 0) lines.push('오늘은 예정된 할 일과 일정이 없어요.');
+  if (extraLine) lines.push(extraLine);
 
   return {
     at: at(date, hour, minute),
-    title: `좋은 아침이에요 · ${formatDate(date)}`,
+    title: `${title} · ${formatDate(date)}`,
     body: lines.join('\n'),
   };
 }
@@ -204,7 +224,12 @@ export function buildReminders(
     }
   }
 
-  if (settings.briefing) {
+  // "아침 브리핑" 루틴이 있으면, 설정의 아침 브리핑 대신 루틴 시각에 보낸다(두 번 오지 않게).
+  const routineBriefing =
+    settings.routines &&
+    (data.routines ?? []).some((routine) => routine.kind === 'briefing' && routine.notify);
+
+  if (settings.briefing && !routineBriefing) {
     for (let offset = 0; offset < BRIEFING_DAYS_AHEAD; offset++) {
       reminders.push(briefingFor(addDays(today, offset), data, briefingHour, briefingMinute));
     }
@@ -226,8 +251,50 @@ export function buildReminders(
     }
   }
 
-  return reminders
-    .filter((reminder) => reminder.at.getTime() > now.getTime())
-    .sort((a, b) => a.at.getTime() - b.at.getTime())
-    .slice(0, MAX_REMINDERS);
+  const upcoming = (list: Reminder[], max: number) =>
+    list
+      .filter((reminder) => reminder.at.getTime() > now.getTime())
+      .sort((a, b) => a.at.getTime() - b.at.getTime())
+      .slice(0, max);
+
+  const routineReminders = settings.routines ? buildRoutineReminders(data, today) : [];
+  return [
+    ...upcoming(reminders, MAX_REMINDERS),
+    ...upcoming(routineReminders, MAX_ROUTINE_REMINDERS),
+  ].sort((a, b) => a.at.getTime() - b.at.getTime());
+}
+
+/** 하루 루틴 알림. 오늘부터 며칠 치, 루틴마다 정한 요일·시각에 하나씩 만든다. */
+function buildRoutineReminders(data: ReminderData, today: string): Reminder[] {
+  const all = data.routines ?? [];
+  const reminders: Reminder[] = [];
+
+  for (let offset = 0; offset < ROUTINE_DAYS_AHEAD; offset++) {
+    const date = addDays(today, offset);
+    const dayList = routinesForDate(all, date);
+
+    dayList.forEach((routine, index) => {
+      if (!routine.notify) return;
+      // 오늘 이미 완료한 루틴은 알리지 않는다.
+      if (offset === 0 && data.routinesDoneToday?.has(routine.id)) return;
+
+      const { hour, minute } = routineHourMinute(routine);
+      const next = dayList[index + 1];
+      const nextLine = next ? `다음 루틴: ${routineTimeLabel(next)} ${next.title}` : undefined;
+
+      if (routine.kind === 'briefing') {
+        // 날씨 예보가 며칠 치뿐이라, 브리핑은 아침 브리핑과 같은 날수만큼만 미리 만든다.
+        if (offset >= BRIEFING_DAYS_AHEAD) return;
+        reminders.push(briefingFor(date, data, hour, minute, `☀️ ${routine.title}`, nextLine));
+        return;
+      }
+
+      reminders.push({
+        at: at(date, hour, minute),
+        title: `⏰ ${routineTimeLabel(routine)} ${routine.title}`,
+        body: ['지금 시작할 시간이에요.', nextLine].filter(Boolean).join('\n'),
+      });
+    });
+  }
+  return reminders;
 }

@@ -3,10 +3,11 @@ import { useEffect, useState } from 'react';
 
 import { activeUserId } from '@/lib/auth';
 
-export type TodaySectionId = 'weather' | 'todos' | 'events' | 'habits' | 'money';
+export type TodaySectionId = 'weather' | 'routines' | 'todos' | 'events' | 'habits' | 'money';
 
 export const DEFAULT_TODAY_ORDER: readonly TodaySectionId[] = [
   'weather',
+  'routines',
   'todos',
   'events',
   'habits',
@@ -15,6 +16,7 @@ export const DEFAULT_TODAY_ORDER: readonly TodaySectionId[] = [
 
 export const TODAY_SECTION_LABELS: Record<TodaySectionId, string> = {
   weather: '날씨',
+  routines: '하루 루틴',
   todos: '할 일',
   events: '일정',
   habits: '습관',
@@ -42,6 +44,7 @@ function storageKey() {
 function isSectionId(value: unknown): value is TodaySectionId {
   return (
     value === 'weather' ||
+    value === 'routines' ||
     value === 'todos' ||
     value === 'events' ||
     value === 'habits' ||
@@ -53,10 +56,13 @@ function normalizeState(raw: unknown): TodayLayoutState {
   if (!raw || typeof raw !== 'object') return DEFAULT_STATE;
   const obj = raw as Partial<TodayLayoutState>;
   const validOrder = Array.isArray(obj.order) ? obj.order.filter(isSectionId) : [];
-  const mergedOrder = [
-    ...validOrder,
-    ...DEFAULT_TODAY_ORDER.filter((id) => !validOrder.includes(id)),
-  ];
+  // 새로 생긴 상자(예: 하루 루틴)는 저장된 순서에 없으므로, 기본 순서에서의 자리에 끼워 넣는다.
+  const mergedOrder = [...validOrder];
+  DEFAULT_TODAY_ORDER.forEach((id, defaultIndex) => {
+    if (!mergedOrder.includes(id)) {
+      mergedOrder.splice(Math.min(defaultIndex, mergedOrder.length), 0, id);
+    }
+  });
   const hidden = Array.isArray(obj.hidden) ? obj.hidden.filter(isSectionId) : [];
   const collapsed = Array.isArray(obj.collapsed) ? obj.collapsed.filter(isSectionId) : [];
   return { order: mergedOrder, hidden, collapsed };

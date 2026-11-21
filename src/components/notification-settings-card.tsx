@@ -1,3 +1,4 @@
+import { router } from 'expo-router';
 import { useState } from 'react';
 import { Linking, Modal, Platform, Pressable, StyleSheet, Switch, View } from 'react-native';
 
@@ -87,7 +88,7 @@ export function NotificationSettingsCard() {
 
       <Row
         label="알림 받기"
-        description="아침 브리핑, 할 일, 일정, 습관을 원하는 시각에 알려줍니다."
+        description="아침 브리핑, 하루 루틴, 할 일, 일정, 습관을 원하는 시각에 알려줍니다."
         value={settings.enabled}
         onChange={setEnabled}
       />
@@ -115,6 +116,15 @@ export function NotificationSettingsCard() {
             onChange={(briefing) => update({ briefing })}
             timeText={timeLabel(settings.briefingHour, settings.briefingMinute)}
             onEditTime={() => setEditing('briefing')}
+          />
+          <Row
+            label="하루 루틴"
+            description="루틴마다 정한 요일·시각에 알려줍니다. '아침 브리핑' 루틴이 있으면 위 아침 브리핑 대신 그 시각에 보냅니다."
+            value={settings.routines}
+            onChange={(routines) => update({ routines })}
+            timeText="시각·요일은 루틴 화면에서"
+            actionLabel="루틴 관리"
+            onEditTime={() => router.push('/routines')}
           />
           <Row
             label="할 일"
@@ -176,6 +186,7 @@ function Row({
   onChange,
   timeText,
   onEditTime,
+  actionLabel = '시간 변경',
 }: {
   label: string;
   description: string;
@@ -183,6 +194,8 @@ function Row({
   onChange: (value: boolean) => void;
   timeText?: string;
   onEditTime?: () => void;
+  /** 시간 단추 끝에 붙는 글 (기본: '시간 변경') */
+  actionLabel?: string;
 }) {
   const theme = useTheme();
   const isDark = useColorScheme() === 'dark';
@@ -213,7 +226,7 @@ function Row({
       {value && timeText && onEditTime ? (
         <Pressable
           accessibilityRole="button"
-          accessibilityLabel={`${label} 시간 변경`}
+          accessibilityLabel={`${label} ${actionLabel}`}
           onPress={onEditTime}
           style={({ pressed }) => [
             styles.timeChip,
@@ -224,7 +237,7 @@ function Row({
             },
           ]}>
           <ThemedText type="smallBold" themeColor="tint">
-            {timeText} · 시간 변경 ›
+            {timeText} · {actionLabel} ›
           </ThemedText>
         </Pressable>
       ) : null}

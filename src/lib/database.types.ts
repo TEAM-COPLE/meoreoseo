@@ -90,6 +90,31 @@ type HabitLogRow = {
   created_at: string;
 };
 
+/** 하루 루틴 한 항목. 예: 06:10 샤워 */
+type RoutineRow = {
+  id: string;
+  user_id: string;
+  title: string;
+  /** 하는 시각 'HH:MM:SS' */
+  time_of_day: string;
+  /** 하는 요일들 (0=일 … 6=토) */
+  weekdays: number[];
+  /** 'normal'(보통) 또는 'briefing'(아침 브리핑: 알림에 할 일·일정·날씨 요약을 담는다) */
+  kind: string;
+  /** 그 시각에 휴대폰 알림을 보낼지 */
+  notify: boolean;
+  created_at: string;
+};
+
+/** 루틴을 완료한 날짜 기록 */
+type RoutineLogRow = {
+  id: string;
+  user_id: string;
+  routine_id: string;
+  log_date: string;
+  created_at: string;
+};
+
 type NoteRow = {
   id: string;
   user_id: string;
@@ -182,6 +207,11 @@ export type Database = {
       tags: Table<TagRow, 'id' | 'user_id' | 'created_at'>;
       habits: Table<HabitRow, 'id' | 'user_id' | 'archived' | 'created_at'>;
       habit_logs: Table<HabitLogRow, 'id' | 'user_id' | 'created_at'>;
+      routines: Table<
+        RoutineRow,
+        'id' | 'user_id' | 'weekdays' | 'kind' | 'notify' | 'created_at'
+      >;
+      routine_logs: Table<RoutineLogRow, 'id' | 'user_id' | 'created_at'>;
       notes: Table<
         NoteRow,
         'id' | 'user_id' | 'title' | 'body' | 'pinned' | 'created_at' | 'updated_at'

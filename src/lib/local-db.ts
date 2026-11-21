@@ -15,6 +15,8 @@ type TableName =
   | 'habit_logs'
   | 'notes'
   | 'tags'
+  | 'routines'
+  | 'routine_logs'
   | 'weather_city';
 
 const ALL_TABLES: readonly TableName[] = [
@@ -25,6 +27,8 @@ const ALL_TABLES: readonly TableName[] = [
   'habit_logs',
   'notes',
   'tags',
+  'routines',
+  'routine_logs',
   'weather_city',
 ];
 
@@ -501,6 +505,89 @@ export async function localSetHabitLogDone(
         logs.filter((log) => !(log.habit_id === habitId && log.log_date === logDate)),
       );
     }
+  });
+}
+
+// ───────────────────────── 하루 루틴 (routines) ─────────────────────────
+// 로그인 없이 써 보는 "개발 모드"에서 루틴을 휴대폰 안에 저장한다.
+
+type RoutineRow = Tables<'routines'>;
+type RoutineLogRow = Tables<'routine_logs'>;
+export type LocalRoutineValues = Pick<
+  RoutineRow,
+  'title' | 'time_of_day' | 'weekdays' | 'kind' | 'notify'
+>;
+
+export async function localListRoutines(): Promise<RoutineRow[]> {
+  return readTable<RoutineRow>('routines');
+}
+
+export async function localSaveRoutines(
+  items: { id?: string; values: LocalRoutineValues }[],
+): Promise<void> {
+  await withTableLock('routines', async () => {
+    let rows = await readTable<RoutineRow>('routines');
+    for (const { id, values } of items) {
+      if (id) {
+        rows = rows.map((row) => (row.id === id ? { ...row, ...values } : row));
+      } else {
+        rows = [
+          ...rows,
+          {
+            ...values,
+            id: generateId(),
+            user_id: DEV_USER_ID,
+            created_at: new Date().toISOString(),
+          },
+        ];
+      }
+    }
+    await writeTable('routines', rows);
+  });
+}
+
+export async function localDeleteRoutine(id: string): Promise<void> {
+  await withTableLock('routines', async () => {
+    const rows = await readTable<RoutineRow>('routines');
+    await writeTable('routines', rows.filter((row) => row.id !== id));
+  });
+  await withTableLock('routine_logs', async () => {
+    const logs = await readTable<RoutineLogRow>('routine_logs');
+    await writeTable('routine_logs', logs.filter((log) => log.routine_id !== id));
+  });
+}
+
+export async function localListRoutineLogs(
+  sinceDate: string,
+): Promise<Pick<RoutineLogRow, 'routine_id' | 'log_date'>[]> {
+  const logs = await readTable<RoutineLogRow>('routine_logs');
+  return logs
+    .filter((log) => log.log_date >= sinceDate)
+    .map(({ routine_id, log_date }) => ({ routine_id, log_date }));
+}
+
+export async function localSetRoutineLogDone(
+  routineId: string,
+  logDate: string,
+  done: boolean,
+): Promise<void> {
+  await withTableLock('routine_logs', async () => {
+    const logs = await readTable<RoutineLogRow>('routine_logs');
+    const rest = logs.filter((log) => !(log.routine_id === routineId && log.log_date === logDate));
+    if (!done) {
+      await writeTable('routine_logs', rest);
+      return;
+    }
+    await writeTable('routine_logs', [
+      ...rest,
+      {
+        id: generateId(),
+        user_id: DEV_USER_ID,
+        routine_id: routineId,
+        log_date: logDate,
+        created_at: new Date().toISOString(),
+      },
+    ]);
   });
 }
 
