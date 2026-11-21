@@ -1,6 +1,7 @@
 import { useQueryClient } from "@tanstack/react-query";
 import { router } from "expo-router";
 import {
+    useEffect,
     useLayoutEffect,
     useRef,
     useState,
@@ -45,6 +46,11 @@ import {
     useHabits,
     useToggleHabitLog,
 } from "@/hooks/use-habits";
+import {
+    useRoutineLogs,
+    useRoutines,
+    useToggleRoutineLog,
+} from "@/hooks/use-routines";
 import { useTheme, useThemeMode } from "@/hooks/use-theme";
 import { useTodayLayout, type TodaySectionId } from "@/hooks/use-today-layout";
 import { useTodos, useToggleTodo, type Todo } from "@/hooks/use-todos";
@@ -57,6 +63,13 @@ import {
 import { formatDate, todayISO, toISODate, yearMonthOf } from "@/lib/dates";
 import { confirm, errorMessage, formatWon } from "@/lib/format";
 import { todoStartOf } from "@/lib/repeat";
+import {
+    minutesUntilLabel,
+    pickNowAndNext,
+    routineMinutes,
+    routinesForDate,
+    routineTimeLabel,
+} from "@/lib/routines";
 import { describeWeather, formatTemperature } from "@/lib/weather";
 
 /**
@@ -112,6 +125,16 @@ export default function TodayScreen() {
         return (
           <WeatherSection
             key={id}
+            index={index}
+            collapsed={isCollapsed}
+            onToggleCollapse={onToggleCollapse}
+          />
+        );
+      case "routines":
+        return (
+          <RoutineSection
+            key={id}
+            today={today}
             index={index}
             collapsed={isCollapsed}
             onToggleCollapse={onToggleCollapse}
@@ -770,6 +793,191 @@ function HabitSection({
   );
 }
 
+/** 지금이 하루의 몇 분째인지. 30초마다 새로 계산해서 "지금/다음 루틴"이 저절로 바뀌게 한다. */
+function useNowMinutes(): number {
+  const read = () => {
+    const now = new Date();
+    return now.getHours() * 60 + now.getMinutes();
+  };
+  const [minutes, setMinutes] = useState(read);
+  useEffect(() => {
+    const timer = setInterval(() => setMinutes(read()), 30_000);
+    return () => clearInterval(timer);
+  }, []);
+  return minutes;
+}
+
+/**
+ * 하루 루틴 상자. 오늘 요일의 루틴을 시각 순서로 보여 주고,
+ * "지금 할 루틴"과 "다음 루틴"을 위쪽에 크게 알려 준다. 체크하면 오늘 완료로 기록된다.
+ */
+function RoutineSection({
+  today,
+  index,
+  collapsed,
+  onToggleCollapse,
+}: {
+  today: string;
+  index: number;
+  collapsed: boolean;
+  onToggleCollapse: () => void;
+}) {
+  const theme = useTheme();
+  const routines = useRoutines();
+  const logs = useRoutineLogs();
+  const toggle = useToggleRoutineLog();
+  const nowMinutes = useNowMinutes();
+
+  const ready = routines.data !== undefined && logs.data !== undefined;
+  const all = routines.data ?? [];
+  const items = routinesForDate(all, today);
+  const isDone = (id: string) => logs.data?.get(id)?.has(today) ?? false;
+  const doneCount = items.filter((routine) => isDone(routine.id)).length;
+  const { now, next } = pickNowAndNext(items, (r) => isDone(r.id), nowMinutes);
+
+  return (
+    <Section
+      index={index}
+      collapsed={collapsed}
+      onToggleCollapse={onToggleCollapse}
+      title={
+        ready && items.length > 0
+          ? `하루 루틴 ${doneCount}/${items.length}`
+          : "하루 루틴"
+      }
+      onQuickAdd={() =>
+        router.push({ pathname: "/routines", params: { add: "1" } })
+      }
+      // 루틴을 추가·수정하거나 요일을 바꾸려면 루틴 화면(src/app/routines.tsx)으로 간다.
+      linkLabel="관리"
+      onLink={() => router.push("/routines")}
+    >
+      <SectionStatus
+        loading={routines.isPending || logs.isPending}
+        error={routines.error ?? logs.error}
+        onRetry={() => {
+          routines.refetch();
+          logs.refetch();
+        }}
+        variant="list"
+      />
+
+      {ready && all.length === 0 ? (
+        <ThemedText type="small" themeColor="textSecondary">
+          {'아직 루틴이 없습니다. "관리"를 눌러 06:00 아침 브리핑, 06:10 샤워처럼 시간별로 정해 보세요.'}
+        </ThemedText>
+      ) : null}
+      {ready && all.length > 0 && items.length === 0 ? (
+        <ThemedText type="small" themeColor="textSecondary">
+          오늘은 정해 둔 루틴이 없는 날이에요.
+        </ThemedText>
+      ) : null}
+      {ready && items.length > 0 && doneCount === items.length ? (
+        <ThemedText type="small" themeColor="tint">
+          오늘 루틴을 모두 마쳤어요! 👏
+        </ThemedText>
+      ) : null}
+
+      {ready && (now || next) ? (
+        <View style={[styles.routineNowBox, { backgroundColor: theme.tintSoft }]}>
+          {now ? (
+            <ThemedText type="smallBold" themeColor="tint">
+              지금 · {routineTimeLabel(now)} {now.title}
+            </ThemedText>
+          ) : null}
+          {next ? (
+            <ThemedText type="small" themeColor="textSecondary">
+              다음 · {routineTimeLabel(next)} {next.title} (
+              {minutesUntilLabel(routineMinutes(next) - nowMinutes)})
+            </ThemedText>
+          ) : null}
+        </View>
+      ) : null}
+
+      {ready
+        ? items.map((routine, idx) => {
+            const done = isDone(routine.id);
+            const badge =
+              routine.id === now?.id
+                ? "지금"
+                : routine.id === next?.id
+                  ? "다음"
+                  : null;
+            return (
+              <View
+                key={routine.id}
+                style={[
+                  styles.row,
+                  idx > 0 && {
+                    borderTopWidth: StyleSheet.hairlineWidth,
+                    borderTopColor: theme.border,
+                    paddingTop: Spacing.two,
+                  },
+                ]}
+              >
+                <Checkbox
+                  checked={done}
+                  label={`${routine.title} 오늘 완료 표시`}
+                  onPress={() =>
+                    toggle.mutate({ routineId: routine.id, date: today, done })
+                  }
+                />
+                <ThemedText
+                  type="smallBold"
+                  themeColor="accentWarm"
+                  style={styles.routineTime}
+                >
+                  {routineTimeLabel(routine)}
+                </ThemedText>
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel={`${routine.title} 수정`}
+                  onPress={() =>
+                    router.push({
+                      pathname: "/routines",
+                      params: { editId: routine.id },
+                    })
+                  }
+                  style={({ pressed }) => [
+                    styles.rowBody,
+                    pressed && styles.pressed,
+                  ]}
+                >
+                  <ThemedText
+                    type="default"
+                    themeColor={done ? "textSecondary" : "text"}
+                    style={done && styles.doneTitle}
+                  >
+                    {routine.kind === "briefing" ? "☀️ " : ""}
+                    {routine.title}
+                  </ThemedText>
+                </Pressable>
+                {badge && !done ? (
+                  <View
+                    style={[
+                      styles.streakBadge,
+                      { backgroundColor: theme.tintSoft },
+                    ]}
+                  >
+                    <ThemedText
+                      type="smallBold"
+                      themeColor="tint"
+                      style={styles.streakBadgeText}
+                    >
+                      {badge}
+                    </ThemedText>
+                  </View>
+                ) : null}
+              </View>
+            );
+          })
+        : null}
+
+      {toggle.error ? <SaveError /> : null}
+    </Section>
+  );
+}
+
 function MoneySection({
   today,
   index,
@@ -1066,6 +1274,16 @@ const styles = StyleSheet.create({
   },
   time: {
     minWidth: 96,
+  },
+  routineTime: {
+    minWidth: 44,
+    fontVariant: ["tabular-nums"],
+  },
+  routineNowBox: {
+    borderRadius: Radius.medium,
+    paddingHorizontal: Spacing.three,
+    paddingVertical: Spacing.two,
+    gap: Spacing.half,
   },
   stats: {
     flexDirection: "row",

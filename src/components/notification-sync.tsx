@@ -4,6 +4,7 @@ import { AppState } from 'react-native';
 import { useUpcomingEvents } from '@/hooks/use-events';
 import { useHabitLogs, useHabits } from '@/hooks/use-habits';
 import { useNotificationSettings } from '@/hooks/use-notification-settings';
+import { useRoutineLogs, useRoutines } from '@/hooks/use-routines';
 import { useTodos } from '@/hooks/use-todos';
 import { useWeather, useWeatherCity } from '@/hooks/use-weather';
 import { todayISO } from '@/lib/dates';
@@ -18,7 +19,7 @@ import { buildReminders, EVENT_DAYS_AHEAD } from '@/lib/reminders';
  * 화면에는 아무것도 그리지 않고, 휴대폰의 예약 알림을 데이터와 맞춰 주는 부품.
  * 로그인해 있는 동안 src/app/_layout.tsx 에 놓여 있다.
  *
- * 할 일·일정·습관·알림 설정 중 하나라도 바뀌면 예약 알림을 다시 만든다.
+ * 할 일·일정·습관·루틴·알림 설정 중 하나라도 바뀌면 예약 알림을 다시 만든다.
  */
 export function NotificationSync() {
   const settings = useNotificationSettings().data;
@@ -27,6 +28,8 @@ export function NotificationSync() {
   const events = useUpcomingEvents(EVENT_DAYS_AHEAD, enabled).data;
   const habits = useHabits(enabled).data;
   const logs = useHabitLogs(enabled).data;
+  const routines = useRoutines(enabled).data;
+  const routineLogs = useRoutineLogs(enabled).data;
   // 아침 브리핑에 넣을 날씨. 날씨는 못 받아도 기다리지 않는다(브리핑에서 날씨 줄만 빠진다).
   const city = useWeatherCity(enabled).data;
   const weather = useWeather(city, enabled).data;
@@ -55,7 +58,7 @@ export function NotificationSync() {
       return;
     }
     // 데이터를 다 받아오기 전에는 건드리지 않는다. 덜 받은 상태로 예약하면 알림이 빠진다.
-    if (!todos || !events || !habits || !logs) return;
+    if (!todos || !events || !habits || !logs || !routines || !routineLogs) return;
 
     const today = todayISO();
     const reminders = buildReminders(settings, {
@@ -64,6 +67,10 @@ export function NotificationSync() {
       habitCount: habits.length,
       habitsDoneToday: habits.filter((habit) => logs.get(habit.id)?.has(today)).length,
       forecast: JSON.parse(forecastKey),
+      routines,
+      routinesDoneToday: new Set(
+        routines.filter((routine) => routineLogs.get(routine.id)?.has(today)).map((r) => r.id),
+      ),
     });
     const remindersKey = JSON.stringify(
       reminders.map((r) => [r.at.getTime(), r.title, r.body]),
@@ -88,7 +95,7 @@ export function NotificationSync() {
       }
     }, 800);
     return () => clearTimeout(timer);
-  }, [settings, todos, events, habits, logs, forecastKey, wakeCount]);
+  }, [settings, todos, events, habits, logs, routines, routineLogs, forecastKey, wakeCount]);
 
   // 로그아웃하면 이 부품이 화면에서 빠진다. 그때 예약해 둔 알림도 지운다.
   useEffect(() => {

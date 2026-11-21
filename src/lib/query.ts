@@ -39,6 +39,8 @@ const PERSISTABLE_ROOTS = new Set([
   'events',
   'habits',
   'habit-logs',
+  'routines',
+  'routine-logs',
   'transactions',
   'notes',
   'note',
@@ -57,8 +59,11 @@ let persistTimer: ReturnType<typeof setTimeout> | null = null;
 let unsubscribeCache: (() => void) | null = null;
 let warmCacheLoaded = false;
 
+/** "날짜 모음" 지도(Map<id, Set<날짜>>)로 저장하는 데이터들 */
+const DATE_SET_MAP_ROOTS = new Set(['habit-logs', 'routine-logs']);
+
 function serializeData(key: QueryKey, data: unknown): unknown {
-  if (key[0] === 'habit-logs' && data instanceof Map) {
+  if (DATE_SET_MAP_ROOTS.has(sourceOf(key)) && data instanceof Map) {
     return {
       __type: 'habitLogsMap',
       entries: [...data.entries()].map(([k, set]) => [k, [...(set as Set<string>)]]),
