@@ -32,6 +32,11 @@
   "rewrites": [
     {
       "source": "/google-callback",
+      "has": [{ "type": "query", "key": "state", "value": { "pre": "login." } }],
+      "destination": "https://bwbnhpiphwrpesipuipu.supabase.co/functions/v1/google-login/callback"
+    },
+    {
+      "source": "/google-callback",
       "destination": "https://bwbnhpiphwrpesipuipu.supabase.co/functions/v1/google-calendar/callback"
     },
     { "source": "/:path*", "destination": "/" }
