@@ -7,11 +7,16 @@ import { hasSupabaseConfig, isProviderEnabled, supabase } from './supabase';
 /**
  * 소셜 로그인 (구글, 카카오).
  *
- * 흐름은 두 서비스가 똑같다. 아래에서 "구글"은 카카오로 바꿔 읽어도 된다.
- * 1. Supabase 에게 "구글 로그인 주소"를 받는다.
- * 2. 그 주소를 브라우저로 연다. 사용자가 구글 계정을 고른다.
- * 3. 구글 → Supabase → 우리 앱의 /auth-callback 주소로 돌아온다.
+ * 카카오
+ * 1. Supabase 에게 "카카오 로그인 주소"를 받는다.
+ * 2. 그 주소를 브라우저로 연다. 사용자가 카카오 계정을 고른다.
+ * 3. 카카오 → Supabase → 우리 앱의 /auth-callback 주소로 돌아온다.
  * 4. 주소에 담긴 인증 코드(PKCE) 또는 토큰으로 로그인 상태(세션)를 만든다.
+ *
+ * 구글 (구글 화면에 supabase.co 주소 대신 meoreoseo.vercel.app 이 보이게)
+ * 1. 서버 함수 google-login 에게 구글 로그인 주소와 일회용 글자(nonce)를 받는다.
+ * 2. 구글 → meoreoseo.vercel.app/google-callback → 서버 함수 → 앱의 /auth-callback 으로 돌아온다.
+ * 3. 주소에 담긴 구글 신분증(id_token)과 nonce 로 Supabase 에 로그인한다.
  */
 
 /** 지원하는 로그인 서비스. 값은 Supabase 가 쓰는 이름과 같아야 한다. */
@@ -106,6 +111,53 @@ function describeError(message: string): string {
   return '로그인 처리 중 문제가 발생했습니다. 잠시 후 다시 시도해 주세요.';
 }
 
+// ───────────── 구글 로그인 (우리 주소로 돌아오는 방식) ─────────────
+// Supabase 기본 구글 로그인은 구글 화면에 "bwbnhpiphwrpesipuipu.supabase.co" 가 보여서,
+// 구글이 우리 웹사이트(meoreoseo.vercel.app)로 돌아오게 하는 서버 함수(google-login)를 쓴다.
+
+/** 웹에서는 구글에 다녀오는 동안 페이지가 새로 열리므로 sessionStorage 에 둔다. */
+const GOOGLE_NONCE_KEY = 'meoreoseo.google-login-nonce';
+/** 휴대폰에서는 앱이 그대로 살아 있으므로 메모리에 둔다. */
+let googleNonce: string | null = null;
+
+function saveGoogleNonce(nonce: string): void {
+  googleNonce = nonce;
+  if (Platform.OS === 'web') {
+    try {
+      window.sessionStorage.setItem(GOOGLE_NONCE_KEY, nonce);
+    } catch {
+      // 저장소를 못 쓰는 브라우저면 메모리 값만 쓴다.
+    }
+  }
+}
+
+/** 로그인을 시작할 때 받은 일회용 글자(nonce)를 꺼내고 지운다. */
+function takeGoogleNonce(): string | null {
+  let nonce = googleNonce;
+  googleNonce = null;
+  if (Platform.OS === 'web') {
+    try {
+      nonce = nonce ?? window.sessionStorage.getItem(GOOGLE_NONCE_KEY);
+      window.sessionStorage.removeItem(GOOGLE_NONCE_KEY);
+    } catch {
+      // 무시
+    }
+  }
+  return nonce;
+}
+
+/** 서버 함수에게 구글 로그인 주소와 일회용 글자(nonce)를 받는다. */
+async function startGoogleLogin(returnTo: string): Promise<{ url: string } | { error: string }> {
+  const { data, error } = await supabase.functions.invoke('google-login', {
+    body: { action: 'start', returnTo },
+  });
+  if (error || typeof data?.url !== 'string' || typeof data?.nonce !== 'string') {
+    return { error: '구글 로그인 주소를 받지 못했습니다. 잠시 후 다시 시도해 주세요.' };
+  }
+  saveGoogleNonce(data.nonce);
+  return { url: data.url };
+}
+
 // 같은 주소를 두 번 처리하지 않도록 진행 중인 요청을 공유한다.
 // (휴대폰에서는 로그인 버튼 쪽과 /auth-callback 화면 쪽이 같은 주소를 동시에 받을 수 있다.)
 let pendingUrl: string | null = null;
@@ -127,6 +179,19 @@ export async function completeSignInFromUrl(url: string): Promise<string | null>
 
       const failure = params.get('error_description') || params.get('error');
       if (failure) return describeError(failure);
+
+      // 구글: 우리 서버 함수(google-login)가 돌려준 구글 신분증으로 로그인한다.
+      const googleIdToken = params.get('google_id_token');
+      if (googleIdToken) {
+        const nonce = takeGoogleNonce();
+        if (!nonce) return '로그인을 시작한 창에서 다시 시도해 주세요.';
+        const { error } = await supabase.auth.signInWithIdToken({
+          provider: 'google',
+          token: googleIdToken,
+          nonce,
+        });
+        return error ? describeError(error.message) : null;
+      }
 
       const code = params.get('code');
       if (code) {
@@ -169,6 +234,16 @@ export async function signInWith(provider: SocialProvider): Promise<string | nul
 
   const redirectTo = callbackUrl();
 
+  if (provider === 'google') {
+    const started = await startGoogleLogin(redirectTo);
+    if ('error' in started) return started.error;
+    if (Platform.OS === 'web') {
+      window.location.assign(started.url);
+      return null;
+    }
+    return openLoginWindow(started.url, redirectTo, name);
+  }
+
   if (Platform.OS === 'web') {
     const { error } = await supabase.auth.signInWithOAuth({
       provider,
@@ -184,9 +259,13 @@ export async function signInWith(provider: SocialProvider): Promise<string | nul
   });
   if (error) return describeError(error.message);
   if (!data.url) return `${name} 로그인 주소를 받지 못했습니다.`;
+  return openLoginWindow(data.url, redirectTo, name);
+}
 
+/** 휴대폰: 앱 위에 로그인 브라우저 창을 띄우고, 돌아오면 로그인을 마무리한다. */
+async function openLoginWindow(loginUrl: string, redirectTo: string, name: string): Promise<string | null> {
   try {
-    const result = await WebBrowser.openAuthSessionAsync(data.url, redirectTo);
+    const result = await WebBrowser.openAuthSessionAsync(loginUrl, redirectTo);
     if (result.type !== 'success' || !result.url) {
       // 사용자가 창을 닫은 경우. 오류로 보지 않는다.
       return null;
