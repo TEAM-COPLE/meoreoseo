@@ -163,6 +163,64 @@ type ErrorLogRow = {
   app_version: string | null;
 };
 
+type StudyProfileRow = {
+  user_id: string;
+  /** 공부 화면에서 다른 사람에게 보이는 이름 (2~12자) */
+  nickname: string;
+  /** 한 줄 다짐 (40자까지) */
+  status_message: string;
+  /** 하루 목표 공부 시간(분) */
+  daily_goal_minutes: number;
+  /** 전체 랭킹에 참여하는지 */
+  public_ranking: boolean;
+  created_at: string;
+  updated_at: string;
+};
+
+type StudySubjectRow = {
+  id: string;
+  user_id: string;
+  name: string;
+  /** 태그와 같은 색 이름 (lib/tags.ts 의 TAG_COLORS) */
+  color: string;
+  sort: number;
+  created_at: string;
+};
+
+type StudySessionRow = {
+  id: string;
+  user_id: string;
+  subject_id: string | null;
+  /** 어느 날의 공부로 칠지 'YYYY-MM-DD' */
+  study_date: string;
+  started_at: string;
+  ended_at: string;
+  seconds: number;
+  created_at: string;
+};
+
+type StudyLiveRow = {
+  user_id: string;
+  subject_name: string | null;
+  started_at: string;
+  updated_at: string;
+};
+
+type StudyGroupRow = {
+  id: string;
+  name: string;
+  description: string;
+  invite_code: string;
+  owner_id: string;
+  created_at: string;
+};
+
+type StudyGroupMemberRow = {
+  group_id: string;
+  user_id: string;
+  joined_at: string;
+};
+
 export type Database = {
   __InternalSupabase: {
     PostgrestVersion: '14.18';
@@ -241,9 +299,52 @@ export type Database = {
         ErrorLogRow,
         'id' | 'user_id' | 'created_at' | 'detail' | 'app_version'
       >;
+      study_profiles: Table<
+        StudyProfileRow,
+        | 'user_id'
+        | 'status_message'
+        | 'daily_goal_minutes'
+        | 'public_ranking'
+        | 'created_at'
+        | 'updated_at'
+      >;
+      study_subjects: Table<StudySubjectRow, 'id' | 'user_id' | 'color' | 'sort' | 'created_at'>;
+      study_sessions: Table<StudySessionRow, 'id' | 'user_id' | 'subject_id' | 'created_at'>;
+      study_live: Table<StudyLiveRow, 'user_id' | 'subject_name' | 'updated_at'>;
+      study_groups: Table<StudyGroupRow, 'id' | 'description' | 'created_at'>;
+      study_group_members: Table<StudyGroupMemberRow, 'joined_at'>;
     };
     Views: { [_ in never]: never };
-    Functions: { [_ in never]: never };
+    Functions: {
+      create_study_group: { Args: { p_name: string; p_description?: string }; Returns: string };
+      join_study_group: { Args: { p_code: string }; Returns: string };
+      leave_study_group: { Args: { p_group: string }; Returns: undefined };
+      kick_study_group_member: { Args: { p_group: string; p_user: string }; Returns: undefined };
+      study_group_board: {
+        Args: { p_group: string; p_from: string; p_to: string };
+        Returns: {
+          user_id: string;
+          nickname: string;
+          status_message: string;
+          total_seconds: number;
+          live_started_at: string | null;
+          live_subject: string | null;
+          is_me: boolean;
+          is_owner: boolean;
+        }[];
+      };
+      study_ranking: {
+        Args: { p_from: string; p_to: string; p_limit?: number };
+        Returns: {
+          rank: number;
+          nickname: string;
+          status_message: string;
+          total_seconds: number;
+          live_started_at: string | null;
+          is_me: boolean;
+        }[];
+      };
+    };
     Enums: { [_ in never]: never };
     CompositeTypes: { [_ in never]: never };
   };

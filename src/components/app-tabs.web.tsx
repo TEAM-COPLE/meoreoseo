@@ -15,7 +15,7 @@ import { useColorScheme, useTheme } from '@/hooks/use-theme';
 
 import { ThemedText } from './themed-text';
 
-/** 웹용 위쪽 메뉴. 휴대폰 탭 막대와 같은 다섯 화면으로 이동한다. */
+/** 웹용 위쪽 메뉴. 휴대폰 탭 막대와 같은 여섯 화면으로 이동한다. */
 export default function AppTabs() {
   return (
     <Tabs style={styles.root}>
@@ -29,6 +29,9 @@ export default function AppTabs() {
           </TabTrigger>
           <TabTrigger name="calendar" href="/calendar" asChild>
             <TabButton>일정</TabButton>
+          </TabTrigger>
+          <TabTrigger name="study" href="/study" asChild>
+            <TabButton>공부</TabButton>
           </TabTrigger>
           <TabTrigger name="notes" href="/notes" asChild>
             <TabButton>메모</TabButton>
