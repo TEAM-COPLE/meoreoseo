@@ -26,6 +26,7 @@ import CalendarScreen from "@/app/(tabs)/calendar";
 import TodayScreen from "@/app/(tabs)/index";
 import MoneyScreen from "@/app/(tabs)/money";
 import NotesScreen from "@/app/(tabs)/notes";
+import StudyScreen from "@/app/(tabs)/study";
 import TodosScreen from "@/app/(tabs)/todos";
 import { SafeBoundary } from "@/components/safe-boundary";
 import { ThemedText } from "@/components/themed-text";
@@ -34,7 +35,7 @@ import { useColorScheme } from "@/hooks/use-theme";
 import { indexOfSwipeRoute, useIsSwipeLocked } from "@/lib/swipe-navigation";
 
 type TabDefinition = {
-  path: "/" | "/todos" | "/calendar" | "/notes" | "/money";
+  path: "/" | "/todos" | "/calendar" | "/study" | "/notes" | "/money";
   label: string;
   sf: SFSymbol;
   md: string;
@@ -64,6 +65,13 @@ const TABS: readonly TabDefinition[] = [
     Component: CalendarScreen,
   },
   {
+    path: "/study",
+    label: "공부",
+    sf: "timer",
+    md: "timer",
+    Component: StudyScreen,
+  },
+  {
     path: "/notes",
     label: "메모",
     sf: "note.text",
@@ -85,7 +93,7 @@ const DOCK_PADDING = 6;
 
 /**
  * 휴대폰용 순환 가로 스와이프 페이저 + 플로팅 독 하단 탭 바.
- * 오늘 ↔ 할 일 ↔ 일정 ↔ 메모 ↔ 가계부 ↔ 오늘 순서로 양쪽 화면의 실제 블럭이 함께 미끄러지며 전환된다.
+ * 오늘 ↔ 할 일 ↔ 일정 ↔ 공부 ↔ 메모 ↔ 가계부 ↔ 오늘 순서로 양쪽 화면의 실제 블럭이 함께 미끄러지며 전환된다.
  */
 export default function AppTabs() {
   const pathname = usePathname();

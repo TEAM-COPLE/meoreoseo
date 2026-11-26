@@ -4,6 +4,7 @@ export const SWIPE_ROUTES = [
   { path: '/', label: '오늘' },
   { path: '/todos', label: '할 일' },
   { path: '/calendar', label: '일정' },
+  { path: '/study', label: '공부' },
   { path: '/notes', label: '메모' },
   { path: '/money', label: '가계부' },
 ] as const;

@@ -16,6 +16,7 @@ import { Colors } from '@/constants/theme';
 import { ThemeModeProvider, useColorScheme } from '@/hooks/use-theme';
 import { NotificationSync } from '@/components/notification-sync';
 import { SafeBoundary } from '@/components/safe-boundary';
+import { StudyTimerSync } from '@/components/study-timer-sync';
 import { WidgetSync } from '@/components/widget-sync';
 import { ConfirmRootHost } from '@/components/ui/confirm-modal';
 import { InitialDbLoadingOverlay } from '@/components/ui/loading-animation';
@@ -122,6 +123,12 @@ function ThemedRootNavigator() {
           <WidgetSync />
         </SafeBoundary>
       ) : null}
+      {/* 공부 타이머: 앱을 벗어나면 멈추기, 못 보낸 기록 다시 보내기 */}
+      {session !== null ? (
+        <SafeBoundary name="study-timer-sync">
+          <StudyTimerSync />
+        </SafeBoundary>
+      ) : null}
 
       {!loading ? (
         <Stack screenOptions={{ headerShown: false }}>
@@ -133,6 +140,8 @@ function ThemedRootNavigator() {
             <Stack.Screen name="habits" />
             {/* 하루 루틴 관리. 오늘 화면에서 연다. */}
             <Stack.Screen name="routines" />
+            {/* 스터디 그룹 자세히 보기. 공부 탭에서 연다. */}
+            <Stack.Screen name="study-group/[id]" />
             <Stack.Screen
               name="settings"
               options={{ headerShown: true, title: '설정', headerBackTitle: '뒤로' }}
