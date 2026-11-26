@@ -1,3 +1,4 @@
+import { BarChart3, Timer, Trophy, User, Users } from 'lucide-react-native';
 import { useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 
@@ -18,10 +19,10 @@ import { queryClient } from '@/lib/query';
 type Section = 'timer' | 'records' | 'groups' | 'ranking';
 
 const SECTIONS = [
-  { value: 'timer', label: '⏱ 타이머' },
-  { value: 'records', label: '📊 기록' },
-  { value: 'groups', label: '👥 그룹' },
-  { value: 'ranking', label: '🏆 랭킹' },
+  { value: 'timer', label: '타이머', icon: Timer },
+  { value: 'records', label: '기록', icon: BarChart3 },
+  { value: 'groups', label: '그룹', icon: Users },
+  { value: 'ranking', label: '랭킹', icon: Trophy },
 ] as const;
 
 /**
@@ -37,21 +38,9 @@ export default function StudyScreen() {
   const [section, setSection] = useState<Section>('timer');
   const [editingProfile, setEditingProfile] = useState(false);
 
-  // 로그인 없이 쓰는 개발 모드에서는 기록을 서버에 저장할 수 없다.
-  if (!session) {
-    return (
-      <Screen title="공부">
-        <Card>
-          <ThemedText type="smallBold">공부 타이머는 로그인해야 쓸 수 있어요</ThemedText>
-          <ThemedText type="small" themeColor="textSecondary">
-            공부 시간은 서버에 저장되어 친구와 비교하는 데 쓰여요. 구글이나 카카오로 로그인해 주세요.
-          </ThemedText>
-        </Card>
-      </Screen>
-    );
-  }
-
-  const needsProfile = (section === 'groups' || section === 'ranking') && profile.data === null;
+  const isSocialSection = section === 'groups' || section === 'ranking';
+  const needsLogin = isSocialSection && !session;
+  const needsProfile = !needsLogin && isSocialSection && profile.data === null;
 
   return (
     <Screen
@@ -68,7 +57,8 @@ export default function StudyScreen() {
       action={
         profile.data ? (
           <Button
-            label={`🙂 ${profile.data.nickname}`}
+            label={profile.data.nickname}
+            icon={(color) => <User size={14} color={color} strokeWidth={2} />}
             size="small"
             variant="secondary"
             onPress={() => setEditingProfile(true)}
@@ -81,6 +71,15 @@ export default function StudyScreen() {
         <ThemedText type="small" themeColor="textSecondary" style={styles.motto}>
           “{profile.data.status_message}”
         </ThemedText>
+      ) : null}
+
+      {needsLogin ? (
+        <Card highlight>
+          <ThemedText type="smallBold">그룹과 랭킹은 로그인 후 이용할 수 있어요</ThemedText>
+          <ThemedText type="small" themeColor="textSecondary">
+            타이머와 기록은 로그인 없이도 이 기기에 저장되어 바로 쓸 수 있어요. 친구와 함께 공부하려면 설정에서 로그인해 주세요.
+          </ThemedText>
+        </Card>
       ) : null}
 
       {needsProfile ? (
@@ -97,8 +96,8 @@ export default function StudyScreen() {
 
       {section === 'timer' ? <StudyTimerPanel profile={profile.data} /> : null}
       {section === 'records' ? <StudyRecordsPanel profile={profile.data} /> : null}
-      {section === 'groups' && profile.data ? <StudyGroupsPanel /> : null}
-      {section === 'ranking' && profile.data ? <StudyRankingPanel profile={profile.data} /> : null}
+      {section === 'groups' && session && profile.data ? <StudyGroupsPanel /> : null}
+      {section === 'ranking' && session && profile.data ? <StudyRankingPanel profile={profile.data} /> : null}
 
       {editingProfile ? (
         <StudyProfileForm profile={profile.data ?? null} onClose={() => setEditingProfile(false)} />

@@ -1,3 +1,4 @@
+import { Eye, EyeOff, GripVertical } from 'lucide-react-native';
 import { useEffect, useRef, type ReactNode } from 'react';
 import {
   Animated,
@@ -346,8 +347,9 @@ export function EditableBox({
           ]}
           onAccessibilityAction={handleAccessibilityAction}
           style={[styles.handle, { backgroundColor: theme.tint }]}>
+          <GripVertical size={14} color={theme.onTint} strokeWidth={2.2} />
           <ThemedText type="smallBold" selectable={false} style={{ color: theme.onTint }}>
-            ≡ 옮기기
+            옮기기
           </ThemedText>
         </View>
         <Pressable
@@ -363,6 +365,11 @@ export function EditableBox({
               opacity: pressed ? 0.7 : 1,
             },
           ]}>
+          {isHidden ? (
+            <Eye size={14} color={theme.tint} strokeWidth={1.9} />
+          ) : (
+            <EyeOff size={14} color={theme.textSecondary} strokeWidth={1.9} />
+          )}
           <ThemedText type="smallBold" selectable={false} themeColor={isHidden ? 'tint' : 'text'}>
             {isHidden ? '보이기' : '숨기기'}
           </ThemedText>
@@ -410,13 +417,19 @@ const styles = StyleSheet.create({
   },
   handle: {
     minHeight: 36,
+    flexDirection: 'row',
+    alignItems: 'center',
     justifyContent: 'center',
+    gap: 4,
     paddingHorizontal: Spacing.three,
     borderRadius: Radius.full,
   },
   pill: {
     minHeight: 36,
+    flexDirection: 'row',
+    alignItems: 'center',
     justifyContent: 'center',
+    gap: 5,
     paddingHorizontal: Spacing.three,
     borderRadius: Radius.full,
     borderWidth: 1,

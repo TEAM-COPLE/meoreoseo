@@ -1,6 +1,6 @@
+import { Check } from 'lucide-react-native';
 import { Pressable, StyleSheet } from 'react-native';
 
-import { ThemedText } from '@/components/themed-text';
 import { Radius } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 
@@ -35,7 +35,7 @@ export function Checkbox({ checked, onPress, onLongPress, label, disabled }: Pro
           opacity: pressed || disabled ? 0.6 : 1,
         },
       ]}>
-      {checked ? <ThemedText style={[styles.check, { color: theme.onTint }]}>✓</ThemedText> : null}
+      {checked ? <Check size={14} color={theme.onTint} strokeWidth={2.75} /> : null}
     </Pressable>
   );
 }
@@ -48,10 +48,5 @@ const styles = StyleSheet.create({
     borderWidth: 2,
     alignItems: 'center',
     justifyContent: 'center',
-  },
-  check: {
-    fontSize: 14,
-    lineHeight: 18,
-    fontWeight: 700,
   },
 });

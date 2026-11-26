@@ -17,7 +17,10 @@ type TableName =
   | 'tags'
   | 'routines'
   | 'routine_logs'
-  | 'weather_city';
+  | 'weather_city'
+  | 'study_profiles'
+  | 'study_subjects'
+  | 'study_sessions';
 
 const ALL_TABLES: readonly TableName[] = [
   'todos',
@@ -30,6 +33,9 @@ const ALL_TABLES: readonly TableName[] = [
   'routines',
   'routine_logs',
   'weather_city',
+  'study_profiles',
+  'study_subjects',
+  'study_sessions',
 ];
 
 const tableLocks = new Map<TableName, Promise<unknown>>();
@@ -744,4 +750,141 @@ export async function localGetWeatherCity(): Promise<City | null> {
 
 export async function localSaveWeatherCity(city: City): Promise<void> {
   await AsyncStorage.setItem(`${DB_PREFIX}weather_city`, JSON.stringify(city));
+}
+
+// ───────────────────────── 공부 (study) ─────────────────────────
+
+type StudyProfileRow = Tables<'study_profiles'>;
+type StudySubjectRow = Tables<'study_subjects'>;
+type StudySessionRow = Tables<'study_sessions'>;
+
+export async function localGetStudyProfile(): Promise<StudyProfileRow | null> {
+  const rows = await readTable<StudyProfileRow>('study_profiles');
+  return rows[0] ?? null;
+}
+
+export async function localSaveStudyProfile(values: {
+  nickname: string;
+  status_message: string;
+  daily_goal_minutes: number;
+  public_ranking: boolean;
+}): Promise<void> {
+  await withTableLock('study_profiles', async () => {
+    const existing = (await readTable<StudyProfileRow>('study_profiles'))[0];
+    const now = new Date().toISOString();
+    const next: StudyProfileRow = {
+      user_id: DEV_USER_ID,
+      nickname: values.nickname,
+      status_message: values.status_message,
+      daily_goal_minutes: values.daily_goal_minutes,
+      public_ranking: values.public_ranking,
+      created_at: existing?.created_at ?? now,
+      updated_at: now,
+    };
+    await writeTable('study_profiles', [next]);
+  });
+}
+
+export async function localListStudySubjects(): Promise<StudySubjectRow[]> {
+  const rows = await readTable<StudySubjectRow>('study_subjects');
+  return [...rows].sort((a, b) => a.sort - b.sort || a.created_at.localeCompare(b.created_at));
+}
+
+export async function localSaveStudySubject(
+  id: string | undefined,
+  values: { name: string; color: string },
+): Promise<void> {
+  await withTableLock('study_subjects', async () => {
+    const rows = await readTable<StudySubjectRow>('study_subjects');
+    if (id) {
+      await writeTable(
+        'study_subjects',
+        rows.map((row) => (row.id === id ? { ...row, ...values } : row)),
+      );
+      return;
+    }
+    const created: StudySubjectRow = {
+      id: generateId(),
+      user_id: DEV_USER_ID,
+      name: values.name,
+      color: values.color,
+      sort: rows.length,
+      created_at: new Date().toISOString(),
+    };
+    await writeTable('study_subjects', [...rows, created]);
+  });
+}
+
+export async function localAddStudySubjects(
+  list: { name: string; color: string }[],
+): Promise<void> {
+  await withTableLock('study_subjects', async () => {
+    const rows = await readTable<StudySubjectRow>('study_subjects');
+    const now = new Date().toISOString();
+    const created: StudySubjectRow[] = list.map((values, index) => ({
+      id: generateId(),
+      user_id: DEV_USER_ID,
+      name: values.name,
+      color: values.color,
+      sort: rows.length + index,
+      created_at: now,
+    }));
+    await writeTable('study_subjects', [...rows, ...created]);
+  });
+}
+
+export async function localDeleteStudySubject(id: string): Promise<void> {
+  await withTableLock('study_subjects', async () => {
+    const rows = await readTable<StudySubjectRow>('study_subjects');
+    await writeTable('study_subjects', rows.filter((row) => row.id !== id));
+  });
+  await withTableLock('study_sessions', async () => {
+    const sessions = await readTable<StudySessionRow>('study_sessions');
+    if (sessions.some((s) => s.subject_id === id)) {
+      await writeTable(
+        'study_sessions',
+        sessions.map((s) => (s.subject_id === id ? { ...s, subject_id: null } : s)),
+      );
+    }
+  });
+}
+
+export async function localListStudySessions(
+  from: string,
+  to: string,
+): Promise<StudySessionRow[]> {
+  const rows = await readTable<StudySessionRow>('study_sessions');
+  return rows
+    .filter((row) => row.study_date >= from && row.study_date <= to)
+    .sort((a, b) => a.started_at.localeCompare(b.started_at));
+}
+
+export async function localAddStudySession(values: {
+  subject_id: string | null;
+  study_date: string;
+  started_at: string;
+  ended_at: string;
+  seconds: number;
+}): Promise<void> {
+  await withTableLock('study_sessions', async () => {
+    const rows = await readTable<StudySessionRow>('study_sessions');
+    const created: StudySessionRow = {
+      id: generateId(),
+      user_id: DEV_USER_ID,
+      subject_id: values.subject_id,
+      study_date: values.study_date,
+      started_at: values.started_at,
+      ended_at: values.ended_at,
+      seconds: values.seconds,
+      created_at: new Date().toISOString(),
+    };
+    await writeTable('study_sessions', [...rows, created]);
+  });
+}
+
+export async function localDeleteStudySession(id: string): Promise<void> {
+  await withTableLock('study_sessions', async () => {
+    const rows = await readTable<StudySessionRow>('study_sessions');
+    await writeTable('study_sessions', rows.filter((row) => row.id !== id));
+  });
 }

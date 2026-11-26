@@ -23,9 +23,9 @@ const KEEP_AWAKE_TAG = 'study-timer';
  * - 타이머가 도는 동안에는 화면이 저절로 꺼지지 않게 한다 (화면이 꺼지면 "나간 것"이 되기 때문).
  */
 export function StudyTimerSync() {
-  const { userId, session } = useAuth();
+  const { userId } = useAuth();
   const timer = useStudyTimer();
-  const signedIn = session !== null && userId !== null;
+  const signedIn = userId !== null;
 
   // 처음: 저장된 상태를 읽고, 다른 계정의 타이머는 치우고, 못 보낸 기록을 보낸다.
   useEffect(() => {

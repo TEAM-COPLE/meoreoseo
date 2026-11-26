@@ -3,13 +3,21 @@ import { useEffect, useState } from 'react';
 
 import { activeUserId } from '@/lib/auth';
 
-export type TodaySectionId = 'weather' | 'routines' | 'todos' | 'events' | 'habits' | 'money';
+export type TodaySectionId =
+  | 'weather'
+  | 'routines'
+  | 'todos'
+  | 'events'
+  | 'study'
+  | 'habits'
+  | 'money';
 
 export const DEFAULT_TODAY_ORDER: readonly TodaySectionId[] = [
   'weather',
   'routines',
   'todos',
   'events',
+  'study',
   'habits',
   'money',
 ];
@@ -19,6 +27,7 @@ export const TODAY_SECTION_LABELS: Record<TodaySectionId, string> = {
   routines: '하루 루틴',
   todos: '할 일',
   events: '일정',
+  study: '공부 타이머',
   habits: '습관',
   money: '이번 달 가계부',
 };
@@ -47,6 +56,7 @@ function isSectionId(value: unknown): value is TodaySectionId {
     value === 'routines' ||
     value === 'todos' ||
     value === 'events' ||
+    value === 'study' ||
     value === 'habits' ||
     value === 'money'
   );

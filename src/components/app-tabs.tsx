@@ -1,5 +1,13 @@
 import { usePathname } from "expo-router";
-import { SymbolView, type SFSymbol } from "expo-symbols";
+import {
+    Calendar,
+    CheckSquare,
+    StickyNote,
+    Sun,
+    Timer,
+    Wallet,
+    type LucideIcon,
+} from "lucide-react-native";
 import { useEffect, useState, type ComponentType } from "react";
 import {
     Platform,
@@ -37,8 +45,7 @@ import { indexOfSwipeRoute, useIsSwipeLocked } from "@/lib/swipe-navigation";
 type TabDefinition = {
   path: "/" | "/todos" | "/calendar" | "/study" | "/notes" | "/money";
   label: string;
-  sf: SFSymbol;
-  md: string;
+  Icon: LucideIcon;
   Component: ComponentType;
 };
 
@@ -46,43 +53,37 @@ const TABS: readonly TabDefinition[] = [
   {
     path: "/",
     label: "오늘",
-    sf: "sun.max",
-    md: "today",
+    Icon: Sun,
     Component: TodayScreen,
   },
   {
     path: "/todos",
     label: "할 일",
-    sf: "checklist",
-    md: "checklist",
+    Icon: CheckSquare,
     Component: TodosScreen,
   },
   {
     path: "/calendar",
     label: "일정",
-    sf: "calendar",
-    md: "calendar_month",
+    Icon: Calendar,
     Component: CalendarScreen,
   },
   {
     path: "/study",
     label: "공부",
-    sf: "timer",
-    md: "timer",
+    Icon: Timer,
     Component: StudyScreen,
   },
   {
     path: "/notes",
     label: "메모",
-    sf: "note.text",
-    md: "sticky_note_2",
+    Icon: StickyNote,
     Component: NotesScreen,
   },
   {
     path: "/money",
     label: "가계부",
-    sf: "wonsign.circle",
-    md: "account_balance_wallet",
+    Icon: Wallet,
     Component: MoneyScreen,
   },
 ];
@@ -385,6 +386,7 @@ export default function AppTabs() {
           {TABS.map((tab, index) => {
             const selected = index === activeIndex;
             const activeColor = scheme === "dark" ? "#FFFFFF" : colors.tint;
+            const TabIcon = tab.Icon;
             return (
               <Pressable
                 key={tab.path}
@@ -397,13 +399,10 @@ export default function AppTabs() {
                   pressed && styles.tabPressed,
                 ]}
               >
-                <SymbolView
-                  name={{
-                    ios: tab.sf,
-                    android: tab.md as never,
-                  }}
-                  size={20}
-                  tintColor={selected ? activeColor : colors.textSecondary}
+                <TabIcon
+                  size={19}
+                  color={selected ? activeColor : colors.textSecondary}
+                  strokeWidth={selected ? 2.1 : 1.75}
                 />
                 <ThemedText
                   type="small"

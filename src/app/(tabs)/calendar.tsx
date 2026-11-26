@@ -1,4 +1,5 @@
 import { router, useFocusEffect, useLocalSearchParams, usePathname } from 'expo-router';
+import { Lock, Repeat } from 'lucide-react-native';
 import { useCallback, useMemo, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 
@@ -269,9 +270,12 @@ export default function CalendarScreen() {
                 <ThemedText type="default">{event.title}</ThemedText>
                 {tag ? <TagBadge tag={tag} /> : null}
                 {isRepeat(event.repeat) ? (
-                  <ThemedText type="small" themeColor="textSecondary">
-                    {`🔁 ${repeatLabel(event.repeat, event.series_date)}`}
-                  </ThemedText>
+                  <View style={styles.inlineMeta}>
+                    <Repeat size={12} color={theme.textSecondary} strokeWidth={2} />
+                    <ThemedText type="small" themeColor="textSecondary">
+                      {repeatLabel(event.repeat, event.series_date)}
+                    </ThemedText>
+                  </View>
                 ) : null}
                 {event.memo ? (
                   <ThemedText type="small" themeColor="textSecondary" numberOfLines={2}>
@@ -279,9 +283,12 @@ export default function CalendarScreen() {
                   </ThemedText>
                 ) : null}
                 {event.google_readonly ? (
-                  <ThemedText type="small" themeColor="textSecondary">
-                    🔒 구글 캘린더에서만 고칠 수 있어요
-                  </ThemedText>
+                  <View style={styles.inlineMeta}>
+                    <Lock size={12} color={theme.textSecondary} strokeWidth={2} />
+                    <ThemedText type="small" themeColor="textSecondary">
+                      구글 캘린더에서만 고칠 수 있어요
+                    </ThemedText>
+                  </View>
                 ) : null}
               </View>
             </View>
@@ -576,6 +583,11 @@ const styles = StyleSheet.create({
   eventBody: {
     flex: 1,
     gap: Spacing.half,
+  },
+  inlineMeta: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
   },
   times: {
     flexDirection: 'row',

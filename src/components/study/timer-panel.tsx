@@ -1,3 +1,4 @@
+import { BookOpen, Pause, Plane, Play, Plus, TrainFront, Trophy, X } from 'lucide-react-native';
 import { useState } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 
@@ -37,7 +38,9 @@ import {
 import { tagColorValue } from '@/lib/tags';
 
 import { ProgressBar, SubjectDot, useNow } from './common';
+import { FlightTimerModal } from './flight-timer-modal';
 import { StudySubjectForm } from './subject-form';
+import { SubwayTimerModal } from './subway-timer-modal';
 
 const LEAVE_OPTIONS = [
   { value: 'on', label: '멈추기' },
@@ -65,6 +68,8 @@ export function StudyTimerPanel({ profile }: { profile: StudyProfile | null | un
   const removeSession = useDeleteStudySession();
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [editing, setEditing] = useState<StudySubject | 'new' | null>(null);
+  const [flightOpen, setFlightOpen] = useState(false);
+  const [subwayOpen, setSubwayOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -150,9 +155,7 @@ export function StudyTimerPanel({ profile }: { profile: StudyProfile | null | un
           <ThemedText type="small" themeColor="tint" style={styles.flex}>
             {timer.notice}
           </ThemedText>
-          <ThemedText type="smallBold" themeColor="tint">
-            ✕
-          </ThemedText>
+          <X size={15} color={theme.tint} strokeWidth={2.2} />
         </Pressable>
       ) : null}
 
@@ -165,9 +168,12 @@ export function StudyTimerPanel({ profile }: { profile: StudyProfile | null | un
             {formatClock(todayTotal)}
           </ThemedText>
           {running ? (
-            <ThemedText type="small" style={{ color: subjectColor }}>
-              📖 {running.subjectName ?? '공부'} 중 · 이번 {formatClock(runningSeconds(running, now))}
-            </ThemedText>
+            <View style={styles.inlineRow}>
+              <BookOpen size={14} color={subjectColor} strokeWidth={2} />
+              <ThemedText type="small" style={{ color: subjectColor }}>
+                {running.subjectName ?? '공부'} 중 · 이번 {formatClock(runningSeconds(running, now))}
+              </ThemedText>
+            </View>
           ) : (
             <ThemedText type="small" themeColor="textSecondary">
               {subjectList.length > 0 ? '과목을 고르고 시작을 눌러 보세요' : '시작을 눌러 공부 시간을 재 보세요'}
@@ -187,20 +193,86 @@ export function StudyTimerPanel({ profile }: { profile: StudyProfile | null | un
                 opacity: busy || !timer.loaded ? 0.6 : pressed ? 0.85 : 1,
               },
             ]}>
-            <ThemedText
-              style={[styles.bigButtonText, { color: running ? subjectColor : theme.background }]}>
-              {running ? '⏸ 멈춤' : '▶ 시작'}
-            </ThemedText>
+            <View style={styles.bigButtonInner}>
+              {running ? (
+                <Pause
+                  size={22}
+                  color={subjectColor}
+                  fill={subjectColor}
+                  strokeWidth={2}
+                />
+              ) : (
+                <Play
+                  size={22}
+                  color={theme.background}
+                  fill={theme.background}
+                  strokeWidth={2}
+                />
+              )}
+              <ThemedText
+                style={[styles.bigButtonText, { color: running ? subjectColor : theme.background }]}>
+                {running ? '멈춤' : '시작'}
+              </ThemedText>
+            </View>
           </Pressable>
+
+          <View style={styles.modeRow}>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="비행 타이머 열기"
+              disabled={!timer.loaded}
+              onPress={() => setFlightOpen(true)}
+              style={({ pressed }) => [
+                styles.flightBtn,
+                {
+                  backgroundColor: theme.backgroundSelected,
+                  borderColor: theme.border,
+                  opacity: !timer.loaded ? 0.5 : pressed ? 0.75 : 1,
+                },
+              ]}>
+              <Plane size={15} color={theme.text} strokeWidth={1.9} />
+              <ThemedText type="smallBold" numberOfLines={1}>
+                {running ? '비행 경로' : '비행 모드'}
+              </ThemedText>
+            </Pressable>
+
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="지하철 타이머 열기"
+              disabled={!timer.loaded}
+              onPress={() => setSubwayOpen(true)}
+              style={({ pressed }) => [
+                styles.flightBtn,
+                {
+                  backgroundColor: theme.backgroundSelected,
+                  borderColor: theme.border,
+                  opacity: !timer.loaded ? 0.5 : pressed ? 0.75 : 1,
+                },
+              ]}>
+              <TrainFront size={15} color={theme.text} strokeWidth={1.9} />
+              <ThemedText type="smallBold" numberOfLines={1}>
+                {running ? '지하철 노선' : '지하철 모드'}
+              </ThemedText>
+            </Pressable>
+          </View>
         </View>
 
         <View style={styles.goalRow}>
           <ThemedText type="small" themeColor="textSecondary">
             목표 {formatDuration(goalSeconds)}
           </ThemedText>
-          <ThemedText type="smallBold" themeColor={goalRatio >= 1 ? 'success' : 'text'}>
-            {goalRatio >= 1 ? '🎉 목표 달성!' : `${Math.floor(goalRatio * 100)}%`}
-          </ThemedText>
+          {goalRatio >= 1 ? (
+            <View style={styles.inlineRow}>
+              <Trophy size={14} color={theme.success} strokeWidth={2} />
+              <ThemedText type="smallBold" themeColor="success">
+                목표 달성!
+              </ThemedText>
+            </View>
+          ) : (
+            <ThemedText type="smallBold" themeColor="text">
+              {`${Math.floor(goalRatio * 100)}%`}
+            </ThemedText>
+          )}
         </View>
         <ProgressBar ratio={goalRatio} />
         {error ? (
@@ -213,7 +285,13 @@ export function StudyTimerPanel({ profile }: { profile: StudyProfile | null | un
       <Card>
         <View style={styles.headerRow}>
           <ThemedText type="smallBold">과목</ThemedText>
-          <Button label="+ 과목" size="small" variant="secondary" onPress={() => setEditing('new')} />
+          <Button
+            label="과목"
+            icon={(color) => <Plus size={14} color={color} strokeWidth={2.3} />}
+            size="small"
+            variant="secondary"
+            onPress={() => setEditing('new')}
+          />
         </View>
         {subjects.data && subjectList.length === 0 ? (
           <View style={styles.gap}>
@@ -343,6 +421,32 @@ export function StudyTimerPanel({ profile }: { profile: StudyProfile | null | un
           onClose={() => setEditing(null)}
         />
       ) : null}
+
+      <FlightTimerModal
+        visible={flightOpen}
+        running={running !== null}
+        startedAt={running?.startedAt ?? null}
+        elapsedSeconds={running ? runningSeconds(running, now) : 0}
+        subjectName={running ? running.subjectName : (activeSubject?.name ?? null)}
+        subjectColor={subjectColor}
+        busy={busy}
+        onStart={toggleTimer}
+        onStop={toggleTimer}
+        onClose={() => setFlightOpen(false)}
+      />
+
+      <SubwayTimerModal
+        visible={subwayOpen}
+        running={running !== null}
+        startedAt={running?.startedAt ?? null}
+        elapsedSeconds={running ? runningSeconds(running, now) : 0}
+        subjectName={running ? running.subjectName : (activeSubject?.name ?? null)}
+        subjectColor={subjectColor}
+        busy={busy}
+        onStart={toggleTimer}
+        onStop={toggleTimer}
+        onClose={() => setSubwayOpen(false)}
+      />
     </>
   );
 }
@@ -369,6 +473,36 @@ const styles = StyleSheet.create({
     borderWidth: 3,
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  bigButtonInner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+  },
+  modeRow: {
+    marginTop: Spacing.one,
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: Spacing.two,
+  },
+  flightBtn: {
+    minHeight: 36,
+    paddingHorizontal: 14,
+    borderRadius: Radius.full,
+    borderWidth: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexShrink: 0,
+    gap: 6,
+  },
+  inlineRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
   },
   bigButtonText: {
     fontSize: 24,

@@ -1,3 +1,4 @@
+import { ChevronLeft, ChevronRight, type LucideIcon } from 'lucide-react-native';
 import { Pressable, StyleSheet, View } from 'react-native';
 
 import { ThemedText } from '@/components/themed-text';
@@ -14,22 +15,22 @@ type Props = {
 export function MonthSwitcher({ month, onChange }: Props) {
   return (
     <View style={styles.row}>
-      <ArrowButton label="이전 달" symbol="‹" onPress={() => onChange(shiftMonth(month, -1))} />
+      <ArrowButton label="이전 달" Icon={ChevronLeft} onPress={() => onChange(shiftMonth(month, -1))} />
       <ThemedText type="default" style={styles.label}>
         {formatMonth(month)}
       </ThemedText>
-      <ArrowButton label="다음 달" symbol="›" onPress={() => onChange(shiftMonth(month, 1))} />
+      <ArrowButton label="다음 달" Icon={ChevronRight} onPress={() => onChange(shiftMonth(month, 1))} />
     </View>
   );
 }
 
 function ArrowButton({
   label,
-  symbol,
+  Icon,
   onPress,
 }: {
   label: string;
-  symbol: string;
+  Icon: LucideIcon;
   onPress: () => void;
 }) {
   const theme = useTheme();
@@ -43,7 +44,7 @@ function ArrowButton({
         styles.button,
         { backgroundColor: theme.backgroundSelected, opacity: pressed ? 0.7 : 1 },
       ]}>
-      <ThemedText type="default">{symbol}</ThemedText>
+      <Icon size={18} color={theme.text} strokeWidth={2} />
     </Pressable>
   );
 }

@@ -1,4 +1,5 @@
 import { router, useLocalSearchParams } from 'expo-router';
+import { ChevronLeft, Pin, PinOff, Trash2 } from 'lucide-react-native';
 import { useEffect, useState } from 'react';
 import {
   AppState,
@@ -143,7 +144,13 @@ function NoteEditor({ initial }: { initial: Note | null }) {
           { paddingTop: insets.top + Spacing.two, paddingBottom: insets.bottom + Spacing.two },
         ]}>
         <View style={styles.bar}>
-          <Button label="‹ 목록" variant="secondary" size="small" onPress={leave} />
+          <Button
+            label="목록"
+            icon={(color) => <ChevronLeft size={15} color={color} strokeWidth={2.2} />}
+            variant="secondary"
+            size="small"
+            onPress={leave}
+          />
 
           <View style={styles.status}>
             <ThemedText
@@ -166,12 +173,20 @@ function NoteEditor({ initial }: { initial: Note | null }) {
 
           <Button
             label={pinned ? '고정 해제' : '고정'}
+            icon={(color) =>
+              pinned ? (
+                <PinOff size={14} color={color} strokeWidth={2} />
+              ) : (
+                <Pin size={14} color={color} strokeWidth={2} />
+              )
+            }
             variant="secondary"
             size="small"
             onPress={() => change({ pinned: !pinned })}
           />
           <Button
             label="삭제"
+            icon={(color) => <Trash2 size={14} color={color} strokeWidth={2} />}
             variant="danger"
             size="small"
             onPress={deleteNote}

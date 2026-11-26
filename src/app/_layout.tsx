@@ -6,10 +6,11 @@ import {
   ThemeProvider,
   type ErrorBoundaryProps,
 } from 'expo-router';
+import * as ScreenOrientation from 'expo-screen-orientation';
 import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
 import { useEffect, useState } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 
 import { Colors } from '@/constants/theme';
@@ -108,6 +109,12 @@ function ThemedRootNavigator() {
     if (!loading) SplashScreen.hideAsync().catch(() => {});
   }, [loading]);
 
+  // 기본 화면은 세로로 유지하고, 비행 타이머 모달이 열렸을 때만 가로 회전을 허용한다.
+  useEffect(() => {
+    if (Platform.OS === 'web') return;
+    ScreenOrientation.lockAsync(ScreenOrientation.OrientationLock.PORTRAIT_UP).catch(() => {});
+  }, []);
+
   return (
     <ThemeProvider value={colorScheme === 'dark' ? AMOLED_DARK_THEME : CLEAN_LIGHT_THEME}>
       <StatusBar style={colorScheme === 'dark' ? 'light' : 'dark'} />
@@ -124,7 +131,7 @@ function ThemedRootNavigator() {
         </SafeBoundary>
       ) : null}
       {/* 공부 타이머: 앱을 벗어나면 멈추기, 못 보낸 기록 다시 보내기 */}
-      {session !== null ? (
+      {signedIn ? (
         <SafeBoundary name="study-timer-sync">
           <StudyTimerSync />
         </SafeBoundary>

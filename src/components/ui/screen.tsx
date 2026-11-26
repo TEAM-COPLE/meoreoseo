@@ -1,4 +1,5 @@
 import { router } from "expo-router";
+import { ChevronLeft, Settings } from "lucide-react-native";
 import {
     useEffect,
     useRef,
@@ -217,7 +218,7 @@ export function Screen({
                 },
               ]}
             >
-              <ThemedText type="default">‹</ThemedText>
+              <ChevronLeft size={18} color={theme.text} strokeWidth={2} />
             </Pressable>
           ) : null}
           <ThemedText accessibilityRole="header" style={styles.title}>
@@ -238,6 +239,7 @@ export function Screen({
               },
             ]}
           >
+            <Settings size={15} color={theme.textSecondary} strokeWidth={1.8} />
             <ThemedText type="small">설정</ThemedText>
           </Pressable>
         </View>
@@ -446,11 +448,13 @@ const styles = StyleSheet.create({
   },
   account: {
     minHeight: 34,
-    paddingHorizontal: Spacing.three - 2,
+    paddingHorizontal: Spacing.three - 4,
     borderRadius: Radius.full,
     borderWidth: 1,
+    flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
+    gap: 5,
   },
   status: {
     paddingVertical: Spacing.five,

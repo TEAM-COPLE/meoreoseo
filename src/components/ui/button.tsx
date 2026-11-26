@@ -1,4 +1,5 @@
-import { ActivityIndicator, Pressable, StyleSheet, type StyleProp, type ViewStyle } from 'react-native';
+import type { ReactNode } from 'react';
+import { ActivityIndicator, Pressable, StyleSheet, View, type StyleProp, type ViewStyle } from 'react-native';
 
 import { ThemedText } from '@/components/themed-text';
 import { Radius, Spacing } from '@/constants/theme';
@@ -10,6 +11,8 @@ type Props = {
   /** primary: 주된 동작, secondary: 보조 동작, danger: 삭제처럼 되돌릴 수 없는 동작 */
   variant?: 'primary' | 'secondary' | 'danger';
   size?: 'medium' | 'small';
+  /** 버튼 왼쪽에 놓을 작은 아이콘 (색은 버튼 글자 색에 맞춰 넘겨준다) */
+  icon?: ReactNode | ((color: string) => ReactNode);
   loading?: boolean;
   disabled?: boolean;
   /** 구글·카카오 버튼처럼 정해진 색을 써야 할 때만 넘긴다. variant 의 색보다 우선한다. */
@@ -22,6 +25,7 @@ export function Button({
   onPress,
   variant = 'primary',
   size = 'medium',
+  icon,
   loading = false,
   disabled = false,
   colors,
@@ -40,6 +44,7 @@ export function Button({
   const color =
     colors?.text ??
     (variant === 'primary' ? theme.onTint : variant === 'danger' ? theme.danger : theme.text);
+  const renderedIcon = typeof icon === 'function' ? icon(color) : icon;
 
   return (
     <Pressable
@@ -61,11 +66,14 @@ export function Button({
       {loading ? (
         <ActivityIndicator color={color} />
       ) : (
-        <ThemedText
-          type={size === 'small' ? 'smallBold' : 'default'}
-          style={[{ color }, variant === 'primary' && styles.primaryLabel]}>
-          {label}
-        </ThemedText>
+        <View style={styles.content}>
+          {renderedIcon}
+          <ThemedText
+            type={size === 'small' ? 'smallBold' : 'default'}
+            style={[{ color }, variant === 'primary' && styles.primaryLabel]}>
+            {label}
+          </ThemedText>
+        </View>
       )}
     </Pressable>
   );
@@ -83,6 +91,12 @@ const styles = StyleSheet.create({
     minHeight: 34,
     paddingHorizontal: Spacing.three - 2,
     borderRadius: Radius.full,
+  },
+  content: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 5,
   },
   primaryLabel: {
     fontWeight: '700',
