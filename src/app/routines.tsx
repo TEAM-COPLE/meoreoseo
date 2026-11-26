@@ -1,4 +1,5 @@
 import { router, useLocalSearchParams } from 'expo-router';
+import { Plus } from 'lucide-react-native';
 import { useState } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 
@@ -115,7 +116,14 @@ export default function RoutinesScreen() {
       title="하루 루틴"
       onBack={leave}
       onRefresh={() => Promise.all([routines.refetch(), logs.refetch()])}
-      action={<Button label="+ 추가" size="small" onPress={() => setEditing('new')} />}>
+      action={
+        <Button
+          label="추가"
+          icon={(color) => <Plus size={14} color={color} strokeWidth={2.4} />}
+          size="small"
+          onPress={() => setEditing('new')}
+        />
+      }>
       <View style={[styles.hint, { backgroundColor: theme.tintSoft }]}>
         <ThemedText type="small" themeColor="tint" style={styles.hintText}>
           {notifyHint}

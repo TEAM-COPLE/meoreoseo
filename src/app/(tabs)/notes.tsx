@@ -1,4 +1,5 @@
 import { router } from 'expo-router';
+import { Pin, Search } from 'lucide-react-native';
 import { useDeferredValue, useMemo, useRef, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 
@@ -9,6 +10,7 @@ import { TextField, type TextFieldRef } from '@/components/ui/text-field';
 import { Spacing } from '@/constants/theme';
 import { hasSelectionModifier, useMultiSelect } from '@/hooks/use-multi-select';
 import { useDeleteNotes, useNotes } from '@/hooks/use-notes';
+import { useTheme } from '@/hooks/use-theme';
 import { useWebSearchShortcut } from '@/hooks/use-web-shortcut';
 import { formatDate, toISODate } from '@/lib/dates';
 import { confirm, errorMessage } from '@/lib/format';
@@ -17,6 +19,7 @@ import { confirm, errorMessage } from '@/lib/format';
  * 메모 목록. 메모를 누르면 메모장 화면(src/app/note/[id].tsx)이 열린다.
  */
 export default function NotesScreen() {
+  const theme = useTheme();
   const notes = useNotes();
   const removeMany = useDeleteNotes();
   const multi = useMultiSelect();
@@ -103,6 +106,7 @@ export default function NotesScreen() {
         <TextField
           inputRef={searchRef}
           label="검색"
+          leftIcon={<Search size={16} color={theme.textSecondary} strokeWidth={1.9} />}
           value={query}
           onChangeText={setQuery}
           placeholder="제목이나 내용으로 찾기"
@@ -156,9 +160,12 @@ export default function NotesScreen() {
                 {note.title || '제목 없음'}
               </ThemedText>
               {note.pinned ? (
-                <ThemedText type="small" themeColor="tint">
-                  고정
-                </ThemedText>
+                <View style={styles.pinnedBadge}>
+                  <Pin size={12} color={theme.tint} strokeWidth={2} />
+                  <ThemedText type="small" themeColor="tint">
+                    고정
+                  </ThemedText>
+                </View>
               ) : null}
             </View>
             {note.body ? (
@@ -185,5 +192,10 @@ const styles = StyleSheet.create({
   title: {
     flex: 1,
     fontWeight: 700,
+  },
+  pinnedBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
   },
 });

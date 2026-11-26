@@ -1,4 +1,5 @@
 import { router, useLocalSearchParams, usePathname } from 'expo-router';
+import { ChevronRight, Search } from 'lucide-react-native';
 import { useDeferredValue, useMemo, useRef, useState } from 'react';
 import { Platform, Pressable, StyleSheet, View, type ViewStyle } from 'react-native';
 
@@ -228,10 +229,11 @@ export default function MoneyScreen() {
               accessibilityRole="button"
               hitSlop={8}
               onPress={() => setEditingBudget(true)}
-              style={({ pressed }) => pressed && styles.pressed}>
+              style={({ pressed }) => [styles.budgetLink, pressed && styles.pressed]}>
               <ThemedText type="small" themeColor="tint">
-                {budget ? '예산 변경 ›' : '예산 설정 ›'}
+                {budget ? '예산 변경' : '예산 설정'}
               </ThemedText>
+              <ChevronRight size={14} color={theme.tint} strokeWidth={2.2} />
             </Pressable>
           </View>
           {budget ? (
@@ -278,6 +280,7 @@ export default function MoneyScreen() {
       <TextField
         inputRef={searchRef}
         label="검색"
+        leftIcon={<Search size={16} color={theme.textSecondary} strokeWidth={1.9} />}
         placeholder="분류 또는 메모로 검색…"
         value={query}
         onChangeText={setQuery}
@@ -386,7 +389,7 @@ export default function MoneyScreen() {
                   </View>
                   <ThemedText
                     type="default"
-                    style={{ color: item.kind === 'income' ? theme.success : theme.text }}>
+                    style={{ color: item.kind === 'income' ? theme.success : theme.danger }}>
                     {item.kind === 'income' ? '+' : '-'}
                     {formatWon(item.amount)}
                   </ThemedText>
@@ -662,5 +665,10 @@ const styles = StyleSheet.create({
   } as ViewStyle,
   pressed: {
     opacity: 0.6,
+  },
+  budgetLink: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 1,
   },
 });

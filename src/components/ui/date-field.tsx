@@ -1,3 +1,4 @@
+import { Calendar, X } from 'lucide-react-native';
 import { useState } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 
@@ -37,13 +38,20 @@ export function DateField({ label, value, onChange, clearable = false }: Props) 
             styles.field,
             { backgroundColor: theme.backgroundElement, borderColor: theme.border },
           ]}>
+          <Calendar size={16} color={theme.textSecondary} strokeWidth={1.8} />
           <ThemedText type="default" themeColor={value ? 'text' : 'textSecondary'}>
             {value ? formatDate(value) : '날짜 없음'}
           </ThemedText>
         </Pressable>
 
         {clearable && value ? (
-          <Pressable accessibilityRole="button" hitSlop={8} onPress={() => onChange(null)}>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="날짜 지우기"
+            hitSlop={8}
+            onPress={() => onChange(null)}
+            style={styles.clearButton}>
+            <X size={14} color={theme.textSecondary} strokeWidth={2} />
             <ThemedText type="small" themeColor="textSecondary">
               지우기
             </ThemedText>
@@ -83,7 +91,14 @@ const styles = StyleSheet.create({
     paddingHorizontal: Spacing.three - 4,
     borderRadius: Radius.medium,
     borderWidth: StyleSheet.hairlineWidth,
-    justifyContent: 'center',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.two,
+  },
+  clearButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
   },
   calendar: {
     marginTop: Spacing.one,

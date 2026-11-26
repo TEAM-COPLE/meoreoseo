@@ -1,6 +1,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useSyncExternalStore } from 'react';
 
+import { DEV_USER_ID, localAddStudySession } from './local-db';
 import { queryClient } from './query';
 import { MAX_SEGMENT_SECONDS, MIN_SEGMENT_SECONDS, splitByDay } from './study';
 import { supabase } from './supabase';
@@ -136,6 +137,7 @@ export function runningSeconds(running: RunningTimer | null, nowMs = Date.now())
 // ───────────────────────── 지금 공부 중 표시 ─────────────────────────
 
 async function announceLive(running: RunningTimer) {
+  if (running.userId === DEV_USER_ID) return;
   const { error } = await supabase.from('study_live').upsert({
     user_id: running.userId,
     subject_name: running.subjectName,
@@ -147,6 +149,7 @@ async function announceLive(running: RunningTimer) {
 }
 
 async function clearLive(userId: string) {
+  if (userId === DEV_USER_ID) return;
   const { error } = await supabase.from('study_live').delete().eq('user_id', userId);
   if (error) console.warn('study_live delete failed', error.message);
   queryClient.invalidateQueries({ queryKey: ['study-board'] });
@@ -249,6 +252,11 @@ export function flushPendingStudy(userId: string): Promise<void> {
           continue;
         }
         const { userId: _owner, ...row } = segment;
+        if (userId === DEV_USER_ID) {
+          await localAddStudySession(row);
+          sent++;
+          continue;
+        }
         const { error } = await supabase.from('study_sessions').insert(row);
         if (!error) {
           sent++;

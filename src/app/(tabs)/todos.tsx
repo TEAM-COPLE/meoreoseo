@@ -1,4 +1,5 @@
 import { router, useLocalSearchParams, usePathname } from 'expo-router';
+import { ChevronDown, ChevronUp, Repeat, Search, SlidersHorizontal } from 'lucide-react-native';
 import { useDeferredValue, useRef, useState } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 
@@ -187,9 +188,12 @@ export default function TodosScreen() {
               </ThemedText>
             ) : null}
             {repeat && todo.due_date ? (
-              <ThemedText type="small" themeColor="textSecondary">
-                {`🔁 ${repeatLabel(repeat, todo.repeat_start ?? todo.due_date)}`}
-              </ThemedText>
+              <View style={styles.inlineMeta}>
+                <Repeat size={12} color={theme.textSecondary} strokeWidth={2} />
+                <ThemedText type="small" themeColor="textSecondary">
+                  {repeatLabel(repeat, todo.repeat_start ?? todo.due_date)}
+                </ThemedText>
+              </View>
             ) : null}
           </View>
         ) : null}
@@ -305,20 +309,38 @@ export default function TodosScreen() {
               accessibilityLabel="상세 필터 열기"
               accessibilityState={{ expanded: filtersOpen }}
               onPress={() => setFiltersOpen((prev) => !prev)}
-              style={({ pressed }) => [
-                styles.filterToggle,
-                {
-                  backgroundColor: highlighted ? theme.tint : theme.backgroundElement,
-                  borderColor: highlighted ? theme.tint : theme.border,
-                  opacity: pressed ? 0.75 : 1,
-                },
-              ]}>
-              <ThemedText
-                type="smallBold"
-                style={{ color: highlighted ? theme.onTint : theme.text }}>
-                {activeCount > 0 ? `필터 ${activeCount}` : '필터'} {filtersOpen ? '▴' : '▾'}
-              </ThemedText>
-            </Pressable>
+                style={({ pressed }) => [
+                  styles.filterToggle,
+                  {
+                    backgroundColor: highlighted ? theme.tint : theme.backgroundElement,
+                    borderColor: highlighted ? theme.tint : theme.border,
+                    opacity: pressed ? 0.75 : 1,
+                  },
+                ]}>
+                <SlidersHorizontal
+                  size={13}
+                  color={highlighted ? theme.onTint : theme.textSecondary}
+                  strokeWidth={2}
+                />
+                <ThemedText
+                  type="smallBold"
+                  style={{ color: highlighted ? theme.onTint : theme.text }}>
+                  {activeCount > 0 ? `필터 ${activeCount}` : '필터'}
+                </ThemedText>
+                {filtersOpen ? (
+                  <ChevronUp
+                    size={14}
+                    color={highlighted ? theme.onTint : theme.textSecondary}
+                    strokeWidth={2}
+                  />
+                ) : (
+                  <ChevronDown
+                    size={14}
+                    color={highlighted ? theme.onTint : theme.textSecondary}
+                    strokeWidth={2}
+                  />
+                )}
+              </Pressable>
           );
         })()}
       </View>
@@ -364,6 +386,7 @@ export default function TodosScreen() {
       <TextField
         inputRef={searchRef}
         label="검색"
+        leftIcon={<Search size={16} color={theme.textSecondary} strokeWidth={1.9} />}
         placeholder="할 일 제목 또는 메모로 검색…"
         value={query}
         onChangeText={setQuery}
@@ -570,8 +593,10 @@ const styles = StyleSheet.create({
     paddingHorizontal: Spacing.three - 2,
     borderRadius: Radius.full,
     borderWidth: 1,
+    flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
+    gap: 5,
   },
   filterPanelHeader: {
     flexDirection: 'row',
@@ -601,6 +626,12 @@ const styles = StyleSheet.create({
   meta: {
     flexDirection: 'row',
     flexWrap: 'wrap',
+    alignItems: 'center',
     columnGap: Spacing.two,
+  },
+  inlineMeta: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
   },
 });

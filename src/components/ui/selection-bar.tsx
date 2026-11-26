@@ -1,3 +1,4 @@
+import { Check, Plus, Trash2 } from 'lucide-react-native';
 import { useEffect } from 'react';
 import {
   ActivityIndicator,
@@ -33,8 +34,10 @@ export function SelectionHeaderActions({
   onStartSelect: () => void;
   onCancelSelect: () => void;
 }) {
+  const addIcon = (color: string) => <Plus size={14} color={color} strokeWidth={2.4} />;
+
   if (Platform.OS !== 'web') {
-    return selecting ? null : <Button label={addLabel} size="small" onPress={onAdd} />;
+    return selecting ? null : <Button label={addLabel} icon={addIcon} size="small" onPress={onAdd} />;
   }
   if (selecting) {
     return <Button label="취소" variant="secondary" size="small" onPress={onCancelSelect} />;
@@ -44,7 +47,7 @@ export function SelectionHeaderActions({
       {canSelect ? (
         <Button label="선택" variant="secondary" size="small" onPress={onStartSelect} />
       ) : null}
-      <Button label={addLabel} size="small" onPress={onAdd} />
+      <Button label={addLabel} icon={addIcon} size="small" onPress={onAdd} />
     </View>
   );
 }
@@ -62,9 +65,7 @@ export function SelectionIndicator({ selected }: { selected: boolean }) {
           backgroundColor: selected ? theme.tint : 'transparent',
         },
       ]}>
-      {selected ? (
-        <ThemedText style={[styles.indicatorCheck, { color: theme.onTint }]}>✓</ThemedText>
-      ) : null}
+      {selected ? <Check size={13} color={theme.onTint} strokeWidth={2.75} /> : null}
     </View>
   );
 }
@@ -163,9 +164,12 @@ export function SelectionBar({
           {deleting ? (
             <ActivityIndicator size="small" color={theme.onDanger} />
           ) : (
-            <ThemedText type="smallBold" style={{ color: theme.onDanger }} numberOfLines={1}>
-              {count > 0 ? `${count}개 삭제` : '삭제'}
-            </ThemedText>
+            <View style={styles.deleteInner}>
+              <Trash2 size={14} color={theme.onDanger} strokeWidth={2} />
+              <ThemedText type="smallBold" style={{ color: theme.onDanger }} numberOfLines={1}>
+                {count > 0 ? `${count}개 삭제` : '삭제'}
+              </ThemedText>
+            </View>
           )}
         </Pressable>
       </View>
@@ -187,10 +191,10 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  indicatorCheck: {
-    fontSize: 13,
-    lineHeight: 16,
-    fontWeight: '700',
+  deleteInner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
   },
   bar: {
     flexDirection: 'row',

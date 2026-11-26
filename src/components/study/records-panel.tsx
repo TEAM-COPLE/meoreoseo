@@ -1,3 +1,4 @@
+import { ChevronLeft, ChevronRight, Flame, type LucideIcon } from 'lucide-react-native';
 import { useState } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 
@@ -30,11 +31,11 @@ import { tagColorValue } from '@/lib/tags';
 
 import { ProgressBar, SubjectDot } from './common';
 
-/** 시간을 막대 위에 짧게. 예: 5400 → '1.5h', 1200 → '20m' */
+/** 시간을 막대 위에 짧게. 예: 5400 → '1.5시간', 1200 → '20분', 20 → '0분' */
 function compact(seconds: number): string {
   if (seconds <= 0) return '';
-  if (seconds < 3600) return `${Math.round(seconds / 60)}m`;
-  return `${Math.round(seconds / 360) / 10}h`;
+  if (seconds < 3600) return `${Math.round(seconds / 60)}분`;
+  return `${Math.round(seconds / 360) / 10}시간`;
 }
 
 /**
@@ -80,7 +81,7 @@ export function StudyRecordsPanel({ profile }: { profile: StudyProfile | null | 
   return (
     <>
       <View style={styles.tiles}>
-        <Tile label="연속 공부" value={`🔥 ${streak}일`} />
+        <Tile label="연속 공부" value={`${streak}일`} icon={Flame} />
         <Tile label="이번 주" value={formatDuration(thisWeekSum)} />
         <Tile label="하루 평균 (이번 주)" value={formatDuration(Math.floor(thisWeekSum / thisWeekDays))} />
         <Tile label="최고 기록 (120일)" value={bestDay ? formatDuration(bestDay[1]) : '-'} />
@@ -88,14 +89,14 @@ export function StudyRecordsPanel({ profile }: { profile: StudyProfile | null | 
 
       <Card>
         <View style={styles.rowBetween}>
-          <ArrowButton label="이전 주" symbol="‹" onPress={() => setWeekFrom(addDays(weekFrom, -7))} />
+          <ArrowButton label="이전 주" Icon={ChevronLeft} onPress={() => setWeekFrom(addDays(weekFrom, -7))} />
           <ThemedText type="smallBold">
             {parseISODate(weekFrom).getMonth() + 1}/{parseISODate(weekFrom).getDate()} ~{' '}
             {parseISODate(weekTo).getMonth() + 1}/{parseISODate(weekTo).getDate()} · {formatDuration(weekSum)}
           </ThemedText>
           <ArrowButton
             label="다음 주"
-            symbol="›"
+            Icon={ChevronRight}
             disabled={addDays(weekFrom, 7) > today}
             onPress={() => setWeekFrom(addDays(weekFrom, 7))}
           />
@@ -224,28 +225,31 @@ export function StudyRecordsPanel({ profile }: { profile: StudyProfile | null | 
   );
 }
 
-function Tile({ label, value }: { label: string; value: string }) {
+function Tile({ label, value, icon: Icon }: { label: string; value: string; icon?: LucideIcon }) {
   const theme = useTheme();
   return (
     <View style={[styles.tile, { backgroundColor: theme.backgroundElement, borderColor: theme.border }]}>
       <ThemedText type="small" themeColor="textSecondary" numberOfLines={1}>
         {label}
       </ThemedText>
-      <ThemedText type="default" style={styles.tileValue} numberOfLines={1}>
-        {value}
-      </ThemedText>
+      <View style={styles.tileValueRow}>
+        {Icon ? <Icon size={16} color={theme.tint} strokeWidth={2} /> : null}
+        <ThemedText type="default" style={styles.tileValue} numberOfLines={1}>
+          {value}
+        </ThemedText>
+      </View>
     </View>
   );
 }
 
 function ArrowButton({
   label,
-  symbol,
+  Icon,
   onPress,
   disabled = false,
 }: {
   label: string;
-  symbol: string;
+  Icon: LucideIcon;
   onPress: () => void;
   disabled?: boolean;
 }) {
@@ -258,7 +262,7 @@ function ArrowButton({
       hitSlop={8}
       onPress={onPress}
       style={[styles.arrow, { backgroundColor: theme.backgroundSelected, opacity: disabled ? 0.3 : 1 }]}>
-      <ThemedText type="default">{symbol}</ThemedText>
+      <Icon size={16} color={theme.text} strokeWidth={2} />
     </Pressable>
   );
 }
@@ -276,6 +280,11 @@ const styles = StyleSheet.create({
     borderRadius: Radius.large,
     borderWidth: 1,
     gap: 2,
+  },
+  tileValueRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
   },
   tileValue: {
     fontWeight: '800',

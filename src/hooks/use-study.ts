@@ -1,6 +1,16 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
-import { requireUserId, useAuth } from '@/lib/auth';
+import { isDevMode, requireUserId, useAuth } from '@/lib/auth';
+import {
+  localAddStudySubjects,
+  localDeleteStudySession,
+  localDeleteStudySubject,
+  localGetStudyProfile,
+  localListStudySessions,
+  localListStudySubjects,
+  localSaveStudyProfile,
+  localSaveStudySubject,
+} from '@/lib/local-db';
 import { check } from '@/lib/query';
 import type { StudyGroup, StudyProfile, StudySession, StudySubject } from '@/lib/study';
 import { supabase } from '@/lib/supabase';
@@ -31,11 +41,12 @@ function friendly(error: { message: string; code?: string } | null): void {
 
 /** 내 공부 프로필. 아직 만들지 않았으면 null */
 export function useStudyProfile() {
-  const { userId, session } = useAuth();
+  const { userId } = useAuth();
   return useQuery({
     queryKey: [...PROFILE_KEY, userId],
-    enabled: session !== null,
+    enabled: userId !== null,
     queryFn: async (): Promise<StudyProfile | null> => {
+      if (isDevMode()) return localGetStudyProfile();
       const { data, error } = await supabase
         .from('study_profiles')
         .select('*')
@@ -57,6 +68,11 @@ export function useSaveStudyProfile() {
   return useMutation({
     mutationKey: PROFILE_KEY,
     mutationFn: async (values: StudyProfileValues) => {
+      requireUserId();
+      if (isDevMode()) {
+        await localSaveStudyProfile(values);
+        return;
+      }
       const { error } = await supabase
         .from('study_profiles')
         .upsert({ user_id: requireUserId(), ...values });
@@ -73,11 +89,12 @@ export function useSaveStudyProfile() {
 // ───────────────────────── 과목 ─────────────────────────
 
 export function useStudySubjects() {
-  const { userId, session } = useAuth();
+  const { userId } = useAuth();
   return useQuery({
     queryKey: [...SUBJECTS_KEY, userId],
-    enabled: session !== null,
+    enabled: userId !== null,
     queryFn: async (): Promise<StudySubject[]> => {
+      if (isDevMode()) return localListStudySubjects();
       const { data, error } = await supabase
         .from('study_subjects')
         .select('*')
@@ -97,6 +114,10 @@ export function useSaveStudySubject() {
     mutationKey: SUBJECTS_KEY,
     mutationFn: async ({ id, values }: { id?: string; values: StudySubjectValues }) => {
       requireUserId();
+      if (isDevMode()) {
+        await localSaveStudySubject(id, values);
+        return;
+      }
       const { error } = id
         ? await supabase.from('study_subjects').update(values).eq('id', id)
         : await supabase.from('study_subjects').insert(values);
@@ -112,6 +133,10 @@ export function useAddStudySubjects() {
     mutationKey: SUBJECTS_KEY,
     mutationFn: async (list: StudySubjectValues[]) => {
       requireUserId();
+      if (isDevMode()) {
+        await localAddStudySubjects(list);
+        return;
+      }
       const { error } = await supabase
         .from('study_subjects')
         .insert(list.map((values, index) => ({ ...values, sort: index })));
@@ -128,6 +153,10 @@ export function useDeleteStudySubject() {
     mutationKey: SUBJECTS_KEY,
     mutationFn: async (id: string) => {
       requireUserId();
+      if (isDevMode()) {
+        await localDeleteStudySubject(id);
+        return;
+      }
       const { error } = await supabase.from('study_subjects').delete().eq('id', id);
       check(error);
     },
@@ -142,11 +171,12 @@ export function useDeleteStudySubject() {
 
 /** 기간(from~to, 'YYYY-MM-DD') 안의 내 공부 기록. 시작 시각 순서 */
 export function useStudySessions(from: string, to: string) {
-  const { userId, session } = useAuth();
+  const { userId } = useAuth();
   return useQuery({
     queryKey: [...SESSIONS_KEY, userId, from, to],
-    enabled: session !== null,
+    enabled: userId !== null,
     queryFn: async (): Promise<StudySession[]> => {
+      if (isDevMode()) return localListStudySessions(from, to);
       const { data, error } = await supabase
         .from('study_sessions')
         .select('*')
@@ -166,6 +196,10 @@ export function useDeleteStudySession() {
     mutationKey: SESSIONS_KEY,
     mutationFn: async (id: string) => {
       requireUserId();
+      if (isDevMode()) {
+        await localDeleteStudySession(id);
+        return;
+      }
       const { error } = await supabase.from('study_sessions').delete().eq('id', id);
       check(error);
     },

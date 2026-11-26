@@ -8,6 +8,15 @@ import {
   type TabListProps,
   type TabTriggerSlotProps,
 } from 'expo-router/ui';
+import {
+  Calendar,
+  CheckSquare,
+  StickyNote,
+  Sun,
+  Timer,
+  Wallet,
+  type LucideIcon,
+} from 'lucide-react-native';
 import { Pressable, StyleSheet, useWindowDimensions, View, type PressableProps } from 'react-native';
 
 import { MaxContentWidth, Radius, Spacing } from '@/constants/theme';
@@ -22,22 +31,22 @@ export default function AppTabs() {
       <TabList asChild>
         <TabBar>
           <TabTrigger name="today" href="/" asChild>
-            <TabButton>오늘</TabButton>
+            <TabButton Icon={Sun}>오늘</TabButton>
           </TabTrigger>
           <TabTrigger name="todos" href="/todos" asChild>
-            <TabButton>할 일</TabButton>
+            <TabButton Icon={CheckSquare}>할 일</TabButton>
           </TabTrigger>
           <TabTrigger name="calendar" href="/calendar" asChild>
-            <TabButton>일정</TabButton>
+            <TabButton Icon={Calendar}>일정</TabButton>
           </TabTrigger>
           <TabTrigger name="study" href="/study" asChild>
-            <TabButton>공부</TabButton>
+            <TabButton Icon={Timer}>공부</TabButton>
           </TabTrigger>
           <TabTrigger name="notes" href="/notes" asChild>
-            <TabButton>메모</TabButton>
+            <TabButton Icon={StickyNote}>메모</TabButton>
           </TabTrigger>
           <TabTrigger name="money" href="/money" asChild>
-            <TabButton>가계부</TabButton>
+            <TabButton Icon={Wallet}>가계부</TabButton>
           </TabTrigger>
         </TabBar>
       </TabList>
@@ -46,10 +55,16 @@ export default function AppTabs() {
   );
 }
 
-function TabButton({ children, isFocused, ...props }: TabTriggerSlotProps) {
+function TabButton({
+  children,
+  isFocused,
+  Icon,
+  ...props
+}: TabTriggerSlotProps & { Icon: LucideIcon }) {
   const theme = useTheme();
   const scheme = useColorScheme();
   const isDark = scheme === 'dark';
+  const fg = isFocused ? (isDark ? theme.text : theme.tint) : theme.textSecondary;
 
   return (
     <Pressable
@@ -64,6 +79,7 @@ function TabButton({ children, isFocused, ...props }: TabTriggerSlotProps) {
         },
         pressed && styles.pressed,
       ]}>
+      <Icon size={15} color={fg} strokeWidth={isFocused ? 2.1 : 1.75} />
       <ThemedText
         type={isFocused ? 'smallBold' : 'small'}
         themeColor={isFocused ? (isDark ? 'text' : 'tint') : 'textSecondary'}>
@@ -158,8 +174,10 @@ const styles = StyleSheet.create({
     minHeight: 36,
     paddingHorizontal: Spacing.three - 4,
     borderRadius: Radius.full,
+    flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
+    gap: 5,
   },
   pressed: {
     opacity: 0.7,

@@ -1,4 +1,5 @@
 import { router, useLocalSearchParams } from 'expo-router';
+import { Flame } from 'lucide-react-native';
 import { useMemo, useState } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 
@@ -292,6 +293,7 @@ export default function HabitsScreen() {
                       styles.streakPill,
                       { backgroundColor: streak > 0 ? theme.tintSoft : theme.backgroundSelected },
                     ]}>
+                    {streak > 0 ? <Flame size={12} color={theme.tint} strokeWidth={2} /> : null}
                     <ThemedText
                       type="smallBold"
                       themeColor={streak > 0 ? 'tint' : 'textSecondary'}
@@ -456,6 +458,9 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   streakPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
     paddingHorizontal: Spacing.two + 2,
     paddingVertical: 3,
     borderRadius: Radius.full,

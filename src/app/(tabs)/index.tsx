@@ -1,6 +1,24 @@
 import { useQueryClient } from "@tanstack/react-query";
 import { router } from "expo-router";
 import {
+    Calendar,
+    CheckSquare,
+    ChevronDown,
+    ChevronRight,
+    Clock,
+    CloudSun,
+    Flame,
+    Pause,
+    Plane,
+    Play,
+    Plus,
+    Sun,
+    Timer,
+    TrainFront,
+    Wallet,
+    type LucideIcon,
+} from "lucide-react-native";
+import {
     useEffect,
     useLayoutEffect,
     useRef,
@@ -18,6 +36,9 @@ import {
     type ViewStyle,
 } from "react-native";
 
+import { ProgressBar, SubjectDot, useNow } from "@/components/study/common";
+import { FlightTimerModal } from "@/components/study/flight-timer-modal";
+import { SubwayTimerModal } from "@/components/study/subway-timer-modal";
 import { ThemedText } from "@/components/themed-text";
 import {
     BoardDragController,
@@ -51,7 +72,12 @@ import {
     useRoutines,
     useToggleRoutineLog,
 } from "@/hooks/use-routines";
-import { useTheme, useThemeMode } from "@/hooks/use-theme";
+import {
+    useStudyProfile,
+    useStudySessions,
+    useStudySubjects,
+} from "@/hooks/use-study";
+import { useColorScheme, useTheme, useThemeMode } from "@/hooks/use-theme";
 import { useTodayLayout, type TodaySectionId } from "@/hooks/use-today-layout";
 import { useTodos, useToggleTodo, type Todo } from "@/hooks/use-todos";
 import { useTransactions } from "@/hooks/use-transactions";
@@ -60,6 +86,7 @@ import {
     useWeather,
     useWeatherCity,
 } from "@/hooks/use-weather";
+import { useAuth } from "@/lib/auth";
 import { formatDate, todayISO, toISODate, yearMonthOf } from "@/lib/dates";
 import { confirm, errorMessage, formatWon } from "@/lib/format";
 import { todoStartOf } from "@/lib/repeat";
@@ -70,6 +97,20 @@ import {
     routinesForDate,
     routineTimeLabel,
 } from "@/lib/routines";
+import {
+    formatClock,
+    formatDuration,
+    splitByDay,
+    sumSeconds,
+    type StudySubject,
+} from "@/lib/study";
+import {
+    runningSeconds,
+    startStudy,
+    stopStudy,
+    useStudyTimer,
+} from "@/lib/study-timer";
+import { tagColorValue } from "@/lib/tags";
 import { describeWeather, formatTemperature } from "@/lib/weather";
 
 /**
@@ -153,6 +194,16 @@ export default function TodayScreen() {
       case "events":
         return (
           <EventSection
+            key={id}
+            today={today}
+            index={index}
+            collapsed={isCollapsed}
+            onToggleCollapse={onToggleCollapse}
+          />
+        );
+      case "study":
+        return (
+          <StudySection
             key={id}
             today={today}
             index={index}
@@ -252,8 +303,9 @@ export default function TodayScreen() {
               },
             ]}
           >
+            <Plus size={12} color="#000000" strokeWidth={2.4} />
             <ThemedText type="smallBold" style={styles.quickPillText}>
-              + 할 일
+              할 일
             </ThemedText>
           </Pressable>
           <Pressable
@@ -270,8 +322,9 @@ export default function TodayScreen() {
               },
             ]}
           >
+            <Plus size={12} color="#000000" strokeWidth={2.4} />
             <ThemedText type="smallBold" style={styles.quickPillText}>
-              + 가계부
+              가계부
             </ThemedText>
           </Pressable>
           <Pressable
@@ -286,8 +339,9 @@ export default function TodayScreen() {
               },
             ]}
           >
+            <Plus size={12} color="#000000" strokeWidth={2.4} />
             <ThemedText type="smallBold" style={styles.quickPillText}>
-              + 메모
+              메모
             </ThemedText>
           </Pressable>
         </View>
@@ -296,7 +350,7 @@ export default function TodayScreen() {
       {editingLayout ? (
         <View style={[styles.editHint, { backgroundColor: theme.tintSoft }]}>
           <ThemedText type="small" themeColor="tint">
-            상자의 &quot;≡ 옮기기&quot;를 잡고 원하는 자리로 끌어 놓으세요. 다
+            상자의 &quot;옮기기&quot;를 잡고 원하는 자리로 끌어 놓으세요. 다
             됐으면 오른쪽 위 &quot;완료&quot;를 누르세요.
           </ThemedText>
         </View>
@@ -399,6 +453,7 @@ function WeatherSection({
         now ? <WeatherBackdrop code={now.code} isDay={now.isDay} /> : null
       }
       title={city.data ? `날씨 · ${city.data.name}` : "날씨"}
+      icon={CloudSun}
       linkLabel={picking ? "닫기" : "지역 변경"}
       onLink={() => setPicking((open) => !open)}
     >
@@ -514,6 +569,7 @@ function TodoSection({
       collapsed={collapsed}
       onToggleCollapse={onToggleCollapse}
       title="할 일"
+      icon={CheckSquare}
       onQuickAdd={() =>
         router.push({ pathname: "/todos", params: { add: "1" } })
       }
@@ -602,6 +658,7 @@ function EventSection({
       collapsed={collapsed}
       onToggleCollapse={onToggleCollapse}
       title="일정"
+      icon={Calendar}
       onQuickAdd={() =>
         router.push({ pathname: "/calendar", params: { add: "1" } })
       }
@@ -696,6 +753,7 @@ function HabitSection({
       title={
         ready && items.length > 0 ? `습관 ${doneCount}/${items.length}` : "습관"
       }
+      icon={Flame}
       onQuickAdd={() =>
         router.push({ pathname: "/habits", params: { add: "1" } })
       }
@@ -769,6 +827,7 @@ function HabitSection({
                       { backgroundColor: theme.tintSoft },
                     ]}
                   >
+                    <Flame size={12} color={theme.tint} strokeWidth={2} />
                     <ThemedText
                       type="smallBold"
                       themeColor="tint"
@@ -845,6 +904,7 @@ function RoutineSection({
           ? `하루 루틴 ${doneCount}/${items.length}`
           : "하루 루틴"
       }
+      icon={Clock}
       onQuickAdd={() =>
         router.push({ pathname: "/routines", params: { add: "1" } })
       }
@@ -940,15 +1000,18 @@ function RoutineSection({
                   }
                   style={({ pressed }) => [
                     styles.rowBody,
+                    styles.routineTitleRow,
                     pressed && styles.pressed,
                   ]}
                 >
+                  {routine.kind === "briefing" ? (
+                    <Sun size={14} color={theme.textSecondary} strokeWidth={1.8} />
+                  ) : null}
                   <ThemedText
                     type="default"
                     themeColor={done ? "textSecondary" : "text"}
                     style={done && styles.doneTitle}
                   >
-                    {routine.kind === "briefing" ? "☀️ " : ""}
                     {routine.title}
                   </ThemedText>
                 </Pressable>
@@ -975,6 +1038,241 @@ function RoutineSection({
 
       {toggle.error ? <SaveError /> : null}
     </Section>
+  );
+}
+
+function StudySection({
+  today,
+  index,
+  collapsed,
+  onToggleCollapse,
+}: {
+  today: string;
+  index: number;
+  collapsed: boolean;
+  onToggleCollapse: () => void;
+}) {
+  const theme = useTheme();
+  const scheme = useColorScheme();
+  const { userId } = useAuth();
+  const timer = useStudyTimer();
+  const profile = useStudyProfile();
+  const sessions = useStudySessions(today, today);
+  const subjects = useStudySubjects();
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [flightOpen, setFlightOpen] = useState(false);
+  const [subwayOpen, setSubwayOpen] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const running = timer.running && !timer.running.leftAt ? timer.running : null;
+  const now = useNow(running !== null);
+  const subjectList = subjects.data ?? [];
+  const subjectById = new Map(subjectList.map((s) => [s.id, s]));
+
+  const runningToday = running
+    ? splitByDay(running.startedAt, now)
+        .filter((part) => part.date === today)
+        .reduce((total, part) => total + Math.floor((part.end - part.start) / 1000), 0)
+    : 0;
+  const todayTotal = sumSeconds(sessions.data ?? []) + runningToday;
+  const goalSeconds = (profile.data?.daily_goal_minutes ?? 180) * 60;
+  const goalRatio = todayTotal / goalSeconds;
+
+  const activeSubjectId = running
+    ? running.subjectId
+    : (selectedId ?? subjectList[0]?.id ?? null);
+  const activeSubject = activeSubjectId ? (subjectById.get(activeSubjectId) ?? null) : null;
+  const subjectColor = activeSubject
+    ? tagColorValue(activeSubject.color, scheme)
+    : theme.tint;
+
+  async function toggleTimer() {
+    if (!userId || busy) return;
+    setBusy(true);
+    setError(null);
+    try {
+      if (running) {
+        const seconds = await stopStudy();
+        if (seconds === 0) setError("5초보다 짧은 기록은 남기지 않아요.");
+      } else {
+        await startStudy(
+          userId,
+          activeSubject ? { id: activeSubject.id, name: activeSubject.name } : null,
+        );
+      }
+    } catch (e) {
+      setError(errorMessage(e));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function pickSubject(subject: StudySubject) {
+    setSelectedId(subject.id);
+    if (running && userId && running.subjectId !== subject.id) {
+      setBusy(true);
+      try {
+        await startStudy(userId, { id: subject.id, name: subject.name });
+      } finally {
+        setBusy(false);
+      }
+    }
+  }
+
+  return (
+    <>
+      <Section
+        index={index}
+        collapsed={collapsed}
+        onToggleCollapse={onToggleCollapse}
+        title="공부 타이머"
+        icon={Timer}
+        linkLabel="공부 보기"
+        onLink={() => router.navigate("/study")}
+      >
+        <View style={styles.studyRow}>
+          <View style={styles.studyClockCol}>
+            <ThemedText
+              style={[styles.studyClock, { color: theme.text }]}
+              accessibilityLabel={formatDuration(todayTotal)}
+            >
+              {formatClock(todayTotal)}
+            </ThemedText>
+            <ThemedText type="small" themeColor="textSecondary" numberOfLines={1}>
+              {running
+                ? `${running.subjectName ?? "공부"} 중 · 이번 ${formatClock(runningSeconds(running, now))}`
+                : `목표 ${formatDuration(goalSeconds)} · ${Math.floor(goalRatio * 100)}%`}
+            </ThemedText>
+          </View>
+
+          <View style={styles.studyActions}>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="비행 타이머 열기"
+              disabled={!timer.loaded}
+              onPress={() => setFlightOpen(true)}
+              style={({ pressed }) => [
+                styles.studyIconBtn,
+                {
+                  backgroundColor: theme.backgroundSelected,
+                  borderColor: theme.border,
+                  opacity: !timer.loaded ? 0.5 : pressed ? 0.72 : 1,
+                },
+              ]}
+            >
+              <Plane size={15} color={theme.text} strokeWidth={1.9} />
+            </Pressable>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="지하철 타이머 열기"
+              disabled={!timer.loaded}
+              onPress={() => setSubwayOpen(true)}
+              style={({ pressed }) => [
+                styles.studyIconBtn,
+                {
+                  backgroundColor: theme.backgroundSelected,
+                  borderColor: theme.border,
+                  opacity: !timer.loaded ? 0.5 : pressed ? 0.72 : 1,
+                },
+              ]}
+            >
+              <TrainFront size={15} color={theme.text} strokeWidth={1.9} />
+            </Pressable>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={running ? "공부 타이머 멈추기" : "공부 타이머 시작하기"}
+              disabled={busy || !timer.loaded}
+              onPress={toggleTimer}
+              style={({ pressed }) => [
+                styles.studyToggleBtn,
+                {
+                  backgroundColor: running ? theme.backgroundSelected : subjectColor,
+                  borderColor: subjectColor,
+                  opacity: busy || !timer.loaded ? 0.55 : pressed ? 0.8 : 1,
+                },
+              ]}
+            >
+              {running ? (
+                <Pause size={15} color={subjectColor} fill={subjectColor} strokeWidth={2} />
+              ) : (
+                <Play size={15} color={theme.background} fill={theme.background} strokeWidth={2} />
+              )}
+              <ThemedText
+                type="smallBold"
+                style={{ color: running ? subjectColor : theme.background }}
+              >
+                {running ? "멈춤" : "시작"}
+              </ThemedText>
+            </Pressable>
+          </View>
+        </View>
+
+        <ProgressBar ratio={goalRatio} />
+
+        {subjectList.length > 0 ? (
+          <View style={styles.studyChips}>
+            {subjectList.map((subject) => {
+              const selected = subject.id === activeSubjectId;
+              const color = tagColorValue(subject.color, scheme);
+              return (
+                <Pressable
+                  key={subject.id}
+                  accessibilityRole="button"
+                  accessibilityState={{ selected }}
+                  onPress={() => pickSubject(subject)}
+                  style={({ pressed }) => [
+                    styles.studyChip,
+                    {
+                      borderColor: selected ? color : theme.border,
+                      backgroundColor: selected ? `${color}22` : theme.background,
+                      opacity: pressed ? 0.75 : 1,
+                    },
+                  ]}
+                >
+                  <SubjectDot color={subject.color} size={8} />
+                  <ThemedText type="small" style={selected && { fontWeight: "700" }}>
+                    {subject.name}
+                  </ThemedText>
+                </Pressable>
+              );
+            })}
+          </View>
+        ) : null}
+
+        {error ? (
+          <ThemedText type="small" themeColor="danger">
+            {error}
+          </ThemedText>
+        ) : null}
+      </Section>
+
+      <FlightTimerModal
+        visible={flightOpen}
+        running={running !== null}
+        startedAt={running?.startedAt ?? null}
+        elapsedSeconds={running ? runningSeconds(running, now) : 0}
+        subjectName={running ? running.subjectName : (activeSubject?.name ?? null)}
+        subjectColor={subjectColor}
+        busy={busy}
+        onStart={toggleTimer}
+        onStop={toggleTimer}
+        onClose={() => setFlightOpen(false)}
+      />
+
+      <SubwayTimerModal
+        visible={subwayOpen}
+        running={running !== null}
+        startedAt={running?.startedAt ?? null}
+        elapsedSeconds={running ? runningSeconds(running, now) : 0}
+        subjectName={running ? running.subjectName : (activeSubject?.name ?? null)}
+        subjectColor={subjectColor}
+        busy={busy}
+        onStart={toggleTimer}
+        onStop={toggleTimer}
+        onClose={() => setSubwayOpen(false)}
+      />
+    </>
   );
 }
 
@@ -1016,6 +1314,7 @@ function MoneySection({
       collapsed={collapsed}
       onToggleCollapse={onToggleCollapse}
       title="이번 달 가계부"
+      icon={Wallet}
       onQuickAdd={() =>
         router.push({ pathname: "/money", params: { add: "1" } })
       }
@@ -1035,7 +1334,7 @@ function MoneySection({
             <Stat
               label="오늘 쓴 돈"
               value={formatWon(todayExpense)}
-              color={theme.text}
+              color={todayExpense > 0 ? theme.danger : theme.text}
             />
             <Stat
               label="이번 달 지출"
@@ -1045,7 +1344,13 @@ function MoneySection({
             <Stat
               label="남은 돈"
               value={formatWon(income - expense)}
-              color={theme.text}
+              color={
+                income - expense > 0
+                  ? theme.success
+                  : income - expense < 0
+                    ? theme.danger
+                    : theme.text
+              }
             />
           </View>
           {budget ? (
@@ -1093,6 +1398,7 @@ function Section({
   cardStyle,
   backdrop,
   title,
+  icon: Icon,
   linkLabel,
   onLink,
   children,
@@ -1105,6 +1411,7 @@ function Section({
   cardStyle?: StyleProp<ViewStyle>;
   backdrop?: React.ReactNode;
   title: string;
+  icon?: LucideIcon;
   linkLabel: string;
   onLink: () => void;
 }>) {
@@ -1120,6 +1427,9 @@ function Section({
             onPress={onToggleCollapse}
             style={styles.sectionTitlePress}
           >
+            {Icon ? (
+              <Icon size={16} color={theme.textSecondary} strokeWidth={1.9} />
+            ) : null}
             <ThemedText
               accessibilityRole="header"
               type="default"
@@ -1129,9 +1439,19 @@ function Section({
               {title}
             </ThemedText>
             {onToggleCollapse ? (
-              <ThemedText type="small" themeColor="textSecondary">
-                {collapsed ? "▸" : "▾"}
-              </ThemedText>
+              collapsed ? (
+                <ChevronRight
+                  size={15}
+                  color={theme.textSecondary}
+                  strokeWidth={2}
+                />
+              ) : (
+                <ChevronDown
+                  size={15}
+                  color={theme.textSecondary}
+                  strokeWidth={2}
+                />
+              )
             ) : null}
           </Pressable>
           <View style={styles.sectionHeaderActions}>
@@ -1151,9 +1471,7 @@ function Section({
                   },
                 ]}
               >
-                <ThemedText type="smallBold" themeColor="text">
-                  +
-                </ThemedText>
+                <Plus size={14} color={theme.text} strokeWidth={2.2} />
               </Pressable>
             ) : null}
             <Pressable
@@ -1167,8 +1485,9 @@ function Section({
               ]}
             >
               <ThemedText type="smallBold" themeColor="tint" numberOfLines={1}>
-                {linkLabel} ›
+                {linkLabel}
               </ThemedText>
+              <ChevronRight size={14} color={theme.tint} strokeWidth={2.2} />
             </Pressable>
           </View>
         </View>
@@ -1258,6 +1577,9 @@ const styles = StyleSheet.create({
     flexShrink: 0,
   },
   sectionLinkBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 1,
     flexShrink: 0,
   },
   row: {
@@ -1299,7 +1621,15 @@ const styles = StyleSheet.create({
     fontWeight: 700,
     fontVariant: ["tabular-nums"],
   },
+  routineTitleRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
+  },
   streakBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 3,
     paddingHorizontal: 8,
     paddingVertical: 3,
     borderRadius: Radius.full,
@@ -1341,6 +1671,9 @@ const styles = StyleSheet.create({
     gap: Spacing.two,
   },
   quickPill: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 3,
     paddingHorizontal: Spacing.two + 2,
     paddingVertical: Spacing.one + 1,
     borderRadius: Radius.full,
@@ -1403,5 +1736,59 @@ const styles = StyleSheet.create({
   budgetFill: {
     height: 7,
     borderRadius: Radius.full,
+  },
+  studyRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: Spacing.two,
+  },
+  studyClockCol: {
+    flex: 1,
+    gap: 2,
+  },
+  studyClock: {
+    fontSize: 28,
+    lineHeight: 34,
+    fontWeight: "800",
+    fontVariant: ["tabular-nums"],
+    letterSpacing: 0.5,
+  },
+  studyActions: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: Spacing.two,
+  },
+  studyIconBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: Radius.full,
+    borderWidth: 1,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  studyToggleBtn: {
+    minHeight: 36,
+    paddingHorizontal: Spacing.three,
+    borderRadius: Radius.full,
+    borderWidth: 1.5,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 5,
+  },
+  studyChips: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: Spacing.one + 2,
+  },
+  studyChip: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
+    paddingHorizontal: Spacing.two + 2,
+    paddingVertical: 5,
+    borderRadius: Radius.full,
+    borderWidth: 1,
   },
 });

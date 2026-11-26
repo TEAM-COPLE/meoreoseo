@@ -1,3 +1,15 @@
+import {
+  Bell,
+  Info,
+  Link2,
+  LogOut,
+  Moon,
+  Palette,
+  Smartphone,
+  Sun,
+  User,
+  type LucideIcon,
+} from "lucide-react-native";
 import { useState, type ReactNode } from "react";
 import { ScrollView, StyleSheet, View } from "react-native";
 
@@ -16,10 +28,10 @@ import { clearLocalDb } from "@/lib/local-db";
 import { queryClient } from "@/lib/query";
 import { supabase } from "@/lib/supabase";
 
-const THEME_OPTIONS: readonly { value: ThemeMode; label: string }[] = [
-  { value: "dark", label: "다크" },
-  { value: "light", label: "라이트" },
-  { value: "system", label: "기기 설정 따름" },
+const THEME_OPTIONS: readonly { value: ThemeMode; label: string; icon: LucideIcon }[] = [
+  { value: "dark", label: "다크", icon: Moon },
+  { value: "light", label: "라이트", icon: Sun },
+  { value: "system", label: "기기 설정 따름", icon: Smartphone },
 ];
 
 /** 로그인 방법 이름 (Supabase 가 알려주는 provider 값 → 화면 글자) */
@@ -105,7 +117,7 @@ export default function SettingsScreen() {
       style={[styles.root, { backgroundColor: theme.background }]}
       contentContainerStyle={styles.content}
     >
-      <Section title="내 계정">
+      <Section title="내 계정" icon={User}>
         <Card>
           <View style={styles.profile}>
             <View style={[styles.avatar, { backgroundColor: theme.tintSoft }]}>
@@ -145,6 +157,7 @@ export default function SettingsScreen() {
           ) : null}
           <Button
             label={isDevMode ? "개발 모드 종료" : "로그아웃"}
+            icon={(color) => <LogOut size={14} color={color} strokeWidth={2} />}
             variant="secondary"
             size="small"
             onPress={signOut}
@@ -162,7 +175,7 @@ export default function SettingsScreen() {
         </Card>
       </Section>
 
-      <Section title="화면">
+      <Section title="화면" icon={Palette}>
         <Card>
           <ThemedText type="default" style={styles.cardTitle}>
             테마
@@ -176,15 +189,15 @@ export default function SettingsScreen() {
         </Card>
       </Section>
 
-      <Section title="알림">
+      <Section title="알림" icon={Bell}>
         <NotificationSettingsCard />
       </Section>
 
-      <Section title="연동">
+      <Section title="연동" icon={Link2}>
         <GoogleCalendarCard />
       </Section>
 
-      <Section title="앱 정보">
+      <Section title="앱 정보" icon={Info}>
         <VersionInfoCard />
       </Section>
     </ScrollView>
@@ -192,16 +205,24 @@ export default function SettingsScreen() {
 }
 
 /** 회색 작은 제목 아래에 상자를 놓는 묶음 */
-function Section({ title, children }: { title: string; children: ReactNode }) {
+function Section({
+  title,
+  icon: Icon,
+  children,
+}: {
+  title: string;
+  icon?: LucideIcon;
+  children: ReactNode;
+}) {
+  const theme = useTheme();
   return (
     <View style={styles.section}>
-      <ThemedText
-        type="smallBold"
-        themeColor="textSecondary"
-        style={styles.sectionTitle}
-      >
-        {title}
-      </ThemedText>
+      <View style={styles.sectionHeader}>
+        {Icon ? <Icon size={14} color={theme.textSecondary} strokeWidth={1.9} /> : null}
+        <ThemedText type="smallBold" themeColor="textSecondary">
+          {title}
+        </ThemedText>
+      </View>
       {children}
     </View>
   );
@@ -222,7 +243,10 @@ const styles = StyleSheet.create({
   section: {
     gap: Spacing.two,
   },
-  sectionTitle: {
+  sectionHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
     paddingHorizontal: Spacing.one,
   },
   cardTitle: {
