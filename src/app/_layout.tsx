@@ -149,10 +149,8 @@ function ThemedRootNavigator() {
             <Stack.Screen name="routines" />
             {/* 스터디 그룹 자세히 보기. 공부 탭에서 연다. */}
             <Stack.Screen name="study-group/[id]" />
-            <Stack.Screen
-              name="settings"
-              options={{ headerShown: true, title: '설정', headerBackTitle: '뒤로' }}
-            />
+            {/* 설정 화면. 자체 헤더와 뒤로 가기 버튼을 사용해 웹 새로고침 후에도 유지된다. */}
+            <Stack.Screen name="settings" />
             {/* 예전 주소. 설정 화면으로 바로 넘어간다. */}
             <Stack.Screen name="account" />
           </Stack.Protected>

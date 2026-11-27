@@ -1,7 +1,16 @@
 import { Armchair, Plane, Utensils } from 'lucide-react-native';
 import { useEffect, useState } from 'react';
-import { Animated, Easing, Pressable, ScrollView, StyleSheet, View } from 'react-native';
-import Svg, { Line, Path, Rect } from 'react-native-svg';
+import {
+  Animated,
+  Easing,
+  Platform,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  useWindowDimensions,
+  View,
+} from 'react-native';
+import Svg, { Circle, Line, Path, Rect } from 'react-native-svg';
 
 import { ThemedText } from '@/components/themed-text';
 import { Spacing } from '@/constants/theme';
@@ -79,12 +88,29 @@ export function FlightSeatSelector({
   selectedSeat: string;
   onSelectSeat: (seat: string) => void;
 }) {
+  const { width: windowWidth } = useWindowDimensions();
+  const [scrollAreaWidth, setScrollAreaWidth] = useState(0);
+
   const hullFill = '#111622';
   const hullStroke = '#2D384E';
   const wingFill = '#151C2B';
   const engineFill = '#1D273B';
   const cockpitGlass = '#05070C';
   const cockpitFrame = '#3B4A68';
+
+  // 데스크톱(넓은 화면)에서는 동체 양옆 여백을 활용해 날개 끝단(윙팁)까지 전체 주날개를 표시한다.
+  const effectiveWidth =
+    scrollAreaWidth > 0 ? scrollAreaWidth : Platform.OS === 'web' ? Math.min(windowWidth - 80, 640) : 312;
+  const showFullWings = effectiveWidth >= 420;
+  const fullWingWidth = showFullWings
+    ? Math.max(100, Math.min(250, Math.floor((effectiveWidth - 248) / 2) - 4))
+    : 44;
+  const assemblyWidth = showFullWings ? 248 + fullWingWidth * 2 : 312;
+  const tailWidth = showFullWings
+    ? Math.min(assemblyWidth, 248 + Math.round(fullWingWidth * 0.96))
+    : 312;
+  const tailCx = tailWidth / 2;
+  const tailWingOut = showFullWings ? Math.min(tailCx - 8, 124 + Math.round(fullWingWidth * 0.44)) : 134;
 
   function renderFirstSeat(seatId: string) {
     const selected = selectedSeat === seatId;
@@ -222,10 +248,16 @@ export function FlightSeatSelector({
       {/* 스크롤 가능한 블랙 테마 샤프 여객기 좌석 맵 */}
       <ScrollView
         nestedScrollEnabled
-        style={styles.planeScroll}
+        onLayout={(e) => {
+          const w = Math.floor(e.nativeEvent.layout.width);
+          if (w > 0 && Math.abs(w - scrollAreaWidth) > 2) {
+            setScrollAreaWidth(w);
+          }
+        }}
+        style={[styles.planeScroll, showFullWings && styles.planeScrollDesktop]}
         contentContainerStyle={styles.planeScrollContent}
         showsVerticalScrollIndicator={false}>
-        <View style={styles.planeAssembly}>
+        <View style={[styles.planeAssembly, { width: assemblyWidth }]}>
           {/* 1. 샤프한 유선형 기수 (Pointed Ogive Nose + 4분할 조종석 창) */}
           <View style={styles.noseSvgWrap}>
             <Svg width={250} height={148} viewBox="0 0 250 148">
@@ -271,55 +303,234 @@ export function FlightSeatSelector({
           </View>
 
           {/* 2. 동체 + 후퇴익 주날개 & 엔진 나셀 */}
-          <View style={styles.fuselageOuter}>
-            {/* 왼쪽 후퇴익 날개 + 제트 엔진 */}
-            <View pointerEvents="none" style={styles.wingLeft}>
-              <Svg width={44} height={300} viewBox="0 0 44 300">
-                <Path
-                  d="M 44 0 L 2 108 L 2 132 L 44 270 Z"
-                  fill={wingFill}
-                  stroke={hullStroke}
-                  strokeWidth={1.2}
-                />
-                {/* 날개 플랩 라인 */}
-                <Line x1={12} y1={134} x2={42} y2={236} stroke="#232E45" strokeWidth={1} />
-                {/* 왼쪽 제트 엔진 */}
-                <Rect
-                  x={14}
-                  y={52}
-                  width={15}
-                  height={38}
-                  rx={6}
-                  fill={engineFill}
-                  stroke={hullStroke}
-                  strokeWidth={1.1}
-                />
-              </Svg>
-            </View>
-            {/* 오른쪽 후퇴익 날개 + 제트 엔진 */}
-            <View pointerEvents="none" style={styles.wingRight}>
-              <Svg width={44} height={300} viewBox="0 0 44 300">
-                <Path
-                  d="M 0 0 L 42 108 L 42 132 L 0 270 Z"
-                  fill={wingFill}
-                  stroke={hullStroke}
-                  strokeWidth={1.2}
-                />
-                {/* 날개 플랩 라인 */}
-                <Line x1={32} y1={134} x2={2} y2={236} stroke="#232E45" strokeWidth={1} />
-                {/* 오른쪽 제트 엔진 */}
-                <Rect
-                  x={15}
-                  y={52}
-                  width={15}
-                  height={38}
-                  rx={6}
-                  fill={engineFill}
-                  stroke={hullStroke}
-                  strokeWidth={1.1}
-                />
-              </Svg>
-            </View>
+          <View style={[styles.fuselageOuter, { width: assemblyWidth }]}>
+            {showFullWings ? (
+              <>
+                {/* 데스크톱 전체 주날개 (왼쪽 후퇴익 + 레이크드 윙팁 + GE90 엔진 + 항법등) */}
+                <View pointerEvents="none" style={[styles.wingLeftFull, { left: 1 }]}>
+                  <Svg width={fullWingWidth} height={340} viewBox={`0 0 ${fullWingWidth} 340`}>
+                    {/* 주날개 몸체 (후퇴익 + 레이크드 윙팁 + 인보드 예후디) */}
+                    <Path
+                      d={`M ${fullWingWidth} 0 L ${Math.round(fullWingWidth * 0.1)} 172 L 2 214 L 8 228 L ${Math.round(fullWingWidth * 0.56)} 214 L ${fullWingWidth} 244 Z`}
+                      fill={wingFill}
+                      stroke={hullStroke}
+                      strokeWidth={1.3}
+                    />
+                    {/* 앞전 슬랫 라인 */}
+                    <Line
+                      x1={fullWingWidth - 4}
+                      y1={16}
+                      x2={Math.round(fullWingWidth * 0.14)}
+                      y2={178}
+                      stroke="#232E45"
+                      strokeWidth={1}
+                    />
+                    {/* 뒷전 플랩 / 에일러론 분할선 */}
+                    <Path
+                      d={`M ${Math.round(fullWingWidth * 0.12)} 208 L ${Math.round(fullWingWidth * 0.56)} 196 L ${fullWingWidth - 4} 222`}
+                      fill="none"
+                      stroke="#232E45"
+                      strokeWidth={1}
+                    />
+                    {/* 플랩 트랙 페어링 (3개) */}
+                    {[0.32, 0.52, 0.72].map((ratio) => {
+                      const fx = Math.round(fullWingWidth * ratio);
+                      const fy = ratio < 0.56 ? Math.round(218 - ratio * 16) : Math.round(210 + (ratio - 0.56) * 58);
+                      return (
+                        <Rect
+                          key={`fl-${ratio}`}
+                          x={fx - 2}
+                          y={fy}
+                          width={4}
+                          height={16}
+                          rx={2}
+                          fill="#1E293B"
+                          stroke={hullStroke}
+                          strokeWidth={0.8}
+                        />
+                      );
+                    })}
+                    {/* 엔진 파일론 */}
+                    <Rect
+                      x={Math.round(fullWingWidth * 0.66) - 4}
+                      y={66}
+                      width={8}
+                      height={54}
+                      rx={2}
+                      fill="#192336"
+                      stroke={hullStroke}
+                      strokeWidth={0.9}
+                    />
+                    {/* 왼쪽 대형 터보팬 제트 엔진 나셀 */}
+                    <Rect
+                      x={Math.round(fullWingWidth * 0.66) - 12}
+                      y={38}
+                      width={24}
+                      height={56}
+                      rx={10}
+                      fill={engineFill}
+                      stroke={hullStroke}
+                      strokeWidth={1.2}
+                    />
+                    {/* 엔진 흡기구 링 */}
+                    <Rect
+                      x={Math.round(fullWingWidth * 0.66) - 9}
+                      y={40}
+                      width={18}
+                      height={6}
+                      rx={3}
+                      fill="#0B0F18"
+                      stroke="#475569"
+                      strokeWidth={0.8}
+                    />
+                    {/* 엔진 배기 노즐 */}
+                    <Path
+                      d={`M ${Math.round(fullWingWidth * 0.66) - 7} 94 L ${Math.round(fullWingWidth * 0.66) + 7} 94 L ${Math.round(fullWingWidth * 0.66) + 4} 106 L ${Math.round(fullWingWidth * 0.66) - 4} 106 Z`}
+                      fill="#0F172A"
+                      stroke={hullStroke}
+                      strokeWidth={0.9}
+                    />
+                    {/* 좌현 적색 항법등 */}
+                    <Circle cx={5} cy={216} r={2.5} fill="#EF4444" />
+                  </Svg>
+                </View>
+
+                {/* 데스크톱 전체 주날개 (오른쪽 후퇴익 + 레이크드 윙팁 + GE90 엔진 + 항법등) */}
+                <View pointerEvents="none" style={[styles.wingRightFull, { right: 1 }]}>
+                  <Svg width={fullWingWidth} height={340} viewBox={`0 0 ${fullWingWidth} 340`}>
+                    {/* 주날개 몸체 */}
+                    <Path
+                      d={`M 0 0 L ${Math.round(fullWingWidth * 0.9)} 172 L ${fullWingWidth - 2} 214 L ${fullWingWidth - 8} 228 L ${Math.round(fullWingWidth * 0.44)} 214 L 0 244 Z`}
+                      fill={wingFill}
+                      stroke={hullStroke}
+                      strokeWidth={1.3}
+                    />
+                    {/* 앞전 슬랫 라인 */}
+                    <Line
+                      x1={4}
+                      y1={16}
+                      x2={Math.round(fullWingWidth * 0.86)}
+                      y2={178}
+                      stroke="#232E45"
+                      strokeWidth={1}
+                    />
+                    {/* 뒷전 플랩 / 에일러론 분할선 */}
+                    <Path
+                      d={`M ${Math.round(fullWingWidth * 0.88)} 208 L ${Math.round(fullWingWidth * 0.44)} 196 L 4 222`}
+                      fill="none"
+                      stroke="#232E45"
+                      strokeWidth={1}
+                    />
+                    {/* 플랩 트랙 페어링 (3개) */}
+                    {[0.32, 0.52, 0.72].map((ratio) => {
+                      const fx = fullWingWidth - Math.round(fullWingWidth * ratio);
+                      const fy = ratio < 0.56 ? Math.round(218 - ratio * 16) : Math.round(210 + (ratio - 0.56) * 58);
+                      return (
+                        <Rect
+                          key={`fr-${ratio}`}
+                          x={fx - 2}
+                          y={fy}
+                          width={4}
+                          height={16}
+                          rx={2}
+                          fill="#1E293B"
+                          stroke={hullStroke}
+                          strokeWidth={0.8}
+                        />
+                      );
+                    })}
+                    {/* 엔진 파일론 */}
+                    <Rect
+                      x={fullWingWidth - Math.round(fullWingWidth * 0.66) - 4}
+                      y={66}
+                      width={8}
+                      height={54}
+                      rx={2}
+                      fill="#192336"
+                      stroke={hullStroke}
+                      strokeWidth={0.9}
+                    />
+                    {/* 오른쪽 대형 터보팬 제트 엔진 나셀 */}
+                    <Rect
+                      x={fullWingWidth - Math.round(fullWingWidth * 0.66) - 12}
+                      y={38}
+                      width={24}
+                      height={56}
+                      rx={10}
+                      fill={engineFill}
+                      stroke={hullStroke}
+                      strokeWidth={1.2}
+                    />
+                    {/* 엔진 흡기구 링 */}
+                    <Rect
+                      x={fullWingWidth - Math.round(fullWingWidth * 0.66) - 9}
+                      y={40}
+                      width={18}
+                      height={6}
+                      rx={3}
+                      fill="#0B0F18"
+                      stroke="#475569"
+                      strokeWidth={0.8}
+                    />
+                    {/* 엔진 배기 노즐 */}
+                    <Path
+                      d={`M ${fullWingWidth - Math.round(fullWingWidth * 0.66) - 7} 94 L ${fullWingWidth - Math.round(fullWingWidth * 0.66) + 7} 94 L ${fullWingWidth - Math.round(fullWingWidth * 0.66) + 4} 106 L ${fullWingWidth - Math.round(fullWingWidth * 0.66) - 4} 106 Z`}
+                      fill="#0F172A"
+                      stroke={hullStroke}
+                      strokeWidth={0.9}
+                    />
+                    {/* 우현 녹색 항법등 */}
+                    <Circle cx={fullWingWidth - 5} cy={216} r={2.5} fill="#22C55E" />
+                  </Svg>
+                </View>
+              </>
+            ) : (
+              <>
+                {/* 모바일 컴팩트 주날개 + 제트 엔진 */}
+                <View pointerEvents="none" style={styles.wingLeft}>
+                  <Svg width={44} height={300} viewBox="0 0 44 300">
+                    <Path
+                      d="M 44 0 L 2 108 L 2 132 L 44 270 Z"
+                      fill={wingFill}
+                      stroke={hullStroke}
+                      strokeWidth={1.2}
+                    />
+                    <Line x1={12} y1={134} x2={42} y2={236} stroke="#232E45" strokeWidth={1} />
+                    <Rect
+                      x={14}
+                      y={52}
+                      width={15}
+                      height={38}
+                      rx={6}
+                      fill={engineFill}
+                      stroke={hullStroke}
+                      strokeWidth={1.1}
+                    />
+                  </Svg>
+                </View>
+                <View pointerEvents="none" style={styles.wingRight}>
+                  <Svg width={44} height={300} viewBox="0 0 44 300">
+                    <Path
+                      d="M 0 0 L 42 108 L 42 132 L 0 270 Z"
+                      fill={wingFill}
+                      stroke={hullStroke}
+                      strokeWidth={1.2}
+                    />
+                    <Line x1={32} y1={134} x2={2} y2={236} stroke="#232E45" strokeWidth={1} />
+                    <Rect
+                      x={15}
+                      y={52}
+                      width={15}
+                      height={38}
+                      rx={6}
+                      fill={engineFill}
+                      stroke={hullStroke}
+                      strokeWidth={1.1}
+                    />
+                  </Svg>
+                </View>
+              </>
+            )}
 
             {/* 동체 내부 객실 (블랙 테마) */}
             <View
@@ -568,31 +779,31 @@ export function FlightSeatSelector({
 
           {/* 3. 샤프한 테이퍼드 꼬리 + 후퇴 수평 꼬리 날개 + 수직 꼬리 날개 */}
           <View style={styles.tailSvgWrap}>
-            <Svg width={312} height={116} viewBox="0 0 312 116">
+            <Svg width={tailWidth} height={116} viewBox={`0 0 ${tailWidth} 116`}>
               {/* 왼쪽 수평 꼬리 날개 */}
               <Path
-                d="M 122 44 L 22 88 L 22 104 L 138 86 Z"
+                d={`M ${tailCx - 34} 44 L ${tailCx - tailWingOut} 90 L ${tailCx - tailWingOut} 104 L ${tailCx - 18} 86 Z`}
                 fill={wingFill}
                 stroke={hullStroke}
                 strokeWidth={1.2}
               />
               {/* 오른쪽 수평 꼬리 날개 */}
               <Path
-                d="M 190 44 L 290 88 L 290 104 L 174 86 Z"
+                d={`M ${tailCx + 34} 44 L ${tailCx + tailWingOut} 90 L ${tailCx + tailWingOut} 104 L ${tailCx + 18} 86 Z`}
                 fill={wingFill}
                 stroke={hullStroke}
                 strokeWidth={1.2}
               />
               {/* 뾰족하게 좁아지는 테이퍼드 꼬리 동체 */}
               <Path
-                d="M 32 0 C 40 42, 88 86, 152 112 Q 156 114 160 112 C 224 86, 272 42, 280 0 Z"
+                d={`M ${tailCx - 124} 0 C ${tailCx - 116} 42, ${tailCx - 68} 86, ${tailCx - 4} 112 Q ${tailCx} 114 ${tailCx + 4} 112 C ${tailCx + 68} 86, ${tailCx + 116} 42, ${tailCx + 124} 0 Z`}
                 fill={hullFill}
                 stroke={hullStroke}
                 strokeWidth={1.5}
               />
               {/* 중앙 수직 꼬리 날개 능선 */}
               <Path
-                d="M 156 36 L 152 108 L 156 112 L 160 108 Z"
+                d={`M ${tailCx} 36 L ${tailCx - 4} 108 L ${tailCx} 112 L ${tailCx + 4} 108 Z`}
                 fill="#1E293B"
                 stroke={hullStroke}
                 strokeWidth={1}
@@ -882,6 +1093,9 @@ const styles = StyleSheet.create({
   planeScroll: {
     maxHeight: 430,
   },
+  planeScrollDesktop: {
+    maxHeight: 540,
+  },
   planeScrollContent: {
     alignItems: 'center',
     paddingVertical: Spacing.one,
@@ -903,14 +1117,27 @@ const styles = StyleSheet.create({
     position: 'absolute',
     left: -12,
     top: 350,
+    zIndex: 1,
   },
   wingRight: {
     position: 'absolute',
     right: -12,
     top: 350,
+    zIndex: 1,
+  },
+  wingLeftFull: {
+    position: 'absolute',
+    top: 340,
+    zIndex: 1,
+  },
+  wingRightFull: {
+    position: 'absolute',
+    top: 340,
+    zIndex: 1,
   },
   fuselageBody: {
     width: 248,
+    zIndex: 2,
     borderLeftWidth: 1.5,
     borderRightWidth: 1.5,
     paddingHorizontal: 8,
