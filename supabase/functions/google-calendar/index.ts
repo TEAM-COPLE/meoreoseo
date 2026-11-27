@@ -115,7 +115,10 @@ function fail(code: string, message: string, status = 400) {
 }
 
 function redirect(to: string) {
-  return new Response(null, { status: 302, headers: { Location: to } });
+  return new Response(null, {
+    status: 302,
+    headers: { Location: to, 'Cache-Control': 'no-store', 'Referrer-Policy': 'no-referrer' },
+  });
 }
 
 function randomHex(bytes: number): string {
@@ -135,16 +138,38 @@ function short(text: string, max: number): string {
   return text.length > max ? text.slice(0, max) : text;
 }
 
+const PRIVATE_EXP_RE =
+  /^exp:\/\/(localhost|127\.0\.0\.1|10\.\d{1,3}\.\d{1,3}\.\d{1,3}|192\.168\.\d{1,3}\.\d{1,3}|172\.(1[6-9]|2\d|3[01])\.\d{1,3}\.\d{1,3})(:\d+)?\/--\/(settings|account)$/;
+
 /** 로그인을 마치고 돌아갈 주소로 허락된 곳인지 */
 function isAllowedReturn(url: unknown): url is string {
-  if (typeof url !== 'string' || url.length > 1000) return false;
-  return (
-    url.startsWith('https://meoreoseo.vercel.app/') ||
-    /^https:\/\/meoreoseo(-[a-z0-9-]+)?\.vercel\.app\//.test(url) ||
-    url.startsWith('http://localhost:') ||
-    url.startsWith('meoreoseo://') ||
-    url.startsWith('exp://')
-  );
+  if (typeof url !== 'string' || url.length > 500) return false;
+  let parsed: URL;
+  try {
+    parsed = new URL(url);
+  } catch {
+    return false;
+  }
+  if (parsed.username || parsed.password || parsed.search || parsed.hash) return false;
+  const validWebPath = parsed.pathname === '/settings' || parsed.pathname === '/account';
+  if (parsed.protocol === 'https:') {
+    return parsed.host === 'meoreoseo.vercel.app' && validWebPath;
+  }
+  if (parsed.protocol === 'http:') {
+    return (parsed.hostname === 'localhost' || parsed.hostname === '127.0.0.1') && validWebPath;
+  }
+  if (parsed.protocol === 'meoreoseo:') {
+    return (
+      url === 'meoreoseo://settings' ||
+      url === 'meoreoseo:///settings' ||
+      url === 'meoreoseo://account' ||
+      url === 'meoreoseo:///account'
+    );
+  }
+  if (parsed.protocol === 'exp:') {
+    return PRIVATE_EXP_RE.test(url);
+  }
+  return false;
 }
 
 function withParam(url: string, key: string, value: string): string {

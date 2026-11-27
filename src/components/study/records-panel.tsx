@@ -1,5 +1,5 @@
 import { ChevronLeft, ChevronRight, Flame, type LucideIcon } from 'lucide-react-native';
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 
 import { ThemedText } from '@/components/themed-text';
@@ -8,12 +8,12 @@ import { Card } from '@/components/ui/screen';
 import { Radius, Spacing } from '@/constants/theme';
 import { useStudySessions, useStudySubjects } from '@/hooks/use-study';
 import { useColorScheme, useTheme } from '@/hooks/use-theme';
+import { useTodayISO } from '@/hooks/use-today';
 import {
   addDays,
   monthGrid,
   monthRange,
   parseISODate,
-  todayISO,
   WEEKDAY_LABELS,
   yearMonthOf,
   type YearMonth,
@@ -44,37 +44,97 @@ function compact(seconds: number): string {
 export function StudyRecordsPanel({ profile }: { profile: StudyProfile | null | undefined }) {
   const theme = useTheme();
   const scheme = useColorScheme();
-  const today = todayISO();
+  const today = useTodayISO();
   const [weekFrom, setWeekFrom] = useState(() => weekStart(today));
   const [month, setMonth] = useState<YearMonth>(() => yearMonthOf(today));
   const [picked, setPicked] = useState<string | null>(null);
 
-  const weekTo = addDays(weekFrom, 6);
-  const { start: monthFrom, end: monthTo } = monthRange(month);
-  const recent = useStudySessions(addDays(today, -120), today);
-  const week = useStudySessions(weekFrom, weekTo);
-  const monthly = useStudySessions(monthFrom, monthTo);
+  const recentFrom = useMemo(() => addDays(today, -120), [today]);
+  const weekTo = useMemo(() => addDays(weekFrom, 6), [weekFrom]);
+  const { start: monthFrom, end: monthTo } = useMemo(() => monthRange(month), [month]);
+
+  // 최근 120일 안에 들어오는 주간·월간 범위는 recent 쿼리 결과를 재사용해 중복 DB 조회를 없앤다.
+  const weekInRecent = weekFrom >= recentFrom && weekTo <= today;
+  const monthInRecent = monthFrom >= recentFrom;
+
+  const recent = useStudySessions(recentFrom, today);
+  const weekQuery = useStudySessions(weekFrom, weekTo, !weekInRecent);
+  const monthlyQuery = useStudySessions(monthFrom, monthTo, !monthInRecent);
   const subjects = useStudySubjects();
-  const subjectById = new Map((subjects.data ?? []).map((subject) => [subject.id, subject]));
+  const subjectById = useMemo(
+    () => new Map((subjects.data ?? []).map((subject) => [subject.id, subject])),
+    [subjects.data],
+  );
 
   const goalSeconds = (profile?.daily_goal_minutes ?? 180) * 60;
-  const recentTotals = totalsByDate(recent.data ?? []);
-  const streak = studyStreak(recentTotals, today);
-  const weekTotals = totalsByDate(week.data ?? []);
-  const weekDays = Array.from({ length: 7 }, (_, i) => addDays(weekFrom, i));
-  const weekSum = sumSeconds(week.data ?? []);
-  // 위쪽 요약 칸은 넘겨 보는 주와 상관없이 "이번 주" 기준이다.
-  const thisWeekFrom = weekStart(today);
-  const thisWeekSum = sumSeconds((recent.data ?? []).filter((s) => s.study_date >= thisWeekFrom));
-  const thisWeekDays = Math.round(
-    (parseISODate(today).getTime() - parseISODate(thisWeekFrom).getTime()) / 86_400_000,
-  ) + 1;
-  const weekMax = Math.max(goalSeconds, ...weekDays.map((day) => weekTotals.get(day) ?? 0));
-  const monthTotals = totalsByDate(monthly.data ?? []);
-  const monthSum = sumSeconds(monthly.data ?? []);
-  const goalDays = [...monthTotals.values()].filter((seconds) => seconds >= goalSeconds).length;
-  const bestDay = [...recentTotals.entries()].sort((a, b) => b[1] - a[1])[0];
-  const monthSubjects = totalsBySubject(monthly.data ?? []);
+
+  const { recentTotals, streak, bestSeconds, thisWeekSum, thisWeekDays } = useMemo(() => {
+    const rows = recent.data ?? [];
+    const totals = totalsByDate(rows);
+    let maxSeconds = 0;
+    for (const sec of totals.values()) {
+      if (sec > maxSeconds) maxSeconds = sec;
+    }
+    const twFrom = weekStart(today);
+    let twSum = 0;
+    for (const s of rows) {
+      if (s.study_date >= twFrom) twSum += s.seconds;
+    }
+    const twDays =
+      Math.round((parseISODate(today).getTime() - parseISODate(twFrom).getTime()) / 86_400_000) + 1;
+    return {
+      recentTotals: totals,
+      streak: studyStreak(totals, today),
+      bestSeconds: maxSeconds,
+      thisWeekSum: twSum,
+      thisWeekDays: twDays,
+    };
+  }, [recent.data, today]);
+
+  const weekDays = useMemo(
+    () => Array.from({ length: 7 }, (_, i) => addDays(weekFrom, i)),
+    [weekFrom],
+  );
+
+  const { weekTotals, weekSum, weekMax } = useMemo(() => {
+    if (weekInRecent) {
+      let sum = 0;
+      let max = goalSeconds;
+      for (const day of weekDays) {
+        const sec = recentTotals.get(day) ?? 0;
+        sum += sec;
+        if (sec > max) max = sec;
+      }
+      return { weekTotals: recentTotals, weekSum: sum, weekMax: max };
+    }
+    const rows = weekQuery.data ?? [];
+    const totals = totalsByDate(rows);
+    const sum = sumSeconds(rows);
+    let max = goalSeconds;
+    for (const day of weekDays) {
+      const sec = totals.get(day) ?? 0;
+      if (sec > max) max = sec;
+    }
+    return { weekTotals: totals, weekSum: sum, weekMax: max };
+  }, [weekInRecent, recentTotals, weekQuery.data, weekDays, goalSeconds]);
+
+  const { monthTotals, monthSum, goalDays, monthSubjects } = useMemo(() => {
+    const rows = monthInRecent
+      ? (recent.data ?? []).filter((s) => s.study_date >= monthFrom && s.study_date <= monthTo)
+      : (monthlyQuery.data ?? []);
+    const totals = totalsByDate(rows);
+    const sum = sumSeconds(rows);
+    let reachedDays = 0;
+    for (const sec of totals.values()) {
+      if (sec >= goalSeconds) reachedDays += 1;
+    }
+    return {
+      monthTotals: totals,
+      monthSum: sum,
+      goalDays: reachedDays,
+      monthSubjects: totalsBySubject(rows),
+    };
+  }, [monthInRecent, recent.data, monthlyQuery.data, monthFrom, monthTo, goalSeconds]);
 
   const pickedSeconds = picked ? (monthTotals.get(picked) ?? 0) : 0;
 
@@ -84,7 +144,7 @@ export function StudyRecordsPanel({ profile }: { profile: StudyProfile | null | 
         <Tile label="연속 공부" value={`${streak}일`} icon={Flame} />
         <Tile label="이번 주" value={formatDuration(thisWeekSum)} />
         <Tile label="하루 평균 (이번 주)" value={formatDuration(Math.floor(thisWeekSum / thisWeekDays))} />
-        <Tile label="최고 기록 (120일)" value={bestDay ? formatDuration(bestDay[1]) : '-'} />
+        <Tile label="최고 기록 (120일)" value={bestSeconds > 0 ? formatDuration(bestSeconds) : '-'} />
       </View>
 
       <Card>
@@ -157,6 +217,7 @@ export function StudyRecordsPanel({ profile }: { profile: StudyProfile | null | 
           <View key={index} style={styles.weekRow}>
             {weekRow.map((day, col) => {
               if (!day) return <View key={col} style={styles.cell} />;
+              const dayNum = Number(day.slice(8, 10));
               const seconds = monthTotals.get(day) ?? 0;
               const level = seconds === 0 ? 0 : Math.min(4, Math.ceil((seconds / goalSeconds) * 4));
               const alpha = ['00', '40', '70', 'A8', 'FF'][level];
@@ -164,7 +225,7 @@ export function StudyRecordsPanel({ profile }: { profile: StudyProfile | null | 
                 <Pressable
                   key={day}
                   accessibilityRole="button"
-                  accessibilityLabel={`${parseISODate(day).getDate()}일 ${formatDuration(seconds)}`}
+                  accessibilityLabel={`${dayNum}일 ${formatDuration(seconds)}`}
                   onPress={() => setPicked(picked === day ? null : day)}
                   style={[
                     styles.cell,
@@ -177,7 +238,7 @@ export function StudyRecordsPanel({ profile }: { profile: StudyProfile | null | 
                   <ThemedText
                     type="small"
                     style={[styles.cellText, { color: level >= 3 ? '#FFFFFF' : theme.text }]}>
-                    {parseISODate(day).getDate()}
+                    {dayNum}
                   </ThemedText>
                 </Pressable>
               );

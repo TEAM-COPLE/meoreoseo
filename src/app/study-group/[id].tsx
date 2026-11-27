@@ -1,5 +1,5 @@
 import { router, useLocalSearchParams } from 'expo-router';
-import { useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import { Platform, Share, StyleSheet, View } from 'react-native';
 
 import { BoardRow } from '@/components/study/board-row';
@@ -39,28 +39,40 @@ function leave() {
  * 그룹 사람들의 오늘·이번 주·이번 달 공부 시간 순위와 "지금 공부 중" 표시를 보여 준다.
  */
 export default function StudyGroupScreen() {
-  const { id } = useLocalSearchParams<{ id: string }>();
+  const { id } = useLocalSearchParams<{ id: string | string[] }>();
+  const groupId = Array.isArray(id) ? id[0] : id;
   const theme = useTheme();
   const groups = useMyStudyGroups();
-  const group = (groups.data ?? []).find((item) => item.id === id) ?? null;
+  const group = useMemo(
+    () => (groups.data ?? []).find((item) => item.id === groupId) ?? null,
+    [groups.data, groupId],
+  );
   const [period, setPeriod] = useState<StudyPeriod>('day');
-  const range = periodRange(period);
-  const board = useStudyGroupBoard(group ? id : undefined, range.from, range.to);
+  const range = useMemo(() => periodRange(period), [period]);
+  const board = useStudyGroupBoard(group ? groupId : undefined, range.from, range.to);
   const leaveGroup = useLeaveStudyGroup();
   const kick = useKickStudyGroupMember();
   const [editing, setEditing] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
 
   const rows = board.data ?? [];
-  const liveCount = rows.filter((row) => row.live_started_at).length;
+  const liveCount = useMemo(
+    () => (board.data ?? []).reduce((count, row) => count + (row.live_started_at ? 1 : 0), 0),
+    [board.data],
+  );
   const now = useNow(liveCount > 0);
-  const me = rows.find((row) => row.is_me);
-  const iAmOwner = me?.is_owner ?? false;
+  const iAmOwner = useMemo(
+    () => (board.data ?? []).find((row) => row.is_me)?.is_owner ?? false,
+    [board.data],
+  );
 
-  const ranked = rows
-    .map((row) => ({ ...row, seconds: boardSeconds(row, range, now) }))
-    .sort((a, b) => b.seconds - a.seconds || a.nickname.localeCompare(b.nickname));
-  const total = ranked.reduce((sum, row) => sum + row.seconds, 0);
+  const { ranked, total } = useMemo(() => {
+    const list = (board.data ?? [])
+      .map((row) => ({ ...row, seconds: boardSeconds(row, range, now) }))
+      .sort((a, b) => b.seconds - a.seconds || a.nickname.localeCompare(b.nickname));
+    const sum = list.reduce((acc, row) => acc + row.seconds, 0);
+    return { ranked: list, total: sum };
+  }, [board.data, range, now]);
 
   async function shareCode() {
     if (!group) return;
@@ -105,23 +117,26 @@ export default function StudyGroupScreen() {
     }
   }
 
-  async function kickMember(userId: string, nickname: string) {
-    if (!group) return;
-    if (
-      !(await confirm({
-        title: `${nickname} 님을 내보낼까요?`,
-        message: '내보낸 사람은 초대 코드로 다시 들어올 수 있어요.',
-        confirmLabel: '내보내기',
-      }))
-    ) {
-      return;
-    }
-    try {
-      await kick.mutateAsync({ groupId: group.id, userId });
-    } catch (e) {
-      setMessage(errorMessage(e));
-    }
-  }
+  const kickMember = useCallback(
+    async (userId: string, nickname: string) => {
+      if (!group) return;
+      if (
+        !(await confirm({
+          title: `${nickname} 님을 내보낼까요?`,
+          message: '내보낸 사람은 초대 코드로 다시 들어올 수 있어요.',
+          confirmLabel: '내보내기',
+        }))
+      ) {
+        return;
+      }
+      try {
+        await kick.mutateAsync({ groupId: group.id, userId });
+      } catch (e) {
+        setMessage(errorMessage(e));
+      }
+    },
+    [group, kick],
+  );
 
   if (!groups.isPending && !group) {
     return (
@@ -196,7 +211,8 @@ export default function StudyGroupScreen() {
             liveSubject={row.live_subject}
             isMe={row.is_me}
             isOwner={row.is_owner}
-            onLongPress={iAmOwner && !row.is_me ? () => kickMember(row.user_id, row.nickname) : undefined}
+            memberId={iAmOwner && !row.is_me ? row.user_id : undefined}
+            onKickMember={iAmOwner && !row.is_me ? kickMember : undefined}
           />
         ))}
       </View>

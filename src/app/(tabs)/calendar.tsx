@@ -28,6 +28,7 @@ import {
 import { hasSelectionModifier, useMultiSelect } from '@/hooks/use-multi-select';
 import { useTagColorOf, useTagMap } from '@/hooks/use-tags';
 import { useTheme } from '@/hooks/use-theme';
+import { useTodayISO } from '@/hooks/use-today';
 import { useTodos, useToggleTodo, type Todo } from '@/hooks/use-todos';
 import {
   addDays,
@@ -122,7 +123,7 @@ export default function CalendarScreen() {
   }, [eventsByDate, todosByDate, tagColorOf, theme.tint]);
   const dayEvents = eventsByDate.get(selected) ?? [];
   const dayTodos = todosByDate.get(selected) ?? [];
-  const today = todayISO();
+  const today = useTodayISO();
   // 남이 만든 회의 초대처럼 구글에서만 고칠 수 있는 일정은 고르거나 지울 수 없다.
   const dayEventIds = dayEvents.filter((event) => !event.google_readonly).map((event) => event.id);
   const selectedDayIds = dayEventIds.filter((id) => multi.isSelected(id));
@@ -170,7 +171,7 @@ export default function CalendarScreen() {
   return (
     <Screen
       title="일정"
-      onRefresh={() => events.refetch()}
+      onRefresh={() => Promise.all([events.refetch(), todos.refetch()])}
       action={
         <SelectionHeaderActions
           selecting={isSelecting}
@@ -518,7 +519,7 @@ function EventForm({
         </View>
       </View>
       <TagPicker value={tagId} onChange={setTagId} />
-      <TextField label="메모" value={memo} onChangeText={setMemo} multiline />
+      <TextField label="메모" value={memo} onChangeText={setMemo} maxLength={5000} multiline />
       {wasRepeating && event ? (
         <Button
           label={`${formatDate(event.event_date)}부터 반복 그만하기`}
@@ -542,6 +543,7 @@ function groupTodosByDate(todos: Todo[], range: { start: string; end: string }):
     const first = todoStartOf(todo);
     if (!first) continue;
     const last = todo.due_date ?? first;
+    if (last < range.start || first > range.end) continue;
     const from = first > range.start ? first : range.start;
     const to = last < range.end ? last : range.end;
     for (let date = from; date <= to; date = addDays(date, 1)) {

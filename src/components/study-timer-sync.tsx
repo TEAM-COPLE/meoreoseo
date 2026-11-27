@@ -2,6 +2,8 @@ import { activateKeepAwakeAsync, deactivateKeepAwake } from 'expo-keep-awake';
 import { useEffect } from 'react';
 import { AppState, Platform } from 'react-native';
 
+import { flushPendingHabitLogToggles } from '@/hooks/use-habits';
+import { flushPendingTodoToggles } from '@/hooks/use-todos';
 import { useAuth } from '@/lib/auth';
 import {
   flushPendingStudy,
@@ -48,7 +50,12 @@ export function StudyTimerSync() {
   useEffect(() => {
     if (!signedIn || !userId) return;
 
+    function flushPendingEdits() {
+      void flushPendingTodoToggles();
+      void flushPendingHabitLogToggles();
+    }
     function onLeave() {
+      flushPendingEdits();
       if (pauseOnLeave && running) void markStudyLeft();
     }
     function onReturn() {
@@ -60,12 +67,18 @@ export function StudyTimerSync() {
     if (Platform.OS === 'web') {
       if (typeof document === 'undefined') return;
       const onVisibility = () => (document.visibilityState === 'hidden' ? onLeave() : onReturn());
+      const onPageHide = () => flushPendingEdits();
       document.addEventListener('visibilitychange', onVisibility);
-      return () => document.removeEventListener('visibilitychange', onVisibility);
+      window.addEventListener('pagehide', onPageHide);
+      return () => {
+        document.removeEventListener('visibilitychange', onVisibility);
+        window.removeEventListener('pagehide', onPageHide);
+      };
     }
 
     const subscription = AppState.addEventListener('change', (next) => {
-      if (next === 'background') onLeave();
+      if (next === 'inactive') flushPendingEdits();
+      else if (next === 'background') onLeave();
       else if (next === 'active') onReturn();
     });
     return () => subscription.remove();

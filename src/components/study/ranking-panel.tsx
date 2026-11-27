@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 
 import { ThemedText } from '@/components/themed-text';
@@ -25,12 +25,14 @@ import { useNow } from './common';
  */
 export function StudyRankingPanel({ profile }: { profile: StudyProfile }) {
   const [period, setPeriod] = useState<StudyPeriod>('day');
-  const range = periodRange(period);
+  const range = useMemo(() => periodRange(period), [period]);
   const ranking = useStudyRanking(range.from, range.to);
   const save = useSaveStudyProfile();
   const [error, setError] = useState<string | null>(null);
-  const rows = ranking.data ?? [];
-  const anyLive = rows.some((row) => row.live_started_at);
+  const anyLive = useMemo(
+    () => (ranking.data ?? []).some((row) => row.live_started_at),
+    [ranking.data],
+  );
   const now = useNow(anyLive);
 
   async function join() {
@@ -48,10 +50,14 @@ export function StudyRankingPanel({ profile }: { profile: StudyProfile }) {
   }
 
   // 공부 중인 사람의 시간은 실시간으로 올려서 다시 줄 세운다.
-  const live = rows
-    .map((row) => ({ ...row, seconds: boardSeconds(row, range, now) }))
-    .sort((a, b) => b.seconds - a.seconds || a.rank - b.rank);
-  const myIndex = live.findIndex((row) => row.is_me);
+  const live = useMemo(
+    () =>
+      (ranking.data ?? [])
+        .map((row) => ({ ...row, seconds: boardSeconds(row, range, now) }))
+        .sort((a, b) => b.seconds - a.seconds || a.rank - b.rank),
+    [ranking.data, range, now],
+  );
+  const myIndex = useMemo(() => live.findIndex((row) => row.is_me), [live]);
   const me = myIndex >= 0 ? live[myIndex] : null;
   const ahead = myIndex > 0 ? live[myIndex - 1] : null;
 
@@ -106,7 +112,7 @@ export function StudyRankingPanel({ profile }: { profile: StudyProfile }) {
       <View style={styles.list}>
         {live.map((row, index) => (
           <BoardRow
-            key={`${row.nickname}-${index}`}
+            key={row.nickname}
             rank={row.rank > 100 ? row.rank : index + 1}
             nickname={row.nickname}
             statusMessage={row.status_message}

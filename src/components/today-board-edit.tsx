@@ -89,6 +89,15 @@ export class BoardDragController {
     this.callbacks = callbacks;
   }
 
+  dispose() {
+    if (this.timer) {
+      clearInterval(this.timer);
+      this.timer = null;
+    }
+    this.drag = null;
+    this.callbacks = null;
+  }
+
   // ── 스크롤 화면에서 받는 정보 ──
   handleScroll = (event: NativeSyntheticEvent<NativeScrollEvent>) => {
     const { contentOffset, contentSize, layoutMeasurement } = event.nativeEvent;

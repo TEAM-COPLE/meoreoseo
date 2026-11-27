@@ -21,6 +21,7 @@ export const supabase = createClient<Database>(
   {
     auth: {
       storage: authStorage,
+      flowType: 'pkce',
       autoRefreshToken: hasSupabaseConfig,
       persistSession: hasSupabaseConfig,
       // 웹에서는 구글·카카오 로그인 후 돌아온 주소에 담긴 토큰을 자동으로 읽는다.

@@ -3,7 +3,12 @@ import type { Session } from '@supabase/supabase-js';
 import { createContext, useContext, useEffect, useState, type PropsWithChildren } from 'react';
 
 import { DEV_USER_ID } from './local-db';
-import { queryClient, startQueryPersistence, stopQueryPersistence } from './query';
+import {
+  clearPersistedQueryCache,
+  queryClient,
+  startQueryPersistence,
+  stopQueryPersistence,
+} from './query';
 import { hasSupabaseConfig, supabase } from './supabase';
 
 const DEV_MODE_KEY = 'meoreoseo:dev-mode';
@@ -123,10 +128,14 @@ export function AuthProvider({ children }: PropsWithChildren) {
       }
       activeSession = session;
       const nextUserId = session?.user.id;
-      // 사용자가 바뀌면(로그인·로그아웃 포함) 이전 데이터를 화면에 남기지 않게 캐시를 비운다.
+      // 사용자가 바뀌면(로그인·로그아웃 포함) 이전 데이터를 화면과 저장소에 남기지 않게 비운다.
       if (currentUserId !== nextUserId) {
+        const prevUserId = currentUserId;
         stopQueryPersistence();
         queryClient.clear();
+        if (prevUserId && prevUserId !== DEV_USER_ID && !nextUserId) {
+          await clearPersistedQueryCache(prevUserId);
+        }
         currentUserId = nextUserId;
         if (nextUserId) {
           await startQueryPersistence(nextUserId);

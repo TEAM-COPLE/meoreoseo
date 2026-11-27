@@ -69,6 +69,41 @@ export function StaggeredReveal({
   );
 }
 
+const sharedShimmerPulse = new Animated.Value(0.38);
+let shimmerSubscribers = 0;
+let sharedShimmerLoop: Animated.CompositeAnimation | null = null;
+
+function retainShimmerPulse(): () => void {
+  shimmerSubscribers += 1;
+  if (shimmerSubscribers === 1) {
+    sharedShimmerPulse.setValue(0.38);
+    sharedShimmerLoop = Animated.loop(
+      Animated.sequence([
+        Animated.timing(sharedShimmerPulse, {
+          toValue: 0.9,
+          duration: 850,
+          easing: Easing.inOut(Easing.ease),
+          useNativeDriver: USE_NATIVE_DRIVER,
+        }),
+        Animated.timing(sharedShimmerPulse, {
+          toValue: 0.38,
+          duration: 850,
+          easing: Easing.inOut(Easing.ease),
+          useNativeDriver: USE_NATIVE_DRIVER,
+        }),
+      ]),
+    );
+    sharedShimmerLoop.start();
+  }
+  return () => {
+    shimmerSubscribers = Math.max(0, shimmerSubscribers - 1);
+    if (shimmerSubscribers === 0 && sharedShimmerLoop) {
+      sharedShimmerLoop.stop();
+      sharedShimmerLoop = null;
+    }
+  };
+}
+
 /**
  * DB 데이터를 불러오는 동안 은은하게 맥박치듯 반짝이는 스켈레톤 블록.
  */
@@ -84,28 +119,8 @@ export function ShimmerBlock({
   style?: StyleProp<ViewStyle>;
 }) {
   const theme = useTheme();
-  const [pulse] = useState(() => new Animated.Value(0.38));
 
-  useEffect(() => {
-    const loop = Animated.loop(
-      Animated.sequence([
-        Animated.timing(pulse, {
-          toValue: 0.9,
-          duration: 850,
-          easing: Easing.inOut(Easing.ease),
-          useNativeDriver: USE_NATIVE_DRIVER,
-        }),
-        Animated.timing(pulse, {
-          toValue: 0.38,
-          duration: 850,
-          easing: Easing.inOut(Easing.ease),
-          useNativeDriver: USE_NATIVE_DRIVER,
-        }),
-      ]),
-    );
-    loop.start();
-    return () => loop.stop();
-  }, [pulse]);
+  useEffect(() => retainShimmerPulse(), []);
 
   return (
     <Animated.View
@@ -115,7 +130,7 @@ export function ShimmerBlock({
           height,
           borderRadius,
           backgroundColor: theme.backgroundSelected,
-          opacity: pulse,
+          opacity: sharedShimmerPulse,
         },
         style,
       ]}

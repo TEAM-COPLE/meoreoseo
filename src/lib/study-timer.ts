@@ -98,6 +98,16 @@ async function writeJson(key: string, value: unknown): Promise<void> {
 }
 
 let loadPromise: Promise<void> | null = null;
+let activeScopeUserId: string | null = null;
+
+function countPendingFor(pending: PendingSegment[], userId: string | null): number {
+  if (!userId) return 0;
+  let count = 0;
+  for (const seg of pending) {
+    if (seg.userId === userId) count += 1;
+  }
+  return count;
+}
 
 /** 휴대폰에 적어 둔 타이머 상태를 한 번 읽어 온다. 여러 번 불러도 한 번만 읽는다. */
 export function loadStudyTimer(): Promise<void> {
@@ -107,10 +117,12 @@ export function loadStudyTimer(): Promise<void> {
       readJson<PendingSegment[]>(PENDING_KEY),
       readJson<{ pauseOnLeave?: boolean }>(OPTIONS_KEY),
     ]);
+    const validRunning = running && typeof running.startedAt === 'number' ? running : null;
+    const list = pending ?? [];
     setState({
       loaded: true,
-      running: running && typeof running.startedAt === 'number' ? running : null,
-      pendingCount: pending?.length ?? 0,
+      running: validRunning,
+      pendingCount: countPendingFor(list, activeScopeUserId ?? validRunning?.userId ?? null),
       pauseOnLeave: options?.pauseOnLeave ?? true,
     });
   })();
@@ -213,7 +225,7 @@ export async function stopStudy(endMs?: number): Promise<number> {
   const pending = (await readJson<PendingSegment[]>(PENDING_KEY)) ?? [];
   pending.push(...segments);
   await writeJson(PENDING_KEY, pending);
-  setState({ pendingCount: pending.length });
+  setState({ pendingCount: countPendingFor(pending, activeScopeUserId ?? running.userId) });
 
   await flushPendingStudy(running.userId);
   return total;
@@ -272,7 +284,7 @@ export function flushPendingStudy(userId: string): Promise<void> {
       }
       await writeJson(PENDING_KEY, keep.length > 0 ? keep : null);
       setState({
-        pendingCount: keep.length,
+        pendingCount: countPendingFor(keep, activeScopeUserId ?? userId),
         ...(dropped > 0
           ? { notice: '다른 기기의 기록과 시간이 겹치거나 너무 오래된 기록이 있어 일부는 저장하지 못했어요.' }
           : {}),
@@ -291,9 +303,26 @@ export function flushPendingStudy(userId: string): Promise<void> {
 
 /** 로그아웃·계정 바꿈: 다른 계정의 타이머는 화면에서 치운다. */
 export async function forgetStudyTimerFor(userId: string | null): Promise<void> {
+  activeScopeUserId = userId;
   await loadStudyTimer();
+  const pending = (await readJson<PendingSegment[]>(PENDING_KEY)) ?? [];
   if (state.running && state.running.userId !== userId) {
-    setState({ running: null });
+    setState({ running: null, pendingCount: countPendingFor(pending, userId) });
     await writeJson(RUNNING_KEY, null);
+  } else {
+    setState({ pendingCount: countPendingFor(pending, userId) });
+  }
+}
+
+/** 특정 계정(예: 로컬 개발 모드 초기화)의 미전송 공부 기록만 안전하게 지운다. */
+export async function clearStudyPendingFor(userId: string): Promise<void> {
+  await loadStudyTimer();
+  const pending = (await readJson<PendingSegment[]>(PENDING_KEY)) ?? [];
+  const keep = pending.filter((segment) => segment.userId !== userId);
+  if (keep.length !== pending.length) {
+    await writeJson(PENDING_KEY, keep.length > 0 ? keep : null);
+  }
+  if (activeScopeUserId === userId) {
+    setState({ pendingCount: 0 });
   }
 }

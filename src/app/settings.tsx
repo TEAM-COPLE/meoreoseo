@@ -1,3 +1,4 @@
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { router } from "expo-router";
 import {
   Bell,
@@ -21,12 +22,27 @@ import { Button } from "@/components/ui/button";
 import { Card, Screen } from "@/components/ui/screen";
 import { Segmented } from "@/components/ui/segmented";
 import { VersionInfoCard } from "@/components/version-info-card";
+import { clearNativeWidgets } from "@/components/widget-sync";
 import { Radius, Spacing } from "@/constants/theme";
+import {
+  cancelPendingHabitToggles,
+  flushPendingHabitLogToggles,
+} from "@/hooks/use-habits";
 import { useTheme, useThemeMode, type ThemeMode } from "@/hooks/use-theme";
+import {
+  cancelPendingTodoToggles,
+  flushPendingTodoToggles,
+} from "@/hooks/use-todos";
 import { exitDevMode, useAuth } from "@/lib/auth";
 import { confirm, errorMessage } from "@/lib/format";
-import { clearLocalDb } from "@/lib/local-db";
-import { queryClient } from "@/lib/query";
+import { DEV_USER_ID, clearLocalDb } from "@/lib/local-db";
+import { cancelAllReminders } from "@/lib/notifications";
+import {
+  clearPersistedQueryCache,
+  queryClient,
+  startQueryPersistence,
+} from "@/lib/query";
+import { clearStudyPendingFor, stopStudy } from "@/lib/study-timer";
 import { supabase } from "@/lib/supabase";
 
 const THEME_OPTIONS: readonly { value: ThemeMode; label: string; icon: LucideIcon }[] = [
@@ -91,12 +107,26 @@ export default function SettingsScreen() {
     if (!ok) return;
     setBusy(true);
     setError(null);
+    await Promise.allSettled([
+      flushPendingTodoToggles(),
+      flushPendingHabitLogToggles(),
+      stopStudy(),
+    ]);
+    clearNativeWidgets(resolvedScheme);
     if (isDevMode) {
+      await cancelAllReminders().catch(() => {});
       await exitDevMode();
       setBusy(false);
       return;
     }
+    const prevUserId = session?.user.id;
     const { error: signOutError } = await supabase.auth.signOut();
+    if (!signOutError) {
+      await Promise.allSettled([
+        clearPersistedQueryCache(prevUserId),
+        cancelAllReminders(),
+      ]);
+    }
     setBusy(false);
     if (signOutError) setError(errorMessage(signOutError));
   }
@@ -113,7 +143,23 @@ export default function SettingsScreen() {
     setBusy(true);
     setError(null);
     try {
-      await clearLocalDb();
+      cancelPendingTodoToggles();
+      cancelPendingHabitToggles();
+      await Promise.allSettled([
+        stopStudy(),
+        clearStudyPendingFor(DEV_USER_ID),
+        clearLocalDb(),
+        clearPersistedQueryCache(DEV_USER_ID),
+        AsyncStorage.multiRemove([
+          `meoreoseo:monthly-budget:${DEV_USER_ID}`,
+          `meoreoseo:today-layout:${DEV_USER_ID}`,
+          `meoreoseo:money-not-duplicate:${DEV_USER_ID}`,
+        ]),
+        cancelAllReminders(),
+      ]);
+      clearNativeWidgets(resolvedScheme);
+      queryClient.clear();
+      await startQueryPersistence(DEV_USER_ID);
       await queryClient.invalidateQueries();
     } catch (e) {
       setError(errorMessage(e));

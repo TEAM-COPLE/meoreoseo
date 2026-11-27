@@ -1,5 +1,5 @@
 import { Check, Plus, Trash2 } from 'lucide-react-native';
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import {
   ActivityIndicator,
   Platform,
@@ -90,17 +90,24 @@ export function SelectionBar({
 }) {
   const theme = useTheme();
   const allSelected = totalCount > 0 && count >= totalCount;
+  const clearRef = useRef(onClear);
+  const deletingRef = useRef(deleting);
+
+  useEffect(() => {
+    clearRef.current = onClear;
+    deletingRef.current = deleting;
+  }, [deleting, onClear]);
 
   useEffect(() => {
     if (Platform.OS !== 'web' || typeof window === 'undefined') return;
     function handleKeyDown(event: KeyboardEvent) {
-      if (event.key === 'Escape' && !deleting && !hasActiveConfirm()) {
-        onClear();
+      if (event.key === 'Escape' && !deletingRef.current && !hasActiveConfirm()) {
+        clearRef.current();
       }
     }
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [deleting, onClear]);
+  }, []);
 
   return (
     <View

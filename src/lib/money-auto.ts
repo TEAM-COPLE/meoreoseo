@@ -173,6 +173,28 @@ export function guessCategory(merchant: string | null, kind: AutoKind): string {
 /** 두 기록의 시각이 이만큼 안이면 같은 결제로 본다 (알림이 조금 늦게 오는 것을 생각해서) */
 export const SAME_PAYMENT_WINDOW_MS = 10 * 60 * 1000;
 
+function parseTimeMs(iso: string | null): number | null {
+  if (!iso) return null;
+  const ms = Date.parse(iso);
+  return Number.isNaN(ms) ? null : ms;
+}
+
+function paymentBucketKey(item: Pick<Comparable, 'kind' | 'amount'>): string {
+  return `${item.kind}:${item.amount}`;
+}
+
+function isSameTimeOrDate(
+  aOn: string,
+  aMs: number | null,
+  bOn: string,
+  bMs: number | null,
+): boolean {
+  if (aMs !== null && bMs !== null) {
+    return Math.abs(aMs - bMs) <= SAME_PAYMENT_WINDOW_MS;
+  }
+  return aOn === bOn;
+}
+
 /**
  * 같은 결제인지. 지출/수입과 금액이 같고,
  *  - 둘 다 시각을 알면 10분 안,
@@ -180,12 +202,12 @@ export const SAME_PAYMENT_WINDOW_MS = 10 * 60 * 1000;
  */
 export function isSamePayment(a: Comparable, b: Comparable): boolean {
   if (a.kind !== b.kind || a.amount !== b.amount) return false;
-  if (a.occurredAt && b.occurredAt) {
-    const gap = Math.abs(new Date(a.occurredAt).getTime() - new Date(b.occurredAt).getTime());
-    if (Number.isNaN(gap)) return a.occurredOn === b.occurredOn;
-    return gap <= SAME_PAYMENT_WINDOW_MS;
-  }
-  return a.occurredOn === b.occurredOn;
+  return isSameTimeOrDate(
+    a.occurredOn,
+    parseTimeMs(a.occurredAt),
+    b.occurredOn,
+    parseTimeMs(b.occurredAt),
+  );
 }
 
 /**
@@ -198,21 +220,54 @@ export function splitDuplicates<T extends AutoEntry>(
   incoming: T[],
   existing: Comparable[],
 ): { fresh: T[]; duplicates: T[] } {
-  const pool = existing.map((item) => ({ item, used: false }));
+  type ExistingSlot = { item: Comparable; ms: number | null; used: boolean };
+  type SeenNotiSlot = { entry: T; ms: number | null };
+
+  const poolByKey = new Map<string, ExistingSlot[]>();
+  for (const item of existing) {
+    const key = paymentBucketKey(item);
+    let bucket = poolByKey.get(key);
+    if (!bucket) {
+      bucket = [];
+      poolByKey.set(key, bucket);
+    }
+    bucket.push({ item, ms: parseTimeMs(item.occurredAt), used: false });
+  }
+
   const fresh: T[] = [];
   const duplicates: T[] = [];
   // 이번 묶음에서 이미 본 알림 (중복으로 빠진 것 포함)
-  const seenNotifications: T[] = [];
+  const seenNotiByKey = new Map<string, SeenNotiSlot[]>();
+
   for (const entry of incoming) {
-    const sameInBatch =
-      entry.source === 'notification' &&
-      seenNotifications.some((seen) => seen.origin !== entry.origin && isSamePayment(seen, entry));
-    if (entry.source === 'notification') seenNotifications.push(entry);
-    if (sameInBatch) {
-      duplicates.push(entry);
-      continue;
+    const key = paymentBucketKey(entry);
+    const ms = parseTimeMs(entry.occurredAt);
+
+    if (entry.source === 'notification') {
+      let seenBucket = seenNotiByKey.get(key);
+      const sameInBatch =
+        seenBucket !== undefined &&
+        seenBucket.some(
+          (seen) =>
+            seen.entry.origin !== entry.origin &&
+            isSameTimeOrDate(seen.entry.occurredOn, seen.ms, entry.occurredOn, ms),
+        );
+      if (!seenBucket) {
+        seenBucket = [];
+        seenNotiByKey.set(key, seenBucket);
+      }
+      seenBucket.push({ entry, ms });
+      if (sameInBatch) {
+        duplicates.push(entry);
+        continue;
+      }
     }
-    const match = pool.find((slot) => !slot.used && isSamePayment(slot.item, entry));
+
+    const poolBucket = poolByKey.get(key);
+    const match = poolBucket?.find(
+      (slot) =>
+        !slot.used && isSameTimeOrDate(slot.item.occurredOn, slot.ms, entry.occurredOn, ms),
+    );
     if (match) {
       match.used = true;
       duplicates.push(entry);
@@ -230,13 +285,35 @@ export function splitDuplicates<T extends AutoEntry>(
 export function findSuspectedDuplicates<
   T extends Comparable & { id: string; source: string },
 >(items: T[]): T[][] {
+  if (items.length < 2) return [];
+  const msList = items.map((item) => parseTimeMs(item.occurredAt));
+  const indicesByKey = new Map<string, number[]>();
+  for (let i = 0; i < items.length; i += 1) {
+    const key = paymentBucketKey(items[i]);
+    let list = indicesByKey.get(key);
+    if (!list) {
+      list = [];
+      indicesByKey.set(key, list);
+    }
+    list.push(i);
+  }
+
   const groups: T[][] = [];
   const seen = new Set<string>();
-  for (let i = 0; i < items.length; i++) {
-    if (seen.has(items[i].id)) continue;
-    const group = [items[i]];
-    for (let j = i + 1; j < items.length; j++) {
-      if (!seen.has(items[j].id) && isSamePayment(items[i], items[j])) group.push(items[j]);
+  for (let i = 0; i < items.length; i += 1) {
+    const base = items[i];
+    if (seen.has(base.id)) continue;
+    const candidates = indicesByKey.get(paymentBucketKey(base));
+    if (!candidates || candidates.length < 2) continue;
+
+    const group = [base];
+    const baseMs = msList[i];
+    for (const j of candidates) {
+      if (j <= i) continue;
+      const other = items[j];
+      if (!seen.has(other.id) && isSameTimeOrDate(base.occurredOn, baseMs, other.occurredOn, msList[j])) {
+        group.push(other);
+      }
     }
     if (group.length > 1 && group.some((item) => item.source !== 'manual')) {
       for (const item of group) seen.add(item.id);

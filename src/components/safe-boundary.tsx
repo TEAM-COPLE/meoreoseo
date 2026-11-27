@@ -25,7 +25,10 @@ export class SafeBoundary extends Component<Props, State> {
 
   componentDidCatch(error: Error, info: ErrorInfo) {
     try {
-      reportError(this.props.name, Object.assign(error, { stack: `${error.stack ?? ''}\n${info.componentStack ?? ''}` }));
+      const wrapped = new Error(error?.message || String(error));
+      wrapped.name = error?.name || 'Error';
+      wrapped.stack = `${error?.stack ?? ''}\n${info.componentStack ?? ''}`;
+      reportError(this.props.name, wrapped);
     } catch {
       // 기록 실패는 무시한다.
     }
@@ -41,7 +44,9 @@ export class SafeBoundary extends Component<Props, State> {
       <View style={styles.root}>
         <Text style={styles.title}>화면을 불러오지 못했습니다</Text>
         <Text style={styles.message} numberOfLines={6}>
-          {error.message || String(error)}
+          {__DEV__
+            ? error.message || String(error)
+            : '일시적인 오류가 발생했습니다. 다시 시도해 주세요.'}
         </Text>
         <Pressable accessibilityRole="button" onPress={this.retry} style={styles.button}>
           <Text style={styles.buttonText}>다시 시도</Text>

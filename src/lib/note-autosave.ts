@@ -25,7 +25,8 @@ function draftSignature(draft: NoteDraft): string {
 function sortNotes(items: NoteRow[]): NoteRow[] {
   return [...items].sort((a, b) => {
     if (a.pinned !== b.pinned) return a.pinned ? -1 : 1;
-    return b.updated_at.localeCompare(a.updated_at);
+    if (b.updated_at === a.updated_at) return 0;
+    return b.updated_at < a.updated_at ? -1 : 1;
   });
 }
 
@@ -79,7 +80,8 @@ export function createNoteAutosaver(
   let lastSavedSig: string | null = initialId && initialDraft ? draftSignature(initialDraft) : null;
 
   async function save(draft: NoteDraft): Promise<NoteRow | null> {
-    if (!hasActiveSession()) return null;
+    const uid = activeUserId();
+    if (!uid || !hasActiveSession()) return null;
 
     if (isDevMode()) {
       const saved = await localSaveNote(noteId, draft);
@@ -92,6 +94,7 @@ export function createNoteAutosaver(
         .from('notes')
         .update({ ...draft, updated_at: new Date().toISOString() })
         .eq('id', noteId)
+        .eq('user_id', uid)
         .select('*')
         .single();
       if (error || !data) return null;
@@ -183,7 +186,8 @@ export function createNoteAutosaver(
       await running;
 
       if (!noteId) return null;
-      if (!hasActiveSession()) {
+      const uid = activeUserId();
+      if (!uid || !hasActiveSession()) {
         stopped = false;
         return '로그인이 필요합니다.';
       }
@@ -194,7 +198,7 @@ export function createNoteAutosaver(
         return null;
       }
 
-      const { error } = await supabase.from('notes').delete().eq('id', noteId);
+      const { error } = await supabase.from('notes').delete().eq('id', noteId).eq('user_id', uid);
       if (error) {
         stopped = false;
         return error.message;

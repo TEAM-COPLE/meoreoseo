@@ -50,6 +50,7 @@ export type EventInput = {
 };
 
 const KEY = ["events"];
+const ISO_DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 
 /** 일정의 시간을 보여줄 글자로 바꾼다. 예: '하루 종일', '14:30', '14:30 – 16:00' */
 export function timeLabel(
@@ -97,12 +98,13 @@ export function expandEvents(
     }
   }
   return result.sort((a, b) => {
-    if (a.event_date !== b.event_date)
-      return a.event_date.localeCompare(b.event_date);
+    if (a.event_date !== b.event_date) {
+      return a.event_date < b.event_date ? -1 : 1;
+    }
     if (a.start_time === b.start_time) return 0;
     if (a.start_time === null) return -1;
     if (b.start_time === null) return 1;
-    return a.start_time.localeCompare(b.start_time);
+    return a.start_time < b.start_time ? -1 : 1;
   });
 }
 
@@ -113,13 +115,17 @@ export async function loadEvents(
   start: string,
   end: string,
 ): Promise<CalendarEvent[]> {
-  requireUserId();
+  if (!ISO_DATE_RE.test(start) || !ISO_DATE_RE.test(end)) {
+    throw new Error("잘못된 날짜 형식입니다.");
+  }
+  const uid = requireUserId();
   if (isDevMode()) {
     return expandEvents(await localListEvents(start, end), start, end);
   }
   const { data, error } = await supabase
     .from("events")
     .select("*")
+    .eq("user_id", uid)
     .lte("event_date", end)
     // 기간 안에 시작하는 일정 + 그 전에 시작했지만 아직 끝나지 않은 반복 일정
     .or(
@@ -162,7 +168,7 @@ function afterChange() {
 
 export function useSaveEvent() {
   return useInvalidatingMutation(KEY, async ({ id, ...values }: EventInput) => {
-    requireUserId();
+    const uid = requireUserId();
     const repeat = isRepeat(values.repeat) ? values.repeat : null;
     const row = {
       ...values,
@@ -177,7 +183,7 @@ export function useSaveEvent() {
       return;
     }
     const { error } = id
-      ? await supabase.from("events").update(row).eq("id", id)
+      ? await supabase.from("events").update(row).eq("id", id).eq("user_id", uid)
       : await supabase.from("events").insert(row);
     check(error);
     afterChange();
@@ -187,12 +193,16 @@ export function useSaveEvent() {
 /** 일정을 지운다. 반복 일정이면 반복 전체가 지워진다. */
 export function useDeleteEvent() {
   return useInvalidatingMutation(KEY, async (id: string) => {
-    requireUserId();
+    const uid = requireUserId();
     if (isDevMode()) {
       await localDeleteEvent(id);
       return;
     }
-    const { error } = await supabase.from("events").delete().eq("id", id);
+    const { error } = await supabase
+      .from("events")
+      .delete()
+      .eq("id", id)
+      .eq("user_id", uid);
     check(error);
     afterChange();
   });
@@ -202,12 +212,16 @@ export function useDeleteEvent() {
 export function useDeleteEvents() {
   return useInvalidatingMutation(KEY, async (ids: string[]) => {
     if (ids.length === 0) return;
-    requireUserId();
+    const uid = requireUserId();
     if (isDevMode()) {
       await localDeleteEvents(ids);
       return;
     }
-    const { error } = await supabase.from("events").delete().in("id", ids);
+    const { error } = await supabase
+      .from("events")
+      .delete()
+      .in("id", ids)
+      .eq("user_id", uid);
     check(error);
     afterChange();
   });
@@ -221,7 +235,7 @@ export function useEndEventRepeat() {
   return useInvalidatingMutation(
     KEY,
     async ({ event, from }: { event: CalendarEvent; from: string }) => {
-      requireUserId();
+      const uid = requireUserId();
       if (isDevMode()) {
         if (from <= event.series_date) {
           await localDeleteEvent(event.id);
@@ -232,7 +246,13 @@ export function useEndEventRepeat() {
       }
       if (from <= event.series_date) {
         check(
-          (await supabase.from("events").delete().eq("id", event.id)).error,
+          (
+            await supabase
+              .from("events")
+              .delete()
+              .eq("id", event.id)
+              .eq("user_id", uid)
+          ).error,
         );
         afterChange();
         return;
@@ -241,7 +261,8 @@ export function useEndEventRepeat() {
       const { error } = await supabase
         .from("events")
         .update({ repeat_until: until })
-        .eq("id", event.id);
+        .eq("id", event.id)
+        .eq("user_id", uid);
       check(error);
       afterChange();
     },

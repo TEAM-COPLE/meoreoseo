@@ -1,6 +1,6 @@
 import { router, useLocalSearchParams } from 'expo-router';
 import { Plus } from 'lucide-react-native';
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 
 import { ThemedText } from '@/components/themed-text';
@@ -23,7 +23,8 @@ import {
   type Routine,
 } from '@/hooks/use-routines';
 import { useTheme } from '@/hooks/use-theme';
-import { todayISO, WEEKDAY_LABELS } from '@/lib/dates';
+import { useTodayISO } from '@/hooks/use-today';
+import { WEEKDAY_LABELS } from '@/lib/dates';
 import { confirm, errorMessage } from '@/lib/format';
 import { notificationsSupported } from '@/lib/notifications';
 import {
@@ -82,9 +83,12 @@ export default function RoutinesScreen() {
     }
   }
 
-  const today = todayISO();
+  const today = useTodayISO();
   const items = routines.data ?? [];
-  const todayIds = new Set(routinesForDate(items, today).map((r) => r.id));
+  const todayIds = useMemo(
+    () => new Set(routinesForDate(routines.data ?? [], today).map((r) => r.id)),
+    [routines.data, today],
+  );
 
   async function addSamples() {
     setSampleError(null);

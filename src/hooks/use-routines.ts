@@ -38,9 +38,11 @@ export function useRoutines(enabled = true) {
     enabled: enabled && userId !== null,
     queryFn: async (): Promise<Routine[]> => {
       if (isDevMode()) return sortRoutines(await localListRoutines());
+      const uid = requireUserId();
       const { data, error } = await supabase
         .from('routines')
         .select('*')
+        .eq('user_id', uid)
         .order('time_of_day')
         .order('created_at');
       check(error);
@@ -63,9 +65,11 @@ export function useRoutineLogs(enabled = true) {
       const rows = isDevMode()
         ? await localListRoutineLogs(sinceDate)
         : await (async () => {
+            const uid = requireUserId();
             const { data, error } = await supabase
               .from('routine_logs')
               .select('routine_id, log_date')
+              .eq('user_id', uid)
               .gte('log_date', sinceDate);
             check(error);
             return data ?? [];
@@ -84,7 +88,7 @@ export function useRoutineLogs(enabled = true) {
 
 /** 루틴 여러 개를 한꺼번에 추가하거나 고친다. id 가 있으면 고치고, 없으면 새로 만든다. */
 async function saveRoutines(items: { id?: string; values: RoutineValues }[]): Promise<void> {
-  requireUserId();
+  const uid = requireUserId();
   if (isDevMode()) {
     await localSaveRoutines(items);
     return;
@@ -94,10 +98,16 @@ async function saveRoutines(items: { id?: string; values: RoutineValues }[]): Pr
     const { error } = await supabase.from('routines').insert(inserts);
     check(error);
   }
-  for (const item of items) {
-    if (!item.id) continue;
-    const { error } = await supabase.from('routines').update(item.values).eq('id', item.id);
-    check(error);
+  const updates = items.filter(
+    (item): item is { id: string; values: RoutineValues } => Boolean(item.id),
+  );
+  if (updates.length > 0) {
+    const results = await Promise.all(
+      updates.map((item) =>
+        supabase.from('routines').update(item.values).eq('id', item.id).eq('user_id', uid),
+      ),
+    );
+    for (const res of results) check(res.error);
   }
 }
 
@@ -128,12 +138,12 @@ export function useDeleteRoutine() {
   return useMutation({
     mutationKey: KEY,
     mutationFn: async (id: string) => {
-      requireUserId();
+      const uid = requireUserId();
       if (isDevMode()) {
         await localDeleteRoutine(id);
         return;
       }
-      const { error } = await supabase.from('routines').delete().eq('id', id);
+      const { error } = await supabase.from('routines').delete().eq('id', id).eq('user_id', uid);
       check(error);
     },
     onSuccess: () => {
@@ -169,7 +179,7 @@ export function useToggleRoutineLog() {
   return useMutation({
     mutationKey: LOGS_KEY,
     mutationFn: async ({ routineId, date, done }: ToggleVars) => {
-      requireUserId();
+      const uid = requireUserId();
       const target = !done;
       if (isDevMode()) {
         await localSetRoutineLogDone(routineId, date, target);
@@ -188,7 +198,8 @@ export function useToggleRoutineLog() {
           .from('routine_logs')
           .delete()
           .eq('routine_id', routineId)
-          .eq('log_date', date);
+          .eq('log_date', date)
+          .eq('user_id', uid);
         check(error);
       }
     },

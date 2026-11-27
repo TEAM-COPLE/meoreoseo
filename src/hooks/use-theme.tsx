@@ -1,6 +1,14 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as SystemUI from 'expo-system-ui';
-import { createContext, useContext, useEffect, useState, type PropsWithChildren } from 'react';
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useState,
+  type PropsWithChildren,
+} from 'react';
 import { Appearance, Platform, useColorScheme as useSystemColorScheme } from 'react-native';
 
 import { Colors } from '@/constants/theme';
@@ -54,20 +62,21 @@ export function ThemeModeProvider({ children }: PropsWithChildren) {
     SystemUI.setBackgroundColorAsync(background).catch(() => {});
   }, [mode, resolvedScheme]);
 
-  function setMode(next: ThemeMode) {
+  const setMode = useCallback((next: ThemeMode) => {
     setModeState(next);
     AsyncStorage.setItem(STORAGE_KEY, next).catch(() => {});
-  }
+  }, []);
 
-  function toggleScheme() {
+  const toggleScheme = useCallback(() => {
     setMode(resolvedScheme === 'dark' ? 'light' : 'dark');
-  }
+  }, [resolvedScheme, setMode]);
 
-  return (
-    <ThemeModeContext.Provider value={{ mode, resolvedScheme, setMode, toggleScheme }}>
-      {children}
-    </ThemeModeContext.Provider>
+  const value = useMemo<ThemeModeContextValue>(
+    () => ({ mode, resolvedScheme, setMode, toggleScheme }),
+    [mode, resolvedScheme, setMode, toggleScheme],
   );
+
+  return <ThemeModeContext.Provider value={value}>{children}</ThemeModeContext.Provider>;
 }
 
 /** 지금 적용된 밝은/어두운 화면 모드('light' | 'dark')를 돌려준다. */

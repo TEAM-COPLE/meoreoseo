@@ -12,6 +12,7 @@ object PaymentQueue {
   private const val PREFS = "meoreoseo_payment_notifications"
   private const val KEY = "queue"
   private const val MAX_ITEMS = 300
+  private var cached: MutableList<Item>? = null
 
   data class Item(
     val id: String,
@@ -24,9 +25,16 @@ object PaymentQueue {
   private fun prefs(context: Context) =
     context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
 
+  private fun ensureLoaded(context: Context): MutableList<Item> {
+    cached?.let { return it }
+    val loaded = read(context)
+    cached = loaded
+    return loaded
+  }
+
   @Synchronized
   fun add(context: Context, item: Item) {
-    val items = read(context)
+    val items = ensureLoaded(context)
     // 같은 알림이 고쳐져서 다시 올라오면 한 번만 둔다.
     if (items.any { it.id == item.id }) return
     items.add(item)
@@ -36,12 +44,16 @@ object PaymentQueue {
   }
 
   @Synchronized
-  fun list(context: Context): List<Item> = read(context)
+  fun list(context: Context): List<Item> = ensureLoaded(context).toList()
 
   @Synchronized
   fun remove(context: Context, ids: Collection<String>) {
+    if (ids.isEmpty()) return
     val idSet = ids.toSet()
-    write(context, read(context).filterNot { idSet.contains(it.id) })
+    val items = ensureLoaded(context)
+    if (items.removeAll { idSet.contains(it.id) }) {
+      write(context, items)
+    }
   }
 
   private fun read(context: Context): MutableList<Item> {

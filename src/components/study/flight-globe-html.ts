@@ -1,6 +1,6 @@
 /**
  * Globe.gl 기반 3D 지구본 + 실시간 비행 경로 HTML 생성기.
- * 모바일(react-native-webview)과 웹(iframe)에서 동일한 HTML을 사용한다.
+ * 모바일(react-native-webview)과 웹(iframe sandbox="allow-scripts")에서 동일한 HTML을 사용한다.
  */
 
 export type FlightGlobeState = {
@@ -16,13 +16,34 @@ export type FlightGlobeState = {
   routeId: string;
 };
 
+/** <script> 내부에 안전하게 삽입할 수 있도록 HTML 특수문자 및 줄 구분자를 이스케이프한다. */
+export function safeJsonForScript(value: unknown): string {
+  return JSON.stringify(value).replace(/[<>&\u2028\u2029]/g, (ch) => {
+    switch (ch) {
+      case '<':
+        return '\\u003c';
+      case '>':
+        return '\\u003e';
+      case '&':
+        return '\\u0026';
+      case '\u2028':
+        return '\\u2028';
+      case '\u2029':
+        return '\\u2029';
+      default:
+        return ch;
+    }
+  });
+}
+
 export function buildFlightGlobeHtml(initial: FlightGlobeState): string {
-  const initialJson = JSON.stringify(initial);
+  const initialJson = safeJsonForScript(initial);
 
   return `<!DOCTYPE html>
 <html lang="ko">
 <head>
 <meta charset="utf-8" />
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline' https://unpkg.com; img-src https://unpkg.com data: blob:; style-src 'unsafe-inline'; connect-src https://unpkg.com;" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -87,7 +108,10 @@ export function buildFlightGlobeHtml(initial: FlightGlobeState): string {
     transition: opacity 0.3s ease;
   }
 </style>
-<script src="https://unpkg.com/globe.gl@2.43.0/dist/globe.gl.min.js"></script>
+<script
+  src="https://unpkg.com/globe.gl@2.43.0/dist/globe.gl.min.js"
+  crossorigin="anonymous"
+  onerror="window.__globeLoadFailed=true"></script>
 </head>
 <body>
 <div id="globeViz"></div>
@@ -97,8 +121,47 @@ export function buildFlightGlobeHtml(initial: FlightGlobeState): string {
   var DEG = Math.PI / 180;
   var RAD = 180 / Math.PI;
   var currentState = ${initialJson};
-  var lastRouteId = null;
+  var lastRouteKey = null;
   var globe = null;
+  var resizeObs = null;
+  var initAttempts = 0;
+
+  // 매 초마다 DOM/SVG 요소를 새로 만들지 않고 재사용한다.
+  var fromTagEl = document.createElement('div');
+  fromTagEl.className = 'airport-tag';
+
+  var toTagEl = document.createElement('div');
+  toTagEl.className = 'airport-tag';
+
+  var planeWrapEl = document.createElement('div');
+  planeWrapEl.className = 'plane-marker';
+  var planeRingEl = document.createElement('div');
+  planeRingEl.className = 'plane-ring';
+  planeWrapEl.appendChild(planeRingEl);
+  var planeSvgEl = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+  planeSvgEl.setAttribute('width', '20');
+  planeSvgEl.setAttribute('height', '20');
+  planeSvgEl.setAttribute('viewBox', '0 0 24 24');
+  var planePathEl = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+  planePathEl.setAttribute('d', 'M21 16v-2l-8-5V3.5c0-.83-.67-1.5-1.5-1.5S10 2.67 10 3.5V9l-8 5v2l8-2.5V19l-2 1.5V22l3.5-1 3.5 1v-1.5L13 19v-5.5l8 2.5z');
+  planePathEl.setAttribute('fill', '#FFFFFF');
+  planePathEl.setAttribute('stroke', '#060911');
+  planePathEl.setAttribute('stroke-width', '0.7');
+  planePathEl.setAttribute('stroke-linejoin', 'round');
+  planeSvgEl.appendChild(planePathEl);
+  planeWrapEl.appendChild(planeSvgEl);
+
+  var markerItems = [
+    { key: 'from', lat: 0, lng: 0, alt: 0.01 },
+    { key: 'to', lat: 0, lng: 0, alt: 0.01 },
+    { key: 'plane', lat: 0, lng: 0, alt: 0.02 }
+  ];
+
+  function getMarkerElement(d) {
+    if (d.key === 'from') return fromTagEl;
+    if (d.key === 'to') return toTagEl;
+    return planeWrapEl;
+  }
 
   function toVec(lat, lng) {
     var phi = lat * DEG;
@@ -152,27 +215,34 @@ export function buildFlightGlobeHtml(initial: FlightGlobeState): string {
   }
 
   function renderState(st, focusCamera) {
+    if (!st || typeof st !== 'object') return;
     currentState = st;
     if (!globe) return;
 
-    var t = Math.max(0, Math.min(1, st.progress || 0));
-    var distDeg = angularDistanceDeg(st.fromLat, st.fromLng, st.toLat, st.toLng);
+    var t = Math.max(0, Math.min(1, Number(st.progress) || 0));
+    var fromLat = Number(st.fromLat) || 0;
+    var fromLng = Number(st.fromLng) || 0;
+    var toLat = Number(st.toLat) || 0;
+    var toLng = Number(st.toLng) || 0;
+    var arrived = Boolean(st.arrived);
+
+    var distDeg = angularDistanceDeg(fromLat, fromLng, toLat, toLng);
     var arcAlt = Math.max(0.05, Math.min(0.28, distDeg * 0.0032));
-    var planePos = slerp(st.fromLat, st.fromLng, st.toLat, st.toLng, t);
-    var nextPos = slerp(st.fromLat, st.fromLng, st.toLat, st.toLng, Math.min(1, t + 0.02));
-    var prevPos = slerp(st.fromLat, st.fromLng, st.toLat, st.toLng, Math.max(0, t - 0.02));
+    var planePos = slerp(fromLat, fromLng, toLat, toLng, t);
+    var nextPos = slerp(fromLat, fromLng, toLat, toLng, Math.min(1, t + 0.02));
+    var prevPos = slerp(fromLat, fromLng, toLat, toLng, Math.max(0, t - 0.02));
     var heading = t < 0.98
       ? bearing(planePos.lat, planePos.lng, nextPos.lat, nextPos.lng)
       : bearing(prevPos.lat, prevPos.lng, planePos.lat, planePos.lng);
     var planeAlt = Math.sin(Math.PI * t) * arcAlt + 0.015;
-    var activeColor = st.arrived ? '#4ADE80' : '#60A5FA';
+    var activeColor = arrived ? '#4ADE80' : '#60A5FA';
 
     var arcs = [
       {
-        startLat: st.fromLat,
-        startLng: st.fromLng,
-        endLat: st.toLat,
-        endLng: st.toLng,
+        startLat: fromLat,
+        startLng: fromLng,
+        endLat: toLat,
+        endLng: toLng,
         color: ['rgba(255,255,255,0.36)', 'rgba(255,255,255,0.36)'],
         altitude: arcAlt,
         stroke: 0.75,
@@ -184,8 +254,8 @@ export function buildFlightGlobeHtml(initial: FlightGlobeState): string {
 
     if (t > 0.005) {
       arcs.push({
-        startLat: st.fromLat,
-        startLng: st.fromLng,
+        startLat: fromLat,
+        startLng: fromLng,
         endLat: planePos.lat,
         endLng: planePos.lng,
         color: [activeColor, activeColor],
@@ -197,70 +267,57 @@ export function buildFlightGlobeHtml(initial: FlightGlobeState): string {
       });
     }
 
-    globe
-      .arcsData(arcs)
-      .arcColor('color')
-      .arcAltitude('altitude')
-      .arcStroke('stroke')
-      .arcDashLength('dashLen')
-      .arcDashGap('dashGap')
-      .arcDashAnimateTime('dashAnim');
+    globe.arcsData(arcs);
 
-    globe
-      .pointsData([
-        { lat: st.fromLat, lng: st.fromLng, color: activeColor, radius: 0.35 },
-        { lat: st.toLat, lng: st.toLng, color: st.arrived ? '#4ADE80' : '#F8FAFC', radius: 0.35 }
-      ])
-      .pointColor('color')
-      .pointAltitude(0.008)
-      .pointRadius('radius');
+    var routeKey = String(st.routeId || '') + ':' + (arrived ? '1' : '0');
+    var routeChanged = lastRouteKey === null || lastRouteKey.split(':')[0] !== String(st.routeId || '');
+    if (lastRouteKey !== routeKey) {
+      lastRouteKey = routeKey;
+      globe.pointsData([
+        { lat: fromLat, lng: fromLng, color: activeColor, radius: 0.35 },
+        { lat: toLat, lng: toLng, color: arrived ? '#4ADE80' : '#F8FAFC', radius: 0.35 }
+      ]);
+      fromTagEl.textContent = String(st.codeFrom || '');
+      toTagEl.textContent = String(st.codeTo || '');
+      toTagEl.className = 'airport-tag' + (arrived ? ' arrived' : '');
+      planeRingEl.className = 'plane-ring' + (arrived ? ' arrived' : '');
+    }
 
-    globe
-      .htmlElementsData([
-        { type: 'airport', lat: st.fromLat, lng: st.fromLng, alt: 0.01, label: st.codeFrom, arrived: false },
-        { type: 'airport', lat: st.toLat, lng: st.toLng, alt: 0.01, label: st.codeTo, arrived: st.arrived },
-        { type: 'plane', lat: planePos.lat, lng: planePos.lng, alt: planeAlt, heading: heading, arrived: st.arrived }
-      ])
-      .htmlLat('lat')
-      .htmlLng('lng')
-      .htmlAltitude('alt')
-      .htmlElement(function (d) {
-        if (d.type === 'airport') {
-          var tag = document.createElement('div');
-          tag.className = 'airport-tag' + (d.arrived ? ' arrived' : '');
-          tag.textContent = d.label;
-          return tag;
-        }
-        var wrap = document.createElement('div');
-        wrap.className = 'plane-marker';
-        var ring = document.createElement('div');
-        ring.className = 'plane-ring' + (d.arrived ? ' arrived' : '');
-        wrap.appendChild(ring);
-        var svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
-        svg.setAttribute('width', '20');
-        svg.setAttribute('height', '20');
-        svg.setAttribute('viewBox', '0 0 24 24');
-        svg.style.transform = 'rotate(' + d.heading.toFixed(1) + 'deg)';
-        var p = document.createElementNS('http://www.w3.org/2000/svg', 'path');
-        p.setAttribute('d', 'M21 16v-2l-8-5V3.5c0-.83-.67-1.5-1.5-1.5S10 2.67 10 3.5V9l-8 5v2l8-2.5V19l-2 1.5V22l3.5-1 3.5 1v-1.5L13 19v-5.5l8 2.5z');
-        p.setAttribute('fill', '#FFFFFF');
-        p.setAttribute('stroke', '#060911');
-        p.setAttribute('stroke-width', '0.7');
-        p.setAttribute('stroke-linejoin', 'round');
-        svg.appendChild(p);
-        wrap.appendChild(svg);
-        return wrap;
-      });
+    planeSvgEl.style.transform = 'rotate(' + heading.toFixed(1) + 'deg)';
+    markerItems[0].lat = fromLat;
+    markerItems[0].lng = fromLng;
+    markerItems[1].lat = toLat;
+    markerItems[1].lng = toLng;
+    markerItems[2].lat = planePos.lat;
+    markerItems[2].lng = planePos.lng;
+    markerItems[2].alt = planeAlt;
+    globe.htmlElementsData(markerItems.slice());
 
-    if (focusCamera || lastRouteId !== st.routeId) {
-      lastRouteId = st.routeId;
+    if (focusCamera || routeChanged) {
       globe.pointOfView(routeView(st), focusCamera ? 650 : 0);
+    }
+  }
+
+  function showOfflineFallback() {
+    var loading = document.getElementById('loading');
+    if (loading) {
+      loading.textContent = '오프라인 상태에서는 3D 지구본을 불러올 수 없어요.';
+      loading.style.opacity = '1';
     }
   }
 
   function init() {
     var container = document.getElementById('globeViz');
+    if (window.__globeLoadFailed) {
+      showOfflineFallback();
+      return;
+    }
     if (!window.Globe || !container) {
+      initAttempts += 1;
+      if (initAttempts > 50) {
+        showOfflineFallback();
+        return;
+      }
       setTimeout(init, 120);
       return;
     }
@@ -272,6 +329,19 @@ export function buildFlightGlobeHtml(initial: FlightGlobeState): string {
       .showAtmosphere(true)
       .atmosphereColor('#3B82F6')
       .atmosphereAltitude(0.16)
+      .arcColor('color')
+      .arcAltitude('altitude')
+      .arcStroke('stroke')
+      .arcDashLength('dashLen')
+      .arcDashGap('dashGap')
+      .arcDashAnimateTime('dashAnim')
+      .pointColor('color')
+      .pointAltitude(0.008)
+      .pointRadius('radius')
+      .htmlLat('lat')
+      .htmlLng('lng')
+      .htmlAltitude('alt')
+      .htmlElement(getMarkerElement)
       .width(container.clientWidth || window.innerWidth)
       .height(container.clientHeight || window.innerHeight);
 
@@ -301,17 +371,20 @@ export function buildFlightGlobeHtml(initial: FlightGlobeState): string {
 
     window.addEventListener('resize', syncSize);
     if (window.ResizeObserver) {
-      new window.ResizeObserver(syncSize).observe(container);
+      resizeObs = new window.ResizeObserver(syncSize);
+      resizeObs.observe(container);
     }
   }
 
   window.updateFlight = function (next) {
-    var routeChanged = !lastRouteId || lastRouteId !== next.routeId;
+    if (!next || typeof next !== 'object') return;
+    var prevRoute = lastRouteKey ? lastRouteKey.split(':')[0] : null;
+    var routeChanged = !prevRoute || prevRoute !== String(next.routeId || '');
     renderState(next, routeChanged);
   };
 
   window.zoomGlobe = function (factor) {
-    if (!globe) return;
+    if (!globe || typeof factor !== 'number' || !isFinite(factor)) return;
     var pov = globe.pointOfView();
     var nextAlt = Math.max(0.2, Math.min(3.0, pov.altitude * factor));
     globe.pointOfView({ lat: pov.lat, lng: pov.lng, altitude: nextAlt }, 280);
@@ -322,12 +395,33 @@ export function buildFlightGlobeHtml(initial: FlightGlobeState): string {
     globe.pointOfView(routeView(currentState), 550);
   };
 
-  window.addEventListener('message', function (event) {
-    var msg = event && event.data;
+  function handleIncomingMessage(event) {
+    if (window.parent && window.parent !== window && event.source && event.source !== window.parent) {
+      return;
+    }
+    var raw = event && event.data;
+    var msg = raw;
+    if (typeof raw === 'string') {
+      try { msg = JSON.parse(raw); } catch (_e) { return; }
+    }
     if (!msg || typeof msg !== 'object') return;
     if (msg.type === 'update' && msg.state) window.updateFlight(msg.state);
     else if (msg.type === 'zoom' && typeof msg.factor === 'number') window.zoomGlobe(msg.factor);
     else if (msg.type === 'reset') window.resetGlobe();
+  }
+
+  window.addEventListener('message', handleIncomingMessage);
+  document.addEventListener('message', handleIncomingMessage);
+
+  window.addEventListener('pagehide', function () {
+    if (resizeObs) {
+      resizeObs.disconnect();
+      resizeObs = null;
+    }
+    if (globe && typeof globe._destructor === 'function') {
+      globe._destructor();
+      globe = null;
+    }
   });
 
   init();

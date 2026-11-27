@@ -1,5 +1,5 @@
 import { BookOpen, Pause, Plane, Play, Plus, TrainFront, Trophy, X } from 'lucide-react-native';
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 
 import { ThemedText } from '@/components/themed-text';
@@ -14,8 +14,8 @@ import {
   useStudySubjects,
 } from '@/hooks/use-study';
 import { useColorScheme, useTheme } from '@/hooks/use-theme';
+import { useTodayISO } from '@/hooks/use-today';
 import { useAuth } from '@/lib/auth';
-import { todayISO } from '@/lib/dates';
 import { confirm, errorMessage } from '@/lib/format';
 import {
   formatClock,
@@ -61,7 +61,7 @@ export function StudyTimerPanel({ profile }: { profile: StudyProfile | null | un
   const scheme = useColorScheme();
   const { userId } = useAuth();
   const timer = useStudyTimer();
-  const today = todayISO();
+  const today = useTodayISO();
   const sessions = useStudySessions(today, today);
   const subjects = useStudySubjects();
   const addSamples = useAddStudySubjects();
@@ -76,7 +76,10 @@ export function StudyTimerPanel({ profile }: { profile: StudyProfile | null | un
   const running = timer.running && !timer.running.leftAt ? timer.running : null;
   const now = useNow(running !== null);
   const subjectList = subjects.data ?? [];
-  const subjectById = new Map(subjectList.map((subject) => [subject.id, subject]));
+  const subjectById = useMemo(
+    () => new Map((subjects.data ?? []).map((subject) => [subject.id, subject])),
+    [subjects.data],
+  );
 
   // 지금 도는 타이머 중 "오늘"에 해당하는 부분만 오늘 합계에 더한다(자정을 넘긴 경우).
   const runningToday = running
@@ -116,8 +119,11 @@ export function StudyTimerPanel({ profile }: { profile: StudyProfile | null | un
     // 타이머가 도는 중에 다른 과목을 누르면, 지금까지를 기록하고 새 과목으로 이어서 잰다.
     if (running && userId && running.subjectId !== subject.id) {
       setBusy(true);
+      setError(null);
       try {
         await startStudy(userId, { id: subject.id, name: subject.name });
+      } catch (e) {
+        setError(errorMessage(e));
       } finally {
         setBusy(false);
       }
@@ -422,31 +428,35 @@ export function StudyTimerPanel({ profile }: { profile: StudyProfile | null | un
         />
       ) : null}
 
-      <FlightTimerModal
-        visible={flightOpen}
-        running={running !== null}
-        startedAt={running?.startedAt ?? null}
-        elapsedSeconds={running ? runningSeconds(running, now) : 0}
-        subjectName={running ? running.subjectName : (activeSubject?.name ?? null)}
-        subjectColor={subjectColor}
-        busy={busy}
-        onStart={toggleTimer}
-        onStop={toggleTimer}
-        onClose={() => setFlightOpen(false)}
-      />
+      {flightOpen ? (
+        <FlightTimerModal
+          visible
+          running={running !== null}
+          startedAt={running?.startedAt ?? null}
+          elapsedSeconds={running ? runningSeconds(running, now) : 0}
+          subjectName={running ? running.subjectName : (activeSubject?.name ?? null)}
+          subjectColor={subjectColor}
+          busy={busy}
+          onStart={toggleTimer}
+          onStop={toggleTimer}
+          onClose={() => setFlightOpen(false)}
+        />
+      ) : null}
 
-      <SubwayTimerModal
-        visible={subwayOpen}
-        running={running !== null}
-        startedAt={running?.startedAt ?? null}
-        elapsedSeconds={running ? runningSeconds(running, now) : 0}
-        subjectName={running ? running.subjectName : (activeSubject?.name ?? null)}
-        subjectColor={subjectColor}
-        busy={busy}
-        onStart={toggleTimer}
-        onStop={toggleTimer}
-        onClose={() => setSubwayOpen(false)}
-      />
+      {subwayOpen ? (
+        <SubwayTimerModal
+          visible
+          running={running !== null}
+          startedAt={running?.startedAt ?? null}
+          elapsedSeconds={running ? runningSeconds(running, now) : 0}
+          subjectName={running ? running.subjectName : (activeSubject?.name ?? null)}
+          subjectColor={subjectColor}
+          busy={busy}
+          onStart={toggleTimer}
+          onStop={toggleTimer}
+          onClose={() => setSubwayOpen(false)}
+        />
+      ) : null}
     </>
   );
 }

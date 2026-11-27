@@ -1,6 +1,6 @@
-import { router, useLocalSearchParams } from 'expo-router';
+import { Redirect, router, useLocalSearchParams } from 'expo-router';
 import { ChevronLeft, Pin, PinOff, Trash2 } from 'lucide-react-native';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
   AppState,
   KeyboardAvoidingView,
@@ -42,10 +42,13 @@ function leave() {
  * 여기서는 메모를 불러오기만 하고, 실제 편집은 아래 NoteEditor 가 맡는다.
  */
 export default function NoteScreen() {
-  const { id, t } = useLocalSearchParams<{ id: string; t?: string }>();
-  const isNew = id === 'new';
-  const note = useNote(isNew ? null : id);
+  const { id, t } = useLocalSearchParams<{ id: string | string[]; t?: string }>();
+  const rawId = Array.isArray(id) ? id[0] : id;
+  const isPreview = !rawId || rawId.startsWith('preview-');
+  const isNew = rawId === 'new';
+  const note = useNote(isNew || isPreview ? null : rawId);
 
+  if (isPreview) return <Redirect href="/notes" />;
   if (isNew) return <NoteEditor key={`new-${t ?? ''}`} initial={null} />;
 
   if (note.isPending) {
@@ -76,6 +79,11 @@ function NoteEditor({ initial }: { initial: Note | null }) {
   const [title, setTitle] = useState(initial?.title ?? '');
   const [body, setBody] = useState(initial?.body ?? '');
   const [pinned, setPinned] = useState(initial?.pinned ?? false);
+  const draftRef = useRef<NoteDraft>({
+    title: initial?.title ?? '',
+    body: initial?.body ?? '',
+    pinned: initial?.pinned ?? false,
+  });
   const [status, setStatus] = useState<SaveStatus>(initial ? 'saved' : 'idle');
   const [deleting, setDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
@@ -104,15 +112,20 @@ function NoteEditor({ initial }: { initial: Note | null }) {
 
   /** 바뀐 값만 받아 화면에 반영하고, 전체 내용을 자동 저장기에 넘긴다. */
   function change(next: Partial<NoteDraft>) {
+    const merged: NoteDraft = { ...draftRef.current, ...next };
+    draftRef.current = merged;
     if (next.title !== undefined) setTitle(next.title);
     if (next.body !== undefined) setBody(next.body);
     if (next.pinned !== undefined) setPinned(next.pinned);
-    saver.schedule({ title, body, pinned, ...next });
+    saver.schedule(merged);
   }
 
   async function deleteNote() {
     // 아무것도 적지 않은 새 메모는 물어보지 않고 그냥 닫는다.
-    const untouched = initial === null && !title.trim() && !body.trim();
+    const untouched =
+      initial === null &&
+      !draftRef.current.title.trim() &&
+      !draftRef.current.body.trim();
     if (
       !untouched &&
       !(await confirm({
@@ -215,6 +228,7 @@ function NoteEditor({ initial }: { initial: Note | null }) {
           onChangeText={(text) => change({ body: text })}
           placeholder="여기에 적어 보세요. 입력을 멈추면 자동으로 저장됩니다."
           placeholderTextColor={theme.textSecondary}
+          maxLength={50000}
           multiline
           autoFocus={initial === null}
           textAlignVertical="top"

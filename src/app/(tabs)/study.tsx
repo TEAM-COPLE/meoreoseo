@@ -48,9 +48,14 @@ export default function StudyScreen() {
       onRefresh={() =>
         Promise.all([
           queryClient.invalidateQueries({ queryKey: ['study-sessions'] }),
-          queryClient.invalidateQueries({ queryKey: ['study-board'] }),
-          queryClient.invalidateQueries({ queryKey: ['study-ranking'] }),
-          queryClient.invalidateQueries({ queryKey: ['study-groups'] }),
+          queryClient.invalidateQueries({ queryKey: ['study-subjects'] }),
+          ...(session
+            ? [
+                queryClient.invalidateQueries({ queryKey: ['study-board'] }),
+                queryClient.invalidateQueries({ queryKey: ['study-ranking'] }),
+                queryClient.invalidateQueries({ queryKey: ['study-groups'] }),
+              ]
+            : []),
           profile.refetch(),
         ])
       }

@@ -17,6 +17,35 @@ export const notificationsSupported = true;
 
 /** Android 는 알림을 "채널"(종류)로 묶는다. 사용자가 휴대폰 설정에서 채널별로 끌 수 있다. */
 const CHANNEL_ID = 'reminders';
+const SCHEDULE_CONCURRENCY = 20;
+
+let reminderChannelReady = false;
+let errorChannelReady = false;
+let reminderOpQueue: Promise<unknown> = Promise.resolve();
+
+function enqueueReminderOp<T>(task: () => Promise<T>): Promise<T> {
+  const next = reminderOpQueue.catch(() => {}).then(task);
+  reminderOpQueue = next;
+  return next;
+}
+
+async function ensureReminderChannel(): Promise<void> {
+  if (reminderChannelReady) return;
+  await Notifications.setNotificationChannelAsync(CHANNEL_ID, {
+    name: '할 일·일정·습관 알림',
+    importance: AndroidImportance.HIGH,
+  });
+  reminderChannelReady = true;
+}
+
+async function ensureErrorChannel(): Promise<void> {
+  if (errorChannelReady) return;
+  await Notifications.setNotificationChannelAsync(ERROR_CHANNEL_ID, {
+    name: '오류 알림',
+    importance: AndroidImportance.DEFAULT,
+  });
+  errorChannelReady = true;
+}
 
 // 앱을 보고 있는 중에 알림 시각이 되어도 알림을 띄운다(기본값은 띄우지 않음).
 Notifications.setNotificationHandler({
@@ -34,10 +63,7 @@ Notifications.setNotificationHandler({
  */
 export async function requestNotificationPermission(): Promise<boolean> {
   // Android 13 이상은 채널이 먼저 있어야 권한을 묻는 창이 뜬다.
-  await Notifications.setNotificationChannelAsync(CHANNEL_ID, {
-    name: '할 일·일정·습관 알림',
-    importance: AndroidImportance.HIGH,
-  });
+  await ensureReminderChannel();
 
   const current = await Notifications.getPermissionsAsync();
   if (current.granted) return true;
@@ -64,10 +90,7 @@ let askedForErrorPermission = false;
  * @returns 알림을 띄웠으면 true
  */
 export async function showErrorNotification(title: string, body: string): Promise<boolean> {
-  await Notifications.setNotificationChannelAsync(ERROR_CHANNEL_ID, {
-    name: '오류 알림',
-    importance: AndroidImportance.DEFAULT,
-  });
+  await ensureErrorChannel();
 
   const current = await Notifications.getPermissionsAsync();
   let granted = current.granted;
@@ -86,8 +109,8 @@ export async function showErrorNotification(title: string, body: string): Promis
 }
 
 /** 예약해 둔 알림을 모두 지운다. 알림을 끄거나 로그아웃할 때 쓴다. */
-export async function cancelAllReminders(): Promise<void> {
-  await Notifications.cancelAllScheduledNotificationsAsync();
+export function cancelAllReminders(): Promise<void> {
+  return enqueueReminderOp(() => Notifications.cancelAllScheduledNotificationsAsync());
 }
 
 /**
@@ -95,18 +118,26 @@ export async function cancelAllReminders(): Promise<void> {
  * 바뀐 것만 찾아 고치는 대신, 전부 지우고 다시 예약한다(개수가 적어서 이 편이 단순하고 안전하다).
  * @returns 예약한 알림의 개수
  */
-export async function replaceReminders(reminders: Reminder[]): Promise<number> {
-  await Notifications.cancelAllScheduledNotificationsAsync();
+export function replaceReminders(reminders: Reminder[]): Promise<number> {
+  return enqueueReminderOp(async () => {
+    await ensureReminderChannel();
+    await Notifications.cancelAllScheduledNotificationsAsync();
 
-  for (const reminder of reminders) {
-    await Notifications.scheduleNotificationAsync({
-      content: { title: reminder.title, body: reminder.body },
-      trigger: {
-        type: Notifications.SchedulableTriggerInputTypes.DATE,
-        date: reminder.at,
-        channelId: CHANNEL_ID,
-      },
-    });
-  }
-  return reminders.length;
+    for (let i = 0; i < reminders.length; i += SCHEDULE_CONCURRENCY) {
+      const batch = reminders.slice(i, i + SCHEDULE_CONCURRENCY);
+      await Promise.all(
+        batch.map((reminder) =>
+          Notifications.scheduleNotificationAsync({
+            content: { title: reminder.title, body: reminder.body },
+            trigger: {
+              type: Notifications.SchedulableTriggerInputTypes.DATE,
+              date: reminder.at,
+              channelId: CHANNEL_ID,
+            },
+          }),
+        ),
+      );
+    }
+    return reminders.length;
+  });
 }

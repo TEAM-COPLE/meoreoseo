@@ -159,6 +159,15 @@ export function stopQueryPersistence() {
   }
 }
 
+/** 로그아웃·초기화 시 기기 저장소(AsyncStorage)에 남은 평문 쿼리 캐시를 삭제한다. */
+export async function clearPersistedQueryCache(userId: string | null | undefined): Promise<void> {
+  if (!userId) return;
+  if (activeCacheUserId === userId) {
+    stopQueryPersistence();
+  }
+  await AsyncStorage.removeItem(`${CACHE_PREFIX}${userId}`).catch(() => {});
+}
+
 export function hasWarmQueryCache(): boolean {
   return warmCacheLoaded;
 }

@@ -44,18 +44,21 @@ function HabitsWidgetLayout(props: HabitsWidgetProps, environment: WidgetEnviron
   const target = (environment as { target?: string }).target;
   if (target && target.startsWith('toggle-habit:')) {
     const id = target.slice('toggle-habit:'.length);
-    const nextItems = props.items.map((item) => {
-      if (item.id !== id) return item;
-      const nextDone = !item.done;
-      return {
-        ...item,
-        done: nextDone,
-        streak: nextDone ? item.streak + 1 : Math.max(0, item.streak - 1),
-      };
-    });
+    const current = props.items.find((item) => item.id === id);
+    if (!current) return props as unknown as React.JSX.Element;
+    const nextDone = !current.done;
+    const nextItems = props.items.map((item) =>
+      item.id === id
+        ? {
+            ...item,
+            done: nextDone,
+            streak: nextDone ? item.streak + 1 : Math.max(0, item.streak - 1),
+          }
+        : item,
+    );
     return {
       ...props,
-      doneCount: nextItems.filter((item) => item.done).length,
+      doneCount: Math.max(0, props.doneCount + (nextDone ? 1 : -1)),
       items: nextItems,
     } as unknown as React.JSX.Element;
   }

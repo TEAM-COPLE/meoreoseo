@@ -68,14 +68,14 @@ export function useSaveStudyProfile() {
   return useMutation({
     mutationKey: PROFILE_KEY,
     mutationFn: async (values: StudyProfileValues) => {
-      requireUserId();
+      const uid = requireUserId();
       if (isDevMode()) {
         await localSaveStudyProfile(values);
         return;
       }
       const { error } = await supabase
         .from('study_profiles')
-        .upsert({ user_id: requireUserId(), ...values });
+        .upsert({ user_id: uid, ...values });
       friendly(error);
     },
     onSuccess: () => {
@@ -95,9 +95,11 @@ export function useStudySubjects() {
     enabled: userId !== null,
     queryFn: async (): Promise<StudySubject[]> => {
       if (isDevMode()) return localListStudySubjects();
+      const uid = requireUserId();
       const { data, error } = await supabase
         .from('study_subjects')
         .select('*')
+        .eq('user_id', uid)
         .order('sort')
         .order('created_at');
       check(error);
@@ -113,13 +115,13 @@ export function useSaveStudySubject() {
   return useMutation({
     mutationKey: SUBJECTS_KEY,
     mutationFn: async ({ id, values }: { id?: string; values: StudySubjectValues }) => {
-      requireUserId();
+      const uid = requireUserId();
       if (isDevMode()) {
         await localSaveStudySubject(id, values);
         return;
       }
       const { error } = id
-        ? await supabase.from('study_subjects').update(values).eq('id', id)
+        ? await supabase.from('study_subjects').update(values).eq('id', id).eq('user_id', uid)
         : await supabase.from('study_subjects').insert(values);
       check(error);
     },
@@ -152,12 +154,12 @@ export function useDeleteStudySubject() {
   return useMutation({
     mutationKey: SUBJECTS_KEY,
     mutationFn: async (id: string) => {
-      requireUserId();
+      const uid = requireUserId();
       if (isDevMode()) {
         await localDeleteStudySubject(id);
         return;
       }
-      const { error } = await supabase.from('study_subjects').delete().eq('id', id);
+      const { error } = await supabase.from('study_subjects').delete().eq('id', id).eq('user_id', uid);
       check(error);
     },
     onSuccess: () => {
@@ -170,16 +172,18 @@ export function useDeleteStudySubject() {
 // ───────────────────────── 내 기록 ─────────────────────────
 
 /** 기간(from~to, 'YYYY-MM-DD') 안의 내 공부 기록. 시작 시각 순서 */
-export function useStudySessions(from: string, to: string) {
+export function useStudySessions(from: string, to: string, enabled = true) {
   const { userId } = useAuth();
   return useQuery({
     queryKey: [...SESSIONS_KEY, userId, from, to],
-    enabled: userId !== null,
+    enabled: enabled && userId !== null,
     queryFn: async (): Promise<StudySession[]> => {
       if (isDevMode()) return localListStudySessions(from, to);
+      const uid = requireUserId();
       const { data, error } = await supabase
         .from('study_sessions')
         .select('*')
+        .eq('user_id', uid)
         .gte('study_date', from)
         .lte('study_date', to)
         .order('started_at');
@@ -195,12 +199,12 @@ export function useDeleteStudySession() {
   return useMutation({
     mutationKey: SESSIONS_KEY,
     mutationFn: async (id: string) => {
-      requireUserId();
+      const uid = requireUserId();
       if (isDevMode()) {
         await localDeleteStudySession(id);
         return;
       }
-      const { error } = await supabase.from('study_sessions').delete().eq('id', id);
+      const { error } = await supabase.from('study_sessions').delete().eq('id', id).eq('user_id', uid);
       check(error);
     },
     onSuccess: () => {
@@ -300,7 +304,20 @@ export function useUpdateStudyGroup() {
   return useMutation({
     mutationKey: GROUPS_KEY,
     mutationFn: async ({ id, name, description }: { id: string; name: string; description: string }) => {
-      const { error } = await supabase.from('study_groups').update({ name, description }).eq('id', id);
+      const uid = requireUserId();
+      const trimmedName = name.trim();
+      const trimmedDesc = description.trim();
+      if (!trimmedName || trimmedName.length > 30) {
+        throw new Error('그룹 이름은 1~30자로 적어 주세요.');
+      }
+      if (trimmedDesc.length > 100) {
+        throw new Error('소개는 100자 이하로 적어 주세요.');
+      }
+      const { error } = await supabase
+        .from('study_groups')
+        .update({ name: trimmedName, description: trimmedDesc })
+        .eq('id', id)
+        .eq('owner_id', uid);
       check(error);
     },
     onSuccess: () => client.invalidateQueries({ queryKey: GROUPS_KEY }),

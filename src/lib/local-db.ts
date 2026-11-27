@@ -39,6 +39,16 @@ const ALL_TABLES: readonly TableName[] = [
 ];
 
 const tableLocks = new Map<TableName, Promise<unknown>>();
+const tableCache = new Map<TableName, unknown[]>();
+let weatherCityCache: City | null | undefined;
+
+function cmpAsc(a: string, b: string): number {
+  return a < b ? -1 : a > b ? 1 : 0;
+}
+
+function cmpDesc(a: string, b: string): number {
+  return b < a ? -1 : b > a ? 1 : 0;
+}
 
 function withTableLock<T>(table: TableName, task: () => Promise<T>): Promise<T> {
   const prev = tableLocks.get(table) ?? Promise.resolve();
@@ -53,17 +63,28 @@ function withTableLock<T>(table: TableName, task: () => Promise<T>): Promise<T> 
 }
 
 async function readTable<T>(table: TableName): Promise<T[]> {
+  const cached = tableCache.get(table);
+  if (cached !== undefined) return cached as T[];
   const raw = await AsyncStorage.getItem(`${DB_PREFIX}${table}`);
-  if (!raw) return [];
+  if (!raw) {
+    const empty: T[] = [];
+    tableCache.set(table, empty);
+    return empty;
+  }
   try {
     const parsed: unknown = JSON.parse(raw);
-    return Array.isArray(parsed) ? (parsed as T[]) : [];
+    const rows = Array.isArray(parsed) ? (parsed as T[]) : [];
+    tableCache.set(table, rows);
+    return rows;
   } catch {
-    return [];
+    const empty: T[] = [];
+    tableCache.set(table, empty);
+    return empty;
   }
 }
 
 async function writeTable<T>(table: TableName, rows: T[]): Promise<void> {
+  tableCache.set(table, rows);
   await AsyncStorage.setItem(`${DB_PREFIX}${table}`, JSON.stringify(rows));
 }
 
@@ -80,9 +101,13 @@ function generateId(): string {
 }
 
 export async function clearLocalDb(): Promise<void> {
+  weatherCityCache = null;
   await Promise.all(
     ALL_TABLES.map((table) =>
-      withTableLock(table, () => AsyncStorage.removeItem(`${DB_PREFIX}${table}`)),
+      withTableLock(table, async () => {
+        tableCache.delete(table);
+        await AsyncStorage.removeItem(`${DB_PREFIX}${table}`);
+      }),
     ),
   );
 }
@@ -97,9 +122,9 @@ export function sortLocalTodos(items: TodoRow[]): TodoRow[] {
     if (a.due_date !== b.due_date) {
       if (a.due_date === null) return 1;
       if (b.due_date === null) return -1;
-      return a.due_date.localeCompare(b.due_date);
+      return cmpAsc(a.due_date, b.due_date);
     }
-    return b.created_at.localeCompare(a.created_at);
+    return cmpDesc(a.created_at, b.created_at);
   });
 }
 
@@ -242,8 +267,8 @@ export async function localListTransactions(start: string, end: string): Promise
   return rows
     .filter((row) => row.occurred_on >= start && row.occurred_on <= end)
     .sort((a, b) => {
-      if (a.occurred_on !== b.occurred_on) return b.occurred_on.localeCompare(a.occurred_on);
-      return b.created_at.localeCompare(a.created_at);
+      if (a.occurred_on !== b.occurred_on) return cmpDesc(a.occurred_on, b.occurred_on);
+      return cmpDesc(a.created_at, b.created_at);
     });
 }
 
@@ -430,7 +455,7 @@ export async function localListHabits(): Promise<HabitRow[]> {
   const rows = await readTable<HabitRow>('habits');
   return rows
     .filter((row) => !row.archived)
-    .sort((a, b) => a.created_at.localeCompare(b.created_at));
+    .sort((a, b) => cmpAsc(a.created_at, b.created_at));
 }
 
 export async function localSaveHabit(id: string | undefined, name: string): Promise<void> {
@@ -605,7 +630,7 @@ export async function localListNotes(): Promise<NoteRow[]> {
   const rows = await readTable<NoteRow>('notes');
   return [...rows].sort((a, b) => {
     if (a.pinned !== b.pinned) return a.pinned ? -1 : 1;
-    return b.updated_at.localeCompare(a.updated_at);
+    return cmpDesc(a.updated_at, b.updated_at);
   });
 }
 
@@ -668,7 +693,7 @@ type TagRow = Tables<'tags'>;
 
 export async function localListTags(): Promise<TagRow[]> {
   const rows = await readTable<TagRow>('tags');
-  return [...rows].sort((a, b) => a.created_at.localeCompare(b.created_at));
+  return [...rows].sort((a, b) => cmpAsc(a.created_at, b.created_at));
 }
 
 export async function localSaveTag(
@@ -729,8 +754,12 @@ export async function localDeleteTag(id: string): Promise<void> {
 // ───────────────────────── 날씨 지역 (weather_city) ─────────────────────────
 
 export async function localGetWeatherCity(): Promise<City | null> {
+  if (weatherCityCache !== undefined) return weatherCityCache;
   const raw = await AsyncStorage.getItem(`${DB_PREFIX}weather_city`);
-  if (!raw) return null;
+  if (!raw) {
+    weatherCityCache = null;
+    return null;
+  }
   try {
     const parsed = JSON.parse(raw) as Partial<City>;
     if (
@@ -740,15 +769,19 @@ export async function localGetWeatherCity(): Promise<City | null> {
       typeof parsed.latitude === 'number' &&
       typeof parsed.longitude === 'number'
     ) {
-      return parsed as City;
+      weatherCityCache = parsed as City;
+      return weatherCityCache;
     }
+    weatherCityCache = null;
     return null;
   } catch {
+    weatherCityCache = null;
     return null;
   }
 }
 
 export async function localSaveWeatherCity(city: City): Promise<void> {
+  weatherCityCache = city;
   await AsyncStorage.setItem(`${DB_PREFIX}weather_city`, JSON.stringify(city));
 }
 
@@ -787,7 +820,7 @@ export async function localSaveStudyProfile(values: {
 
 export async function localListStudySubjects(): Promise<StudySubjectRow[]> {
   const rows = await readTable<StudySubjectRow>('study_subjects');
-  return [...rows].sort((a, b) => a.sort - b.sort || a.created_at.localeCompare(b.created_at));
+  return [...rows].sort((a, b) => a.sort - b.sort || cmpAsc(a.created_at, b.created_at));
 }
 
 export async function localSaveStudySubject(
@@ -856,7 +889,7 @@ export async function localListStudySessions(
   const rows = await readTable<StudySessionRow>('study_sessions');
   return rows
     .filter((row) => row.study_date >= from && row.study_date <= to)
-    .sort((a, b) => a.started_at.localeCompare(b.started_at));
+    .sort((a, b) => cmpAsc(a.started_at, b.started_at));
 }
 
 export async function localAddStudySession(values: {

@@ -209,6 +209,8 @@ function matchesRule(rule: RepeatRule, anchor: Date, date: Date): boolean {
 
 /** 한 번에 펼치는 날짜의 최대 개수 (실수로 너무 긴 기간을 넣었을 때를 막는다) */
 const MAX_OCCURRENCES = 400;
+/** 비정상적으로 먼 종료일(예: 9999-12-31)이 들어왔을 때 무한에 가까운 루프를 막는 최대 탐색 일수 */
+const MAX_SCAN_DAYS = 40_000;
 
 /** anchor 부터 반복되는 날짜 중 from ~ to 사이(둘 다 포함)를 하루씩 살펴 최대 limit 개 모은다. */
 function collectOccurrences(
@@ -223,7 +225,8 @@ function collectOccurrences(
   const anchorDate = parseISODate(anchor);
   const cursor = parseISODate(first);
   const result: string[] = [];
-  for (let iso = first; iso <= to && result.length < limit; ) {
+  let scanned = 0;
+  for (let iso = first; iso <= to && result.length < limit && scanned < MAX_SCAN_DAYS; scanned += 1) {
     // 기준 날짜(처음 고른 날짜)는 규칙과 상관없이 항상 들어간다.
     if (iso === anchor || matchesRule(rule, anchorDate, cursor)) result.push(iso);
     cursor.setDate(cursor.getDate() + 1);

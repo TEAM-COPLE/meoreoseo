@@ -33,7 +33,10 @@ export function DateField({ label, value, onChange, clearable = false }: Props) 
         <Pressable
           accessibilityRole="button"
           accessibilityLabel={`${label} 고르기`}
-          onPress={() => setOpen((current) => !current)}
+          onPress={() => {
+            if (!open) setMonth(yearMonthOf(value ?? todayISO()));
+            setOpen((current) => !current);
+          }}
           style={[
             styles.field,
             { backgroundColor: theme.backgroundElement, borderColor: theme.border },
