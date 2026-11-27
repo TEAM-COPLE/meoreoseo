@@ -1,3 +1,4 @@
+import { router } from "expo-router";
 import {
   Bell,
   Info,
@@ -11,16 +12,16 @@ import {
   type LucideIcon,
 } from "lucide-react-native";
 import { useState, type ReactNode } from "react";
-import { ScrollView, StyleSheet, View } from "react-native";
+import { StyleSheet, View } from "react-native";
 
 import { GoogleCalendarCard } from "@/components/google-calendar-card";
 import { NotificationSettingsCard } from "@/components/notification-settings-card";
 import { ThemedText } from "@/components/themed-text";
 import { Button } from "@/components/ui/button";
-import { Card } from "@/components/ui/screen";
+import { Card, Screen } from "@/components/ui/screen";
 import { Segmented } from "@/components/ui/segmented";
 import { VersionInfoCard } from "@/components/version-info-card";
-import { MaxContentWidth, Radius, Spacing } from "@/constants/theme";
+import { Radius, Spacing } from "@/constants/theme";
 import { useTheme, useThemeMode, type ThemeMode } from "@/hooks/use-theme";
 import { exitDevMode, useAuth } from "@/lib/auth";
 import { confirm, errorMessage } from "@/lib/format";
@@ -40,6 +41,15 @@ const PROVIDER_LABEL: Record<string, string> = {
   kakao: "카카오",
   email: "이메일",
 };
+
+/** 이전 화면으로 돌아간다. 주소로 바로 열거나 새로고침한 경우에는 홈으로 이동한다. */
+function leave() {
+  if (router.canGoBack()) {
+    router.back();
+  } else {
+    router.replace("/");
+  }
+}
 
 /**
  * 설정 화면. 위에서부터 [내 계정] [화면] [알림] [앱 정보] 순서로 놓는다.
@@ -113,10 +123,7 @@ export default function SettingsScreen() {
   }
 
   return (
-    <ScrollView
-      style={[styles.root, { backgroundColor: theme.background }]}
-      contentContainerStyle={styles.content}
-    >
+    <Screen title="설정" onBack={leave} hideSettings>
       <Section title="내 계정" icon={User}>
         <Card>
           <View style={styles.profile}>
@@ -200,7 +207,7 @@ export default function SettingsScreen() {
       <Section title="앱 정보" icon={Info}>
         <VersionInfoCard />
       </Section>
-    </ScrollView>
+    </Screen>
   );
 }
 
@@ -229,17 +236,6 @@ function Section({
 }
 
 const styles = StyleSheet.create({
-  root: {
-    flex: 1,
-  },
-  content: {
-    width: "100%",
-    maxWidth: MaxContentWidth,
-    alignSelf: "center",
-    padding: Spacing.three,
-    paddingBottom: Spacing.five,
-    gap: Spacing.four,
-  },
   section: {
     gap: Spacing.two,
   },

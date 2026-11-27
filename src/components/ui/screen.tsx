@@ -46,6 +46,8 @@ type Props = PropsWithChildren<{
   action?: ReactNode;
   /** 넘기면 제목 왼쪽에 "‹" 뒤로 가기 버튼이 생긴다. 탭이 아닌 화면에서 쓴다. */
   onBack?: () => void;
+  /** true 면 헤더 오른쪽의 "설정" 버튼을 숨긴다(설정 화면 자체에서 사용). */
+  hideSettings?: boolean;
   /** 화면 아래쪽에 떠 있는 작업 막대(예: 멀티 삭제 바) */
   overlay?: ReactNode;
   /** 아래로 당겨서 새로고침할 때 호출할 함수 */
@@ -70,6 +72,7 @@ export function Screen({
   title,
   action,
   onBack,
+  hideSettings = false,
   overlay,
   onRefresh,
   wide = false,
@@ -225,23 +228,25 @@ export function Screen({
             {title}
           </ThemedText>
           {action}
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel="설정"
-            hitSlop={8}
-            onPress={() => router.push("/settings")}
-            style={({ pressed }) => [
-              styles.account,
-              {
-                backgroundColor: theme.background,
-                borderColor: theme.border,
-                opacity: pressed ? 0.7 : 1,
-              },
-            ]}
-          >
-            <Settings size={15} color={theme.textSecondary} strokeWidth={1.8} />
-            <ThemedText type="small">설정</ThemedText>
-          </Pressable>
+          {!hideSettings ? (
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="설정"
+              hitSlop={8}
+              onPress={() => router.push("/settings")}
+              style={({ pressed }) => [
+                styles.account,
+                {
+                  backgroundColor: theme.background,
+                  borderColor: theme.border,
+                  opacity: pressed ? 0.7 : 1,
+                },
+              ]}
+            >
+              <Settings size={15} color={theme.textSecondary} strokeWidth={1.8} />
+              <ThemedText type="small">설정</ThemedText>
+            </Pressable>
+          ) : null}
         </View>
 
         {children}
