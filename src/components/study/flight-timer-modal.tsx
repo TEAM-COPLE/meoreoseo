@@ -1,6 +1,9 @@
 import * as ScreenOrientation from 'expo-screen-orientation';
 import {
+  Armchair,
   CheckCircle2,
+  ChevronDown,
+  ChevronUp,
   Columns2,
   LocateFixed,
   Minus,
@@ -33,6 +36,13 @@ import { useTheme, useThemeMode } from '@/hooks/use-theme';
 import { formatClock } from '@/lib/study';
 
 import { ArrivalOverlay } from './arrival-overlay';
+import { FadeSlideIn } from './common';
+import {
+  BoardingPassTearOverlay,
+  FlightSeatSelector,
+  seatClassLabel,
+  seatPositionLabel,
+} from './flight-boarding';
 import {
   buildAtcTimeline,
   formatAtcTimestamp,
@@ -92,6 +102,9 @@ export function FlightTimerModal({
   const [mapInteracting, setMapInteracting] = useState(false);
   const [showAtc, setShowAtc] = useState(true);
   const [flightMode, setFlightMode] = useState<'with-taxi' | 'immediate'>('with-taxi');
+  const [selectedSeat, setSelectedSeat] = useState<string>('7A');
+  const [seatPickerOpen, setSeatPickerOpen] = useState(false);
+  const [tearingMode, setTearingMode] = useState<'with-taxi' | 'immediate' | null>(null);
   const [landscapeOverride, setLandscapeOverride] = useState<boolean | null>(null);
   const [dismissedArrivalKey, setDismissedArrivalKey] = useState<string | null>(null);
 
@@ -230,8 +243,8 @@ export function FlightTimerModal({
       <View pointerEvents="none" style={styles.globeTopOverlay}>
         <View style={styles.overlayPill}>
           <Plane size={12} color={pathAccent} strokeWidth={2.2} />
-          <ThemedText type="smallBold" style={{ color: accent, fontSize: 12 }}>
-            {route.flightNo}
+          <ThemedText type="smallBold" numberOfLines={1} style={{ color: accent, fontSize: 12 }}>
+            {route.flightNo} · {selectedSeat}
           </ThemedText>
           {subjectName ? (
             <>
@@ -239,7 +252,10 @@ export function FlightTimerModal({
                 ·
               </ThemedText>
               <View style={[styles.subjectDot, { backgroundColor: subjectColor }]} />
-              <ThemedText type="small" style={{ color: accent, fontSize: 12 }}>
+              <ThemedText
+                type="small"
+                numberOfLines={1}
+                style={{ color: accent, fontSize: 12, flexShrink: 1 }}>
                 {subjectName}
               </ThemedText>
             </>
@@ -267,6 +283,7 @@ export function FlightTimerModal({
           ) : null}
           <ThemedText
             type="smallBold"
+            numberOfLines={1}
             style={{
               color: arrived ? theme.success : running ? '#93C5FD' : accentMuted,
               fontSize: 12,
@@ -423,53 +440,54 @@ export function FlightTimerModal({
             atcBaseMs + Math.round(msg.atProgress * targetSeconds * 1000),
           );
           return (
-            <View
-              key={msg.id}
-              style={[
-                styles.atcItem,
-                {
-                  backgroundColor: isLatest
-                    ? 'rgba(96, 165, 250, 0.11)'
-                    : 'rgba(255, 255, 255, 0.03)',
-                  borderColor: isLatest
-                    ? 'rgba(96, 165, 250, 0.35)'
-                    : 'rgba(255, 255, 255, 0.08)',
-                },
-              ]}>
-              <View style={styles.atcMetaRow}>
+            <FadeSlideIn key={msg.id}>
+              <View
+                style={[
+                  styles.atcItem,
+                  {
+                    backgroundColor: isLatest
+                      ? 'rgba(96, 165, 250, 0.11)'
+                      : 'rgba(255, 255, 255, 0.03)',
+                    borderColor: isLatest
+                      ? 'rgba(96, 165, 250, 0.35)'
+                      : 'rgba(255, 255, 255, 0.08)',
+                  },
+                ]}>
+                <View style={styles.atcMetaRow}>
+                  <ThemedText
+                    type="smallBold"
+                    style={{
+                      color: isLatest ? '#93C5FD' : accentMuted,
+                      fontSize: 11,
+                    }}>
+                    {msg.stage}
+                  </ThemedText>
+                  <ThemedText
+                    type="small"
+                    style={{ color: accentMuted, fontSize: 11 }}>
+                    {msg.speaker}
+                  </ThemedText>
+                </View>
+                <ThemedText
+                  type="small"
+                  style={[styles.atcTimestamp, { color: accentMuted }]}>
+                  {msgTimestamp}
+                </ThemedText>
                 <ThemedText
                   type="smallBold"
                   style={{
-                    color: isLatest ? '#93C5FD' : accentMuted,
-                    fontSize: 11,
+                    color: msg.highlight && isLatest ? '#FFFFFF' : '#E2E8F0',
+                    lineHeight: 19,
                   }}>
-                  {msg.stage}
+                  &ldquo;{msg.en}&rdquo;
                 </ThemedText>
                 <ThemedText
                   type="small"
-                  style={{ color: accentMuted, fontSize: 11 }}>
-                  {msg.speaker}
+                  style={{ color: accentMuted, lineHeight: 18 }}>
+                  {msg.ko}
                 </ThemedText>
               </View>
-              <ThemedText
-                type="small"
-                style={[styles.atcTimestamp, { color: accentMuted }]}>
-                {msgTimestamp}
-              </ThemedText>
-              <ThemedText
-                type="smallBold"
-                style={{
-                  color: msg.highlight && isLatest ? '#FFFFFF' : '#E2E8F0',
-                  lineHeight: 19,
-                }}>
-                &ldquo;{msg.en}&rdquo;
-              </ThemedText>
-              <ThemedText
-                type="small"
-                style={{ color: accentMuted, lineHeight: 18 }}>
-                {msg.ko}
-              </ThemedText>
-            </View>
+            </FadeSlideIn>
           );
         })}
       </View>
@@ -602,6 +620,47 @@ export function FlightTimerModal({
         )}
       </View>
 
+      {/* 좌석 선택 아코디언 */}
+      {!running ? (
+        <View style={styles.seatSection}>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="비행기 좌석 선택 열기"
+            accessibilityState={{ expanded: seatPickerOpen }}
+            onPress={() => setSeatPickerOpen((prev) => !prev)}
+            style={({ pressed }) => [
+              styles.seatToggleRow,
+              {
+                backgroundColor: theme.backgroundElement,
+                borderColor: seatPickerOpen ? theme.tint : theme.border,
+                opacity: pressed ? 0.78 : 1,
+              },
+            ]}>
+            <View style={styles.seatToggleLeft}>
+              <Armchair size={16} color={theme.textSecondary} strokeWidth={1.9} />
+              <ThemedText type="smallBold">좌석</ThemedText>
+              <ThemedText type="small" themeColor="textSecondary">
+                {selectedSeat} ({seatClassLabel(selectedSeat)} · {seatPositionLabel(selectedSeat)})
+              </ThemedText>
+            </View>
+            {seatPickerOpen ? (
+              <ChevronUp size={16} color={theme.textSecondary} strokeWidth={2} />
+            ) : (
+              <ChevronDown size={16} color={theme.textSecondary} strokeWidth={2} />
+            )}
+          </Pressable>
+
+          {seatPickerOpen ? (
+            <FlightSeatSelector
+              selectedSeat={selectedSeat}
+              onSelectSeat={(seat) => {
+                setSelectedSeat(seat);
+              }}
+            />
+          ) : null}
+        </View>
+      ) : null}
+
       {running ? (
         <Pressable
           accessibilityRole="button"
@@ -624,38 +683,38 @@ export function FlightTimerModal({
         <View style={styles.launchActions}>
           <Pressable
             accessibilityRole="button"
-            disabled={busy}
+            disabled={busy || tearingMode !== null}
             onPress={() => {
               setFlightMode('with-taxi');
-              onStart();
+              setTearingMode('with-taxi');
             }}
             style={({ pressed }) => [
               styles.actionBtn,
               {
                 backgroundColor: theme.tint,
                 borderColor: theme.tint,
-                opacity: busy ? 0.55 : pressed ? 0.8 : 1,
+                opacity: busy || tearingMode !== null ? 0.55 : pressed ? 0.8 : 1,
               },
             ]}>
             <PlaneTakeoff size={19} color={theme.onTint} strokeWidth={2} />
             <ThemedText type="default" style={[styles.actionText, { color: theme.onTint }]}>
-              {`${route.cityTo}(${route.codeTo})로 출발 · 택싱 포함 (${formatFlightMinutes(Math.round(totalWithTaxiSeconds / 60))})`}
+              {`${route.codeTo} 출발 · 택싱 포함 (${formatFlightMinutes(Math.round(totalWithTaxiSeconds / 60))})`}
             </ThemedText>
           </Pressable>
 
           <Pressable
             accessibilityRole="button"
-            disabled={busy}
+            disabled={busy || tearingMode !== null}
             onPress={() => {
               setFlightMode('immediate');
-              onStart();
+              setTearingMode('immediate');
             }}
             style={({ pressed }) => [
               styles.actionBtn,
               {
                 backgroundColor: theme.backgroundElement,
                 borderColor: theme.border,
-                opacity: busy ? 0.55 : pressed ? 0.8 : 1,
+                opacity: busy || tearingMode !== null ? 0.55 : pressed ? 0.8 : 1,
               },
             ]}>
             <Zap size={17} color={theme.text} strokeWidth={2} />
@@ -704,6 +763,7 @@ export function FlightTimerModal({
               onPress={() => setShowAtc((prev) => !prev)}
               style={({ pressed }) => [
                 styles.topPillBtn,
+                styles.atcToggleBtn,
                 {
                   backgroundColor: showAtc ? theme.tint : theme.backgroundElement,
                   borderColor: showAtc ? theme.tint : theme.border,
@@ -717,6 +777,7 @@ export function FlightTimerModal({
               />
               <ThemedText
                 type="smallBold"
+                numberOfLines={1}
                 style={{
                   color: showAtc ? theme.onTint : theme.text,
                   fontSize: 12,
@@ -812,6 +873,23 @@ export function FlightTimerModal({
           </ScrollView>
         )}
 
+        <BoardingPassTearOverlay
+          visible={tearingMode !== null}
+          route={route}
+          seat={selectedSeat}
+          subjectName={subjectName}
+          totalMinutes={
+            tearingMode === 'immediate'
+              ? route.minutes
+              : Math.round(totalWithTaxiSeconds / 60)
+          }
+          modeLabel={tearingMode === 'immediate' ? '바로 이륙' : '택싱 포함'}
+          onComplete={() => {
+            setTearingMode(null);
+            onStart();
+          }}
+        />
+
         <ArrivalOverlay
           visible={showArrivalOverlay}
           backgroundColor="#1D4ED8"
@@ -865,7 +943,12 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'center',
+    flexShrink: 0,
     gap: 4,
+  },
+  atcToggleBtn: {
+    minWidth: 82,
   },
   closeBtn: {
     width: 32,
@@ -929,6 +1012,7 @@ const styles = StyleSheet.create({
   overlayPill: {
     flexDirection: 'row',
     alignItems: 'center',
+    flexShrink: 1,
     gap: 6,
     paddingHorizontal: 10,
     paddingVertical: 5,
@@ -945,6 +1029,8 @@ const styles = StyleSheet.create({
   statusPill: {
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'center',
+    flexShrink: 0,
     gap: 4,
     paddingHorizontal: 10,
     paddingVertical: 5,
@@ -1123,11 +1209,32 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     paddingVertical: Spacing.three,
   },
+  seatSection: {
+    gap: Spacing.two,
+  },
+  seatToggleRow: {
+    minHeight: 44,
+    paddingHorizontal: Spacing.three,
+    borderRadius: Radius.medium,
+    borderWidth: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: Spacing.two,
+  },
+  seatToggleLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.two,
+    flexShrink: 1,
+  },
   launchActions: {
     gap: Spacing.two,
   },
   actionBtn: {
     minHeight: 52,
+    paddingHorizontal: Spacing.three,
+    paddingVertical: Spacing.two + 2,
     borderRadius: Radius.large,
     borderWidth: 1,
     flexDirection: 'row',
@@ -1137,6 +1244,8 @@ const styles = StyleSheet.create({
   },
   actionText: {
     fontWeight: '700',
+    flexShrink: 1,
+    textAlign: 'center',
   },
   footerHint: {
     textAlign: 'center',
