@@ -1,6 +1,6 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { router, useLocalSearchParams } from "expo-router";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Pressable, StyleSheet, View } from "react-native";
 
 import { ThemedText } from "@/components/themed-text";
@@ -50,6 +50,15 @@ export function GoogleCalendarCard() {
   const [busy, setBusy] = useState<"connect" | "disconnect" | "sync" | null>(
     null,
   );
+  const syncTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const connectedTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (syncTimerRef.current) clearTimeout(syncTimerRef.current);
+      if (connectedTimerRef.current) clearTimeout(connectedTimerRef.current);
+    };
+  }, []);
 
   // 웹: 구글 로그인을 마치고 /account?google=connected 로 돌아왔을 때 안내를 띄운다.
   // 화면이 처음 열릴 때의 값만 기억해 두고, 주소에서는 바로 지운다.
@@ -73,7 +82,9 @@ export function GoogleCalendarCard() {
     client.invalidateQueries({ queryKey: key });
     // 첫 동기화가 서버에서 도는 동안 잠시 뒤에 일정을 다시 불러온다.
     if (google === "connected") {
-      setTimeout(() => {
+      if (connectedTimerRef.current) clearTimeout(connectedTimerRef.current);
+      connectedTimerRef.current = setTimeout(() => {
+        connectedTimerRef.current = null;
         client.invalidateQueries({ queryKey: ["events"] });
         client.invalidateQueries({ queryKey: key });
       }, 8000);
@@ -106,7 +117,11 @@ export function GoogleCalendarCard() {
     setMessage(null);
     requestGoogleSync(0);
     // 맞추는 데 몇 초 걸린다. 버튼은 잠깐만 돌게 한다.
-    setTimeout(() => setBusy(null), 3000);
+    if (syncTimerRef.current) clearTimeout(syncTimerRef.current);
+    syncTimerRef.current = setTimeout(() => {
+      syncTimerRef.current = null;
+      setBusy(null);
+    }, 3000);
   }
 
   async function disconnect() {
@@ -118,7 +133,10 @@ export function GoogleCalendarCard() {
       setMessage(
         '연결을 끊었어요. 구글 캘린더의 "멀어서" 캘린더는 남아 있으니 필요 없으면 구글에서 지워 주세요.',
       );
-      await client.invalidateQueries({ queryKey: key });
+      await Promise.all([
+        client.invalidateQueries({ queryKey: key }),
+        client.removeQueries({ queryKey: ["google-calendar-choices"] }),
+      ]);
     } catch (e) {
       setError(errorMessage(e));
     } finally {
@@ -185,6 +203,7 @@ export function GoogleCalendarCard() {
 
       {connected && !needsReauth && data ? (
         <CalendarPicker
+          userId={userId}
           status={data}
           onReconnect={connect}
           busy={busy !== null}
@@ -236,10 +255,12 @@ export function GoogleCalendarCard() {
  * 고른 캘린더의 일정은 앱에서도 보이고 고칠 수 있다(남이 만든 초대 등은 보기만).
  */
 function CalendarPicker({
+  userId,
   status,
   onReconnect,
   busy,
 }: {
+  userId: string | null;
   status: GoogleCalendarStatus;
   onReconnect: () => void;
   busy: boolean;
@@ -250,7 +271,7 @@ function CalendarPicker({
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const choices = useQuery({
-    queryKey: ["google-calendar-choices"],
+    queryKey: ["google-calendar-choices", userId, status.email],
     enabled: open && status.canPickCalendars,
     queryFn: fetchGoogleCalendars,
     staleTime: 0,

@@ -1,3 +1,4 @@
+import { memo } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 
 import { ThemedText } from '@/components/themed-text';
@@ -8,7 +9,7 @@ import { formatClock, rankLabel } from '@/lib/study';
 import { LiveBadge } from './common';
 
 /** 그룹·랭킹 목록의 한 줄: 등수, 닉네임, 공부 중 표시, 한 줄 다짐, 공부 시간 */
-export function BoardRow({
+export const BoardRow = memo(function BoardRow({
   rank,
   nickname,
   statusMessage,
@@ -17,6 +18,8 @@ export function BoardRow({
   liveSubject,
   isMe,
   isOwner = false,
+  memberId,
+  onKickMember,
   onLongPress,
 }: {
   rank: number;
@@ -27,14 +30,20 @@ export function BoardRow({
   liveSubject?: string | null;
   isMe: boolean;
   isOwner?: boolean;
+  memberId?: string;
+  onKickMember?: (userId: string, nickname: string) => void;
   onLongPress?: () => void;
 }) {
   const theme = useTheme();
   const top = rank <= 3;
+  const interactive = Boolean(onLongPress || (memberId && onKickMember));
   return (
     <Pressable
-      disabled={!onLongPress}
-      onLongPress={onLongPress}
+      disabled={!interactive}
+      onLongPress={
+        onLongPress ??
+        (memberId && onKickMember ? () => onKickMember(memberId, nickname) : undefined)
+      }
       delayLongPress={450}
       accessibilityLabel={`${rank}등 ${nickname}${live ? ' 공부 중' : ''}`}
       style={[
@@ -69,7 +78,7 @@ export function BoardRow({
       </ThemedText>
     </Pressable>
   );
-}
+});
 
 const styles = StyleSheet.create({
   row: {

@@ -1,7 +1,8 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { useEffect, useState } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useCallback } from 'react';
 
-import { activeUserId } from '@/lib/auth';
+import { useAuth } from '@/lib/auth';
 
 export type TodaySectionId =
   | 'weather'
@@ -45,9 +46,10 @@ const DEFAULT_STATE: TodayLayoutState = {
 };
 
 const KEY_PREFIX = 'meoreoseo:today-layout:';
+const QUERY_KEY = ['today-layout'] as const;
 
-function storageKey() {
-  return `${KEY_PREFIX}${activeUserId() ?? 'anon'}`;
+function storageKey(userId: string | null) {
+  return `${KEY_PREFIX}${userId ?? 'anon'}`;
 }
 
 function isSectionId(value: unknown): value is TodaySectionId {
@@ -82,66 +84,87 @@ function normalizeState(raw: unknown): TodayLayoutState {
  * 오늘 화면의 카드 순서·숨김·접힘 상태를 기기에 저장하는 훅.
  */
 export function useTodayLayout() {
-  const [layout, setLayout] = useState<TodayLayoutState>(DEFAULT_STATE);
+  const { userId } = useAuth();
+  const client = useQueryClient();
 
-  useEffect(() => {
-    let active = true;
-    AsyncStorage.getItem(storageKey())
-      .then((raw) => {
-        if (!active || !raw) return;
-        setLayout(normalizeState(JSON.parse(raw)));
-      })
-      .catch(() => {});
-    return () => {
-      active = false;
-    };
-  }, []);
+  const query = useQuery({
+    queryKey: [...QUERY_KEY, userId],
+    enabled: userId !== null,
+    staleTime: Infinity,
+    gcTime: Infinity,
+    queryFn: async (): Promise<TodayLayoutState> => {
+      if (!userId) return DEFAULT_STATE;
+      try {
+        const raw = await AsyncStorage.getItem(storageKey(userId));
+        return raw ? normalizeState(JSON.parse(raw)) : DEFAULT_STATE;
+      } catch {
+        return DEFAULT_STATE;
+      }
+    },
+  });
 
-  function update(updater: (prev: TodayLayoutState) => TodayLayoutState) {
-    setLayout((prev) => {
-      const next = updater(prev);
-      AsyncStorage.setItem(storageKey(), JSON.stringify(next)).catch(() => {});
-      return next;
-    });
-  }
+  const layout = query.data ?? DEFAULT_STATE;
 
-  function moveSection(id: TodaySectionId, direction: -1 | 1) {
-    update((prev) => {
-      const idx = prev.order.indexOf(id);
-      const nextIdx = idx + direction;
-      if (idx < 0 || nextIdx < 0 || nextIdx >= prev.order.length) return prev;
-      const nextOrder = [...prev.order];
-      [nextOrder[idx], nextOrder[nextIdx]] = [nextOrder[nextIdx], nextOrder[idx]];
-      return { ...prev, order: nextOrder };
-    });
-  }
+  const update = useCallback(
+    (updater: (prev: TodayLayoutState) => TodayLayoutState) => {
+      const cacheKey = [...QUERY_KEY, userId];
+      const current = client.getQueryData<TodayLayoutState>(cacheKey) ?? DEFAULT_STATE;
+      const next = updater(current);
+      client.setQueryData<TodayLayoutState>(cacheKey, next);
+      AsyncStorage.setItem(storageKey(userId), JSON.stringify(next)).catch(() => {});
+    },
+    [client, userId],
+  );
+
+  const moveSection = useCallback(
+    (id: TodaySectionId, direction: -1 | 1) => {
+      update((prev) => {
+        const idx = prev.order.indexOf(id);
+        const nextIdx = idx + direction;
+        if (idx < 0 || nextIdx < 0 || nextIdx >= prev.order.length) return prev;
+        const nextOrder = [...prev.order];
+        [nextOrder[idx], nextOrder[nextIdx]] = [nextOrder[nextIdx], nextOrder[idx]];
+        return { ...prev, order: nextOrder };
+      });
+    },
+    [update],
+  );
 
   /** 끌어서 옮긴 결과처럼, 새 순서를 통째로 저장한다. */
-  function setOrder(next: TodaySectionId[]) {
-    update((prev) => ({ ...prev, order: normalizeState({ ...prev, order: next }).order }));
-  }
+  const setOrder = useCallback(
+    (next: TodaySectionId[]) => {
+      update((prev) => ({ ...prev, order: normalizeState({ ...prev, order: next }).order }));
+    },
+    [update],
+  );
 
-  function toggleHidden(id: TodaySectionId) {
-    update((prev) => ({
-      ...prev,
-      hidden: prev.hidden.includes(id)
-        ? prev.hidden.filter((item) => item !== id)
-        : [...prev.hidden, id],
-    }));
-  }
+  const toggleHidden = useCallback(
+    (id: TodaySectionId) => {
+      update((prev) => ({
+        ...prev,
+        hidden: prev.hidden.includes(id)
+          ? prev.hidden.filter((item) => item !== id)
+          : [...prev.hidden, id],
+      }));
+    },
+    [update],
+  );
 
-  function toggleCollapsed(id: TodaySectionId) {
-    update((prev) => ({
-      ...prev,
-      collapsed: prev.collapsed.includes(id)
-        ? prev.collapsed.filter((item) => item !== id)
-        : [...prev.collapsed, id],
-    }));
-  }
+  const toggleCollapsed = useCallback(
+    (id: TodaySectionId) => {
+      update((prev) => ({
+        ...prev,
+        collapsed: prev.collapsed.includes(id)
+          ? prev.collapsed.filter((item) => item !== id)
+          : [...prev.collapsed, id],
+      }));
+    },
+    [update],
+  );
 
-  function resetLayout() {
+  const resetLayout = useCallback(() => {
     update(() => DEFAULT_STATE);
-  }
+  }, [update]);
 
   return {
     order: layout.order,

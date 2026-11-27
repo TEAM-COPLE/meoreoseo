@@ -45,7 +45,9 @@ export function ErrorBoundary({ error, retry }: ErrorBoundaryProps) {
     <View style={fallbackStyles.root}>
       <Text style={fallbackStyles.title}>앱에서 문제가 발생했습니다</Text>
       <Text style={fallbackStyles.message} numberOfLines={8}>
-        {error?.message ?? String(error)}
+        {__DEV__
+          ? (error?.message ?? String(error))
+          : '일시적인 오류가 발생했습니다. 다시 시도해 주세요.'}
       </Text>
       <Pressable accessibilityRole="button" onPress={retry} style={fallbackStyles.button}>
         <Text style={fallbackStyles.buttonText}>다시 시도</Text>

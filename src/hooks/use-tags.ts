@@ -29,9 +29,11 @@ export function useTags() {
     enabled: userId !== null,
     queryFn: async () => {
       if (isDevMode()) return localListTags();
+      const uid = requireUserId();
       const { data, error } = await supabase
         .from('tags')
         .select('*')
+        .eq('user_id', uid)
         .order('created_at', { ascending: true });
       check(error);
       return data ?? [];
@@ -67,7 +69,7 @@ export function useSaveTag() {
   return useMutation({
     mutationKey: KEY,
     mutationFn: async ({ id, name, color }: TagInput): Promise<Tag> => {
-      requireUserId();
+      const uid = requireUserId();
       const trimmed = name.trim();
       if (!trimmed) throw new Error('태그 이름을 입력해 주세요.');
       if (trimmed.length > MAX_TAG_NAME) throw new Error(`태그 이름은 ${MAX_TAG_NAME}자까지 쓸 수 있어요.`);
@@ -76,7 +78,7 @@ export function useSaveTag() {
         return localSaveTag(id, trimmed, color);
       }
       const { data, error } = id
-        ? await supabase.from('tags').update(row).eq('id', id).select('*').single()
+        ? await supabase.from('tags').update(row).eq('id', id).eq('user_id', uid).select('*').single()
         : await supabase.from('tags').insert(row).select('*').single();
       check(error);
       if (!data) throw new Error('태그를 저장하지 못했습니다.');
@@ -92,12 +94,12 @@ export function useDeleteTag() {
   return useMutation({
     mutationKey: KEY,
     mutationFn: async (id: string) => {
-      requireUserId();
+      const uid = requireUserId();
       if (isDevMode()) {
         await localDeleteTag(id);
         return;
       }
-      const { error } = await supabase.from('tags').delete().eq('id', id);
+      const { error } = await supabase.from('tags').delete().eq('id', id).eq('user_id', uid);
       check(error);
     },
     onSuccess: () =>

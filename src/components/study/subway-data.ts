@@ -427,99 +427,122 @@ export function withEuro(word: string): string {
   return `${word}로`;
 }
 
-// 환승역 중복 제거 전체 역 목록 & 인접 그래프 구성
+// 환승역 중복 제거 전체 역 목록 & 인접 그래프 구성 (지하철 모드를 처음 열 때만 지연 초기화)
 type Edge = { toStation: string; toLineId: string; cost: number; isTransfer: boolean };
 const TRANSFER_PENALTY_SECONDS = 240;
 
-const stationLineMap = new Map<string, Set<string>>();
-const graph = new Map<string, Edge[]>();
+let stationLineMapCache: Map<string, Set<string>> | null = null;
+let graphCache: Map<string, Edge[]> | null = null;
+let allStationsCache: readonly StationInfo[] | null = null;
 
 function nodeKey(station: string, lineId: string): string {
   return `${station}@@${lineId}`;
 }
 
-function addEdge(from: string, edge: Edge) {
-  let list = graph.get(from);
-  if (!list) {
-    list = [];
-    graph.set(from, list);
+function ensureSubwayGraph(): {
+  stationLineMap: Map<string, Set<string>>;
+  graph: Map<string, Edge[]>;
+} {
+  if (stationLineMapCache && graphCache) {
+    return { stationLineMap: stationLineMapCache, graph: graphCache };
   }
-  list.push(edge);
-}
 
-for (const line of SUBWAY_LINES) {
-  line.branches.forEach((branch, branchIdx) => {
-    for (let i = 0; i < branch.length; i++) {
-      const st = branch[i];
-      let set = stationLineMap.get(st);
-      if (!set) {
-        set = new Set();
-        stationLineMap.set(st, set);
+  const stationLineMap = new Map<string, Set<string>>();
+  const graph = new Map<string, Edge[]>();
+
+  const addEdge = (from: string, edge: Edge) => {
+    let list = graph.get(from);
+    if (!list) {
+      list = [];
+      graph.set(from, list);
+    }
+    list.push(edge);
+  };
+
+  for (const line of SUBWAY_LINES) {
+    line.branches.forEach((branch, branchIdx) => {
+      for (let i = 0; i < branch.length; i++) {
+        const st = branch[i];
+        let set = stationLineMap.get(st);
+        if (!set) {
+          set = new Set();
+          stationLineMap.set(st, set);
+        }
+        set.add(line.id);
+
+        if (i > 0) {
+          const prev = branch[i - 1];
+          addEdge(nodeKey(prev, line.id), {
+            toStation: st,
+            toLineId: line.id,
+            cost: line.secondsPerStop,
+            isTransfer: false,
+          });
+          addEdge(nodeKey(st, line.id), {
+            toStation: prev,
+            toLineId: line.id,
+            cost: line.secondsPerStop,
+            isTransfer: false,
+          });
+        }
       }
-      set.add(line.id);
 
-      if (i > 0) {
-        const prev = branch[i - 1];
-        addEdge(nodeKey(prev, line.id), {
-          toStation: st,
+      if (branchIdx === 0 && line.circularFirstBranch && branch.length > 2) {
+        const first = branch[0];
+        const last = branch[branch.length - 1];
+        addEdge(nodeKey(last, line.id), {
+          toStation: first,
           toLineId: line.id,
           cost: line.secondsPerStop,
           isTransfer: false,
         });
-        addEdge(nodeKey(st, line.id), {
-          toStation: prev,
+        addEdge(nodeKey(first, line.id), {
+          toStation: last,
           toLineId: line.id,
           cost: line.secondsPerStop,
           isTransfer: false,
         });
       }
-    }
+    });
+  }
 
-    if (branchIdx === 0 && line.circularFirstBranch && branch.length > 2) {
-      const first = branch[0];
-      const last = branch[branch.length - 1];
-      addEdge(nodeKey(last, line.id), {
-        toStation: first,
-        toLineId: line.id,
-        cost: line.secondsPerStop,
-        isTransfer: false,
-      });
-      addEdge(nodeKey(first, line.id), {
-        toStation: last,
-        toLineId: line.id,
-        cost: line.secondsPerStop,
-        isTransfer: false,
-      });
-    }
-  });
-}
-
-// 같은 역 이름을 공유하는 노선 간 환승 간선 연결
-for (const [station, lines] of stationLineMap.entries()) {
-  const arr = [...lines];
-  if (arr.length < 2) continue;
-  for (let i = 0; i < arr.length; i++) {
-    for (let j = i + 1; j < arr.length; j++) {
-      addEdge(nodeKey(station, arr[i]), {
-        toStation: station,
-        toLineId: arr[j],
-        cost: TRANSFER_PENALTY_SECONDS,
-        isTransfer: true,
-      });
-      addEdge(nodeKey(station, arr[j]), {
-        toStation: station,
-        toLineId: arr[i],
-        cost: TRANSFER_PENALTY_SECONDS,
-        isTransfer: true,
-      });
+  // 같은 역 이름을 공유하는 노선 간 환승 간선 연결
+  for (const [station, lines] of stationLineMap.entries()) {
+    const arr = [...lines];
+    if (arr.length < 2) continue;
+    for (let i = 0; i < arr.length; i++) {
+      for (let j = i + 1; j < arr.length; j++) {
+        addEdge(nodeKey(station, arr[i]), {
+          toStation: station,
+          toLineId: arr[j],
+          cost: TRANSFER_PENALTY_SECONDS,
+          isTransfer: true,
+        });
+        addEdge(nodeKey(station, arr[j]), {
+          toStation: station,
+          toLineId: arr[i],
+          cost: TRANSFER_PENALTY_SECONDS,
+          isTransfer: true,
+        });
+      }
     }
   }
+
+  stationLineMapCache = stationLineMap;
+  graphCache = graph;
+  return { stationLineMap, graph };
 }
 
-/** 환승역 중복을 제외한 수도권 전체 역 목록 (가나다순) */
-export const ALL_STATIONS: readonly StationInfo[] = [...stationLineMap.entries()]
-  .map(([name, set]) => ({ name, lineIds: [...set] }))
-  .sort((a, b) => a.name.localeCompare(b.name, 'ko'));
+/** 환승역 중복을 제외한 수도권 전체 역 목록 (가나다순, 최초 호출 시 생성 후 캐시) */
+export function getAllStations(): readonly StationInfo[] {
+  if (!allStationsCache) {
+    const { stationLineMap } = ensureSubwayGraph();
+    allStationsCache = [...stationLineMap.entries()]
+      .map(([name, set]) => ({ name, lineIds: [...set] }))
+      .sort((a, b) => a.name.localeCompare(b.name, 'ko'));
+  }
+  return allStationsCache;
+}
 
 export type RouteStep = {
   station: string;
@@ -545,6 +568,7 @@ export type SubwayPath = {
  */
 export function findSubwayPath(startStation: string, endStation: string): SubwayPath | null {
   if (!startStation || !endStation || startStation === endStation) return null;
+  const { stationLineMap, graph } = ensureSubwayGraph();
   const startLines = stationLineMap.get(startStation);
   const endLines = stationLineMap.get(endStation);
   if (!startLines || !endLines) return null;

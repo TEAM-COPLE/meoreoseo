@@ -6,7 +6,8 @@
  * - DuplicateReviewCard: 이미 저장된 내역 중 "같은 결제가 두 번 들어간 것 같은" 묶음을 보여주고 직접 지우게 하는 상자
  */
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { useEffect, useMemo, useState } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { memo, useCallback, useMemo, useState } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 
 import { ThemedText } from '@/components/themed-text';
@@ -23,7 +24,7 @@ import {
 } from '@/hooks/use-money-auto';
 import { useTheme } from '@/hooks/use-theme';
 import { useDeleteTransaction, type Transaction } from '@/hooks/use-transactions';
-import { activeUserId } from '@/lib/auth';
+import { useAuth } from '@/lib/auth';
 import { formatDate } from '@/lib/dates';
 import { confirm, errorMessage, formatWon } from '@/lib/format';
 import { findSuspectedDuplicates, guessCategory, type AutoEntry } from '@/lib/money-auto';
@@ -182,16 +183,19 @@ function ImportPreviewModal({
   const [showDuplicates, setShowDuplicates] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const chosen = preview.fresh.filter((entry) => !excluded.has(entry.externalId));
+  const chosen = useMemo(
+    () => preview.fresh.filter((entry) => !excluded.has(entry.externalId)),
+    [preview.fresh, excluded],
+  );
 
-  function toggle(id: string) {
+  const toggle = useCallback((id: string) => {
     setExcluded((prev) => {
       const next = new Set(prev);
       if (next.has(id)) next.delete(id);
       else next.add(id);
       return next;
     });
-  }
+  }, []);
 
   async function submit() {
     if (chosen.length === 0) {
@@ -240,7 +244,7 @@ function ImportPreviewModal({
                 key={entry.externalId}
                 entry={entry}
                 selected={!excluded.has(entry.externalId)}
-                onPress={() => toggle(entry.externalId)}
+                onToggle={toggle}
               />
             ))}
             {preview.fresh.length > PREVIEW_LIMIT ? (
@@ -287,16 +291,16 @@ function Count({ label, value, color }: { label: string; value: number; color: s
   );
 }
 
-function EntryRow({
+const EntryRow = memo(function EntryRow({
   entry,
   selected,
   muted = false,
-  onPress,
+  onToggle,
 }: {
   entry: AutoEntry;
   selected?: boolean;
   muted?: boolean;
-  onPress?: () => void;
+  onToggle?: (externalId: string) => void;
 }) {
   const theme = useTheme();
   const body = (
@@ -319,24 +323,26 @@ function EntryRow({
       </ThemedText>
     </>
   );
-  if (!onPress) return <View style={[styles.row, muted && styles.muted]}>{body}</View>;
+  if (!onToggle) return <View style={[styles.row, muted && styles.muted]}>{body}</View>;
   return (
     <Pressable
       accessibilityRole="checkbox"
       accessibilityState={{ checked: !!selected }}
-      onPress={onPress}
+      onPress={() => onToggle(entry.externalId)}
       style={({ pressed }) => [styles.row, !selected && styles.muted, pressed && styles.pressed]}>
       {body}
     </Pressable>
   );
-}
+});
 
 // ───────────────────────── 중복 의심 목록 ─────────────────────────
 
 const DISMISS_PREFIX = 'meoreoseo:money-not-duplicate:';
+const DISMISS_QUERY_KEY = ['money-not-duplicate'] as const;
+const EMPTY_STRING_SET: ReadonlySet<string> = new Set();
 
-function dismissKey() {
-  return `${DISMISS_PREFIX}${activeUserId() ?? 'anon'}`;
+function dismissKey(userId: string | null) {
+  return `${DISMISS_PREFIX}${userId ?? 'anon'}`;
 }
 
 /** 묶음을 가리키는 이름 (안에 든 내역 id 들을 정렬해 잇는다) */
@@ -349,32 +355,43 @@ function groupKey(group: Transaction[]): string {
 
 /** "중복 아님"이라고 고른 묶음을 기기에 기억한다. */
 function useDismissedGroups() {
-  const [dismissed, setDismissed] = useState<Set<string>>(() => new Set());
-  useEffect(() => {
-    let active = true;
-    AsyncStorage.getItem(dismissKey())
-      .then((raw) => {
-        if (!active || !raw) return;
+  const { userId } = useAuth();
+  const client = useQueryClient();
+
+  const query = useQuery({
+    queryKey: [...DISMISS_QUERY_KEY, userId],
+    enabled: userId !== null,
+    staleTime: Infinity,
+    gcTime: Infinity,
+    queryFn: async (): Promise<ReadonlySet<string>> => {
+      if (!userId) return EMPTY_STRING_SET;
+      try {
+        const raw = await AsyncStorage.getItem(dismissKey(userId));
+        if (!raw) return EMPTY_STRING_SET;
         const parsed: unknown = JSON.parse(raw);
-        if (Array.isArray(parsed)) setDismissed(new Set(parsed.filter((v) => typeof v === 'string')));
-      })
-      .catch(() => {});
-    return () => {
-      active = false;
-    };
-  }, []);
+        return Array.isArray(parsed)
+          ? new Set(parsed.filter((v): v is string => typeof v === 'string'))
+          : EMPTY_STRING_SET;
+      } catch {
+        return EMPTY_STRING_SET;
+      }
+    },
+  });
 
-  function dismiss(key: string) {
-    setDismissed((prev) => {
-      const next = new Set(prev);
+  const dismiss = useCallback(
+    (key: string) => {
+      const cacheKey = [...DISMISS_QUERY_KEY, userId];
+      const current = client.getQueryData<ReadonlySet<string>>(cacheKey) ?? EMPTY_STRING_SET;
+      const next = new Set(current);
       next.add(key);
+      client.setQueryData<ReadonlySet<string>>(cacheKey, next);
       // 너무 많이 쌓이지 않게 최근 300개만 남긴다.
-      AsyncStorage.setItem(dismissKey(), JSON.stringify([...next].slice(-300))).catch(() => {});
-      return next;
-    });
-  }
+      AsyncStorage.setItem(dismissKey(userId), JSON.stringify([...next].slice(-300))).catch(() => {});
+    },
+    [client, userId],
+  );
 
-  return { dismissed, dismiss };
+  return { dismissed: query.data ?? EMPTY_STRING_SET, dismiss };
 }
 
 /**

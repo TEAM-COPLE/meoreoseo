@@ -38,11 +38,28 @@ function formatDateTime(date: Date): string {
   return `${date.getMonth() + 1}월 ${date.getDate()}일 ${two(date.getHours())}:${two(date.getMinutes())}`;
 }
 
+const COMMIT_SHA_RE = /^[0-9a-f]{7,40}$/i;
+
 /** GitHub main 브랜치의 가장 최근 커밋 번호 */
 async function latestMainCommit(): Promise<string> {
-  const response = await fetch(GITHUB_MAIN, { headers: { Accept: 'application/vnd.github.sha' } });
-  if (!response.ok) throw new Error(`GitHub 에서 최신 코드를 확인하지 못했습니다 (${response.status})`);
-  return (await response.text()).trim();
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 10_000);
+  try {
+    const response = await fetch(GITHUB_MAIN, {
+      headers: { Accept: 'application/vnd.github.sha' },
+      signal: controller.signal,
+    });
+    if (!response.ok) {
+      throw new Error(`GitHub 에서 최신 코드를 확인하지 못했습니다 (${response.status})`);
+    }
+    const sha = (await response.text()).trim();
+    if (!COMMIT_SHA_RE.test(sha)) {
+      throw new Error('GitHub 에서 올바른 커밋 정보를 받지 못했습니다.');
+    }
+    return sha;
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 /**

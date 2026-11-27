@@ -1,6 +1,6 @@
 import { router, useLocalSearchParams, usePathname } from 'expo-router';
 import { ChevronDown, ChevronUp, Repeat, Search, SlidersHorizontal } from 'lucide-react-native';
-import { useDeferredValue, useRef, useState } from 'react';
+import { useDeferredValue, useMemo, useRef, useState } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 
 import { RepeatPicker } from '@/components/repeat-picker';
@@ -18,6 +18,7 @@ import { Radius, Spacing } from '@/constants/theme';
 import { hasSelectionModifier, useMultiSelect } from '@/hooks/use-multi-select';
 import { useTagColorOf, useTagMap, useTags } from '@/hooks/use-tags';
 import { useTheme } from '@/hooks/use-theme';
+import { useTodayISO } from '@/hooks/use-today';
 import { useWebSearchShortcut } from '@/hooks/use-web-shortcut';
 import {
   useDeleteTodo,
@@ -112,28 +113,38 @@ export default function TodosScreen() {
     setBulkError(null);
   }
 
-  const today = todayISO();
+  const today = useTodayISO();
   // 고른 태그가 지워졌으면 다시 "전체"로 본다.
   const activeTagFilter = tagFilter !== 'all' && tagMap.has(tagFilter) ? tagFilter : 'all';
-  const tagFilterOptions = [
-    { value: 'all', label: '전체' },
-    ...(tags.data ?? []).map((tag) => ({ value: tag.id, label: tag.name })),
-  ];
+  const tagFilterOptions = useMemo(
+    () => [
+      { value: 'all', label: '전체' },
+      ...(tags.data ?? []).map((tag) => ({ value: tag.id, label: tag.name })),
+    ],
+    [tags.data],
+  );
   const keyword = deferredQuery.trim().toLowerCase();
-  const visible = (todos.data ?? []).filter((todo) => {
-    if (stageOf(todo, today) !== filter) return false;
-    if (activeTagFilter !== 'all' && todo.tag_id !== activeTagFilter) return false;
-    if (priorityFilter !== -1 && todo.priority !== priorityFilter) return false;
-    if (keyword) {
-      const hay = `${todo.title} ${todo.notes ?? ''}`.toLowerCase();
-      if (!hay.includes(keyword)) return false;
+  const visible = useMemo(() => {
+    const filtered = (todos.data ?? []).filter((todo) => {
+      if (stageOf(todo, today) !== filter) return false;
+      if (activeTagFilter !== 'all' && todo.tag_id !== activeTagFilter) return false;
+      if (priorityFilter !== -1 && todo.priority !== priorityFilter) return false;
+      if (keyword) {
+        const hay = `${todo.title} ${todo.notes ?? ''}`.toLowerCase();
+        if (!hay.includes(keyword)) return false;
+      }
+      return true;
+    });
+    // 예정 탭은 시작하는 날이 빠른 순서로 보여준다.
+    if (filter === 'upcoming') {
+      filtered.sort((a, b) => {
+        const sa = todoStartOf(a) ?? '';
+        const sb = todoStartOf(b) ?? '';
+        return sa < sb ? -1 : sa > sb ? 1 : 0;
+      });
     }
-    return true;
-  });
-  // 예정 탭은 시작하는 날이 빠른 순서로 보여준다.
-  if (filter === 'upcoming') {
-    visible.sort((a, b) => (todoStartOf(a) ?? '').localeCompare(todoStartOf(b) ?? ''));
-  }
+    return filtered;
+  }, [todos.data, today, filter, activeTagFilter, priorityFilter, keyword]);
   const visibleIds = visible.map((todo) => todo.id);
   const selectedVisibleIds = visibleIds.filter((id) => multi.isSelected(id));
   const isSelecting = visibleIds.length > 0 && (multi.active || selectedVisibleIds.length > 0);
@@ -549,7 +560,7 @@ function TodoForm({ todo, onClose }: { todo: Todo | null; onClose: () => void })
       ) : null}
       <TagPicker value={tagId} onChange={setTagId} />
       <Segmented label="중요도" options={PRIORITIES} value={priority} onChange={setPriority} />
-      <TextField label="메모" value={notes} onChangeText={setNotes} multiline />
+      <TextField label="메모" value={notes} onChangeText={setNotes} maxLength={5000} multiline />
     </FormModal>
   );
 }

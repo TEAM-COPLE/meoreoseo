@@ -3,7 +3,7 @@ import { streakOf, type Habit } from '@/hooks/use-habits';
 import type { Note } from '@/hooks/use-notes';
 import type { Todo } from '@/hooks/use-todos';
 import type { Transaction } from '@/hooks/use-transactions';
-import { formatDate, todayISO, yearMonthOf } from '@/lib/dates';
+import { formatDate, todayISO, toISODate, yearMonthOf } from '@/lib/dates';
 import { formatWon } from '@/lib/format';
 import { isWaitingRepeat } from '@/lib/repeat';
 
@@ -34,6 +34,16 @@ export type WidgetSyncInput = {
   monthlyBudget: number | null;
 };
 
+/** 이전 스냅샷과 동일한 위젯은 네이티브 브리지를 다시 호출하지 않도록 직렬화 값을 기억한다. */
+const lastSnapshotJson = new Map<string, string>();
+
+function pushIfChanged<T>(name: string, props: T, updater: (p: T) => void): void {
+  const serialized = JSON.stringify(props);
+  if (lastSnapshotJson.get(name) === serialized) return;
+  updater(props);
+  lastSnapshotJson.set(name, serialized);
+}
+
 function shortDueLabel(dueDate: string | null, today: string): { label: string; isOverdue: boolean } {
   if (!dueDate) return { label: '', isOverdue: false };
   if (dueDate < today) return { label: '지남', isOverdue: true };
@@ -53,26 +63,31 @@ function shortUpdatedLabel(isoTimestamp: string, today: string): string {
   return '';
 }
 
+/** 위젯은 한 줄 요약만 그리므로, 긴 메모 본문이 Binder 한계를 넘지 않게 앞부분만 잘라 정리한다. */
 function notePreview(body: string): string {
-  return body.replace(/\s+/g, ' ').trim();
+  return body.slice(0, 300).replace(/\s+/g, ' ').trim().slice(0, 120);
+}
+
+function isCompletedToday(todo: Todo, today: string): boolean {
+  return todo.done && todo.done_at !== null && toISODate(new Date(todo.done_at)) === today;
 }
 
 export function buildTodoWidgetProps(input: WidgetSyncInput, today = todayISO()): TodoWidgetProps {
   const activeTodos = (input.todos ?? []).filter((t) => !isWaitingRepeat(t, today));
   const pending = activeTodos.filter((t) => !t.done);
-  const doneTodayCount = activeTodos.filter((t) => t.done).length;
-  const visible = [...pending, ...activeTodos.filter((t) => t.done)].slice(0, 6);
+  const completedToday = activeTodos.filter((t) => isCompletedToday(t, today));
+  const visible = [...pending, ...completedToday].slice(0, 6);
 
   return {
     colorScheme: input.colorScheme,
     dateLabel: formatDate(today),
     pendingCount: pending.length,
-    doneTodayCount,
+    doneTodayCount: completedToday.length,
     items: visible.map((t) => {
       const { label, isOverdue } = shortDueLabel(t.due_date, today);
       return {
         id: t.id,
-        title: t.title,
+        title: t.title.slice(0, 120),
         dueLabel: label,
         isOverdue,
         done: t.done,
@@ -89,7 +104,7 @@ export function buildEventsWidgetProps(input: WidgetSyncInput, today = todayISO(
     totalCount: todayEvents.length,
     items: todayEvents.slice(0, 5).map((e) => ({
       id: e.key,
-      title: e.title,
+      title: e.title.slice(0, 120),
       timeLabel: timeLabel(e),
       isAllDay: !e.start_time,
     })),
@@ -103,7 +118,7 @@ export function buildNotesWidgetProps(input: WidgetSyncInput, today = todayISO()
     totalCount: notes.length,
     items: notes.slice(0, 4).map((n) => ({
       id: n.id,
-      title: n.title.trim() || '제목 없음',
+      title: (n.title.trim() || '제목 없음').slice(0, 120),
       preview: notePreview(n.body),
       pinned: n.pinned,
       updatedLabel: shortUpdatedLabel(n.updated_at, today),
@@ -121,9 +136,9 @@ export function buildHabitsWidgetProps(input: WidgetSyncInput, today = todayISO(
     if (done) doneCount += 1;
     return {
       id: h.id,
-      name: h.name,
+      name: h.name.slice(0, 100),
       done,
-      streak: streakOf(dates),
+      streak: streakOf(dates, today),
     };
   });
 
@@ -183,15 +198,17 @@ export function buildMoneyWidgetProps(input: WidgetSyncInput, today = todayISO()
   };
 }
 
-export function buildDashboardWidgetProps(input: WidgetSyncInput, today = todayISO()): DashboardWidgetProps {
-  const todoProps = buildTodoWidgetProps(input, today);
-  const eventProps = buildEventsWidgetProps(input, today);
-  const habitProps = buildHabitsWidgetProps(input, today);
-  const noteProps = buildNotesWidgetProps(input, today);
-  const moneyProps = buildMoneyWidgetProps(input, today);
-
+function composeDashboardProps(
+  colorScheme: WidgetColorScheme,
+  today: string,
+  todoProps: TodoWidgetProps,
+  eventProps: EventsWidgetProps,
+  habitProps: HabitsWidgetProps,
+  noteProps: NotesWidgetProps,
+  moneyProps: MoneyWidgetProps,
+): DashboardWidgetProps {
   return {
-    colorScheme: input.colorScheme,
+    colorScheme,
     dateLabel: formatDate(today),
     todoPendingCount: todoProps.pendingCount,
     todos: todoProps.items.slice(0, 2).map((t) => ({
@@ -217,7 +234,7 @@ export function buildDashboardWidgetProps(input: WidgetSyncInput, today = todayI
       ? {
           id: noteProps.items[0].id,
           title: noteProps.items[0].title,
-          preview: noteProps.items[0].preview,
+          preview: '',
           pinned: noteProps.items[0].pinned,
         }
       : { id: '', title: '', preview: '', pinned: false },
@@ -227,44 +244,87 @@ export function buildDashboardWidgetProps(input: WidgetSyncInput, today = todayI
   };
 }
 
+export function buildDashboardWidgetProps(input: WidgetSyncInput, today = todayISO()): DashboardWidgetProps {
+  return composeDashboardProps(
+    input.colorScheme,
+    today,
+    buildTodoWidgetProps(input, today),
+    buildEventsWidgetProps(input, today),
+    buildHabitsWidgetProps(input, today),
+    buildNotesWidgetProps(input, today),
+    buildMoneyWidgetProps(input, today),
+  );
+}
+
 export function syncAllWidgets(input: WidgetSyncInput): void {
   const today = todayISO();
-  // 로딩 전(undefined) 데이터로 기존 위젯 내용을 덮어쓰지 않고, 준비된 위젯만 개별 보호하며 갱신한다.
-  const jobs: [string, () => void][] = [];
-  if (input.todos !== undefined) {
-    jobs.push(['todo', () => TodoWidget.updateSnapshot(buildTodoWidgetProps(input, today))]);
+  // 로딩 전(undefined) 데이터로 기존 위젯 내용을 덮어쓰지 않고, 이미 계산한 값을 재사용한다.
+  const todoProps = input.todos !== undefined ? buildTodoWidgetProps(input, today) : undefined;
+  const eventProps = input.events !== undefined ? buildEventsWidgetProps(input, today) : undefined;
+  const noteProps = input.notes !== undefined ? buildNotesWidgetProps(input, today) : undefined;
+  const habitProps =
+    input.habits !== undefined && input.habitLogs !== undefined
+      ? buildHabitsWidgetProps(input, today)
+      : undefined;
+  const moneyProps =
+    input.transactions !== undefined ? buildMoneyWidgetProps(input, today) : undefined;
+
+  const jobs: (() => void)[] = [];
+  if (todoProps) {
+    jobs.push(() => pushIfChanged('todo', todoProps, (p) => TodoWidget.updateSnapshot(p)));
   }
-  if (input.events !== undefined) {
-    jobs.push(['events', () => EventsWidget.updateSnapshot(buildEventsWidgetProps(input, today))]);
+  if (eventProps) {
+    jobs.push(() => pushIfChanged('events', eventProps, (p) => EventsWidget.updateSnapshot(p)));
   }
-  if (input.notes !== undefined) {
-    jobs.push(['notes', () => NotesWidget.updateSnapshot(buildNotesWidgetProps(input, today))]);
+  if (noteProps) {
+    jobs.push(() => pushIfChanged('notes', noteProps, (p) => NotesWidget.updateSnapshot(p)));
   }
-  if (input.habits !== undefined && input.habitLogs !== undefined) {
-    jobs.push(['habits', () => HabitsWidget.updateSnapshot(buildHabitsWidgetProps(input, today))]);
+  if (habitProps) {
+    jobs.push(() => pushIfChanged('habits', habitProps, (p) => HabitsWidget.updateSnapshot(p)));
   }
-  if (input.transactions !== undefined) {
-    jobs.push(['money', () => MoneyWidget.updateSnapshot(buildMoneyWidgetProps(input, today))]);
+  if (moneyProps) {
+    jobs.push(() => pushIfChanged('money', moneyProps, (p) => MoneyWidget.updateSnapshot(p)));
   }
-  if (
-    input.todos !== undefined &&
-    input.events !== undefined &&
-    input.notes !== undefined &&
-    input.habits !== undefined &&
-    input.habitLogs !== undefined &&
-    input.transactions !== undefined
-  ) {
-    jobs.push([
-      'dashboard',
-      () => DashboardWidget.updateSnapshot(buildDashboardWidgetProps(input, today)),
-    ]);
+  if (todoProps && eventProps && noteProps && habitProps && moneyProps) {
+    const dashboardProps = composeDashboardProps(
+      input.colorScheme,
+      today,
+      todoProps,
+      eventProps,
+      habitProps,
+      noteProps,
+      moneyProps,
+    );
+    jobs.push(() =>
+      pushIfChanged('dashboard', dashboardProps, (p) => DashboardWidget.updateSnapshot(p)),
+    );
   }
 
-  for (const [, run] of jobs) {
+  for (const run of jobs) {
     try {
       run();
     } catch {
       // Expo Go 등 위젯 네이티브 모듈이 없거나 갱신에 실패하면 조용히 넘어간다.
     }
   }
+}
+
+/** 로그아웃·개발 데이터 초기화 시 홈/잠금 화면 위젯에 남은 개인 데이터를 비운다. */
+export function clearAllWidgets(colorScheme: WidgetColorScheme = 'dark'): void {
+  lastSnapshotJson.clear();
+  const today = todayISO();
+  const emptyInput: WidgetSyncInput = {
+    colorScheme,
+    todos: [],
+    events: [],
+    notes: [],
+    habits: [],
+    habitLogs: new Map(),
+    transactions: [],
+    monthlyBudget: null,
+  };
+  syncAllWidgets(emptyInput);
+  // 다음 로그인 후 첫 동기화가 반드시 실행되도록 직렬화 캐시를 다시 비운다.
+  lastSnapshotJson.clear();
+  void today;
 }

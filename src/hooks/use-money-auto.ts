@@ -27,16 +27,23 @@ const KEY = ["transactions"];
 
 /** 한 번에 저장하는 최대 개수 (너무 큰 파일로 서버에 부담을 주지 않게) */
 const MAX_IMPORT = 2000;
+const MAX_STATEMENT_BYTES = 5 * 1024 * 1024;
 
 export type AutoSaveResult = { added: number; duplicates: number };
 
 /** 자동 내역들이 걸친 기간의 기존 내역을 불러온다 (중복 비교용). */
 async function loadExisting(entries: AutoEntry[]): Promise<Comparable[]> {
   if (entries.length === 0) return [];
-  const dates = entries.map((entry) => entry.occurredOn).sort();
+  let minDate = entries[0].occurredOn;
+  let maxDate = entries[0].occurredOn;
+  for (let i = 1; i < entries.length; i += 1) {
+    const d = entries[i].occurredOn;
+    if (d < minDate) minDate = d;
+    if (d > maxDate) maxDate = d;
+  }
   // 시각 차이 때문에 날짜가 하루 넘어가는 경우까지 넉넉히 본다.
-  const start = addDays(dates[0], -1);
-  const end = addDays(dates[dates.length - 1], 1);
+  const start = addDays(minDate, -1);
+  const end = addDays(maxDate, 1);
   if (isDevMode()) {
     const rows = await localListTransactions(start, end);
     return rows.map((row) => ({
@@ -46,9 +53,11 @@ async function loadExisting(entries: AutoEntry[]): Promise<Comparable[]> {
       occurredAt: row.occurred_at,
     }));
   }
+  const uid = requireUserId();
   const { data, error } = await supabase
     .from("transactions")
     .select("kind, amount, occurred_on, occurred_at")
+    .eq("user_id", uid)
     .gte("occurred_on", start)
     .lte("occurred_on", end);
   check(error);
@@ -154,39 +163,49 @@ export function usePaymentNotificationSync(enabled = true) {
   const [error, setError] = useState<string | null>(null);
 
   /** 권한이 켜져 있으면 쌓인 알림을 가계부에 적는다. */
-  const pull = useCallback((): Promise<void> => {
-    if (!enabled || currentAccess() !== "on") return Promise.resolve();
-    // 결과는 작업이 끝난 뒤(then 안에서)에만 화면 상태에 넣는다.
-    return syncPaymentNotifications().then(
-      async (result) => {
-        setLastResult(result);
-        setError(null);
-        if (result.added > 0) await client.invalidateQueries({ queryKey: KEY });
-      },
-      (e: unknown) => setError(e instanceof Error ? e.message : String(e)),
-    );
-  }, [client, enabled]);
+  const pull = useCallback(
+    (allowDev = false): Promise<void> => {
+      if (!enabled || (!allowDev && isDevMode()) || currentAccess() !== "on") {
+        return Promise.resolve();
+      }
+      // 결과는 작업이 끝난 뒤(then 안에서)에만 화면 상태에 넣는다.
+      return syncPaymentNotifications().then(
+        async (result) => {
+          setLastResult(result);
+          setError(null);
+          if (result.added > 0) await client.invalidateQueries({ queryKey: KEY });
+        },
+        (e: unknown) => setError(e instanceof Error ? e.message : String(e)),
+      );
+    },
+    [client, enabled],
+  );
 
   /** 권한 상태를 다시 확인한 뒤 가져온다 (설정에서 돌아왔을 때 등). */
-  const run = useCallback(() => {
+  const runAuto = useCallback(() => {
     setAccess(currentAccess());
-    return pull();
+    return pull(false);
+  }, [pull]);
+
+  const syncNow = useCallback(() => {
+    setAccess(currentAccess());
+    return pull(true);
   }, [pull]);
 
   useEffect(() => {
     // 처음 열 때는 권한 상태를 useState 에서 이미 읽었으므로 가져오기만 한다.
-    pull();
+    pull(false);
     const sub = AppState.addEventListener("change", (state) => {
-      if (state === "active") run();
+      if (state === "active") runAuto();
     });
     return () => sub.remove();
-  }, [pull, run]);
+  }, [pull, runAuto]);
 
   const openSettings = useCallback(() => {
     PaymentNotifications?.openPermissionSettings();
   }, []);
 
-  return { access, lastResult, error, syncNow: run, openSettings };
+  return { access, lastResult, error, syncNow, openSettings };
 }
 
 // ───────────────────────── 거래내역 파일 ─────────────────────────
@@ -203,8 +222,12 @@ async function readPickedFile(
   asset: DocumentPicker.DocumentPickerAsset,
 ): Promise<Uint8Array> {
   if (asset.file) return new Uint8Array(await asset.file.arrayBuffer());
-  if (Platform.OS === "web")
+  if (Platform.OS === "web") {
+    if (!asset.uri.startsWith("blob:") && !asset.uri.startsWith("data:")) {
+      throw new Error("지원하지 않는 파일 경로예요.");
+    }
     return new Uint8Array(await (await fetch(asset.uri)).arrayBuffer());
+  }
   return new Uint8Array(await new FsFile(asset.uri).arrayBuffer());
 }
 
@@ -225,12 +248,17 @@ export async function pickStatementPreview(): Promise<StatementPreview | null> {
   });
   if (picked.canceled || !picked.assets?.[0]) return null;
   const asset = picked.assets[0];
-  if (asset.size && asset.size > 5 * 1024 * 1024) {
+  if (asset.size && asset.size > MAX_STATEMENT_BYTES) {
     throw new Error(
       "파일이 너무 커요(5MB 넘음). 기간을 나눠서 내려받아 주세요.",
     );
   }
   const bytes = await readPickedFile(asset);
+  if (bytes.byteLength > MAX_STATEMENT_BYTES) {
+    throw new Error(
+      "파일이 너무 커요(5MB 넘음). 기간을 나눠서 내려받아 주세요.",
+    );
+  }
   const { entries, skipped } = rowsToEntries(readStatementFile(bytes));
   if (entries.length === 0) throw new Error("가져올 거래를 찾지 못했어요.");
   if (entries.length > MAX_IMPORT) {

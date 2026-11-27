@@ -21,7 +21,8 @@ import {
 } from '@/hooks/use-habits';
 import { hasSelectionModifier, useMultiSelect } from '@/hooks/use-multi-select';
 import { useTheme } from '@/hooks/use-theme';
-import { dayOf, lastDays, weekdayOf } from '@/lib/dates';
+import { useTodayISO } from '@/hooks/use-today';
+import { addDays, dayOf, weekdayOf } from '@/lib/dates';
 import { confirm, errorMessage } from '@/lib/format';
 
 /** 오늘 화면으로 돌아간다. 이 화면을 주소로 바로 연 경우에는 돌아갈 곳이 없으므로 새로 연다. */
@@ -71,17 +72,20 @@ export default function HabitsScreen() {
     }
   }
 
-  // 최근 7일. 마지막이 오늘이다.
-  const days = useMemo(() => lastDays(7), []);
-  const today = days[days.length - 1];
+  // 최근 7일. 자정이 지나면 자동으로 새 오늘 기준으로 갱신된다.
+  const today = useTodayISO();
+  const days = useMemo(
+    () => Array.from({ length: 7 }, (_, i) => addDays(today, i - 6)),
+    [today],
+  );
   const streaks = useMemo(() => {
     const map = new Map<string, number>();
     if (!logs.data) return map;
     for (const habit of habits.data ?? []) {
-      map.set(habit.id, streakOf(logs.data.get(habit.id)));
+      map.set(habit.id, streakOf(logs.data.get(habit.id), today));
     }
     return map;
-  }, [habits.data, logs.data]);
+  }, [habits.data, logs.data, today]);
 
   const habitItems = habits.data ?? [];
   const habitIds = habitItems.map((habit) => habit.id);

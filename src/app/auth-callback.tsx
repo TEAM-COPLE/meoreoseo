@@ -22,6 +22,7 @@ export default function AuthCallbackScreen() {
   const [done, setDone] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const navigatedRef = useRef(false);
+  const initialSessionRef = useRef(session !== null);
 
   useEffect(() => {
     if (!session || navigatedRef.current) return;
@@ -30,10 +31,15 @@ export default function AuthCallbackScreen() {
   }, [session]);
 
   useEffect(() => {
+    if (navigatedRef.current) return;
     let active = true;
     // 이 화면을 연 주소. 웹에서는 브라우저 주소창의 주소를 쓴다.
     const url = linkingUrl ?? (Platform.OS === 'web' ? window.location.href : '');
     if (!url) {
+      if (initialSessionRef.current) {
+        setDone(true);
+        return;
+      }
       const fallbackTimer = setTimeout(() => {
         if (active) setDone(true);
       }, 1500);
@@ -45,12 +51,12 @@ export default function AuthCallbackScreen() {
 
     completeSignInFromUrl(url)
       .then((message) => {
-        if (!active) return;
+        if (!active || navigatedRef.current) return;
         setError(message);
         setDone(true);
       })
       .catch(() => {
-        if (!active) return;
+        if (!active || navigatedRef.current) return;
         setError('로그인 처리 중 문제가 발생했습니다. 다시 시도해 주세요.');
         setDone(true);
       });

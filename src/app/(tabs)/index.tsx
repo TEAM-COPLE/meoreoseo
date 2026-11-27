@@ -21,11 +21,13 @@ import {
 import {
     useEffect,
     useLayoutEffect,
+    useMemo,
     useRef,
     useState,
     type PropsWithChildren,
 } from "react";
 import {
+    AppState,
     Platform,
     Pressable,
     StyleSheet,
@@ -78,6 +80,7 @@ import {
     useStudySubjects,
 } from "@/hooks/use-study";
 import { useColorScheme, useTheme, useThemeMode } from "@/hooks/use-theme";
+import { useTodayISO } from "@/hooks/use-today";
 import { useTodayLayout, type TodaySectionId } from "@/hooks/use-today-layout";
 import { useTodos, useToggleTodo, type Todo } from "@/hooks/use-todos";
 import { useTransactions } from "@/hooks/use-transactions";
@@ -87,7 +90,7 @@ import {
     useWeatherCity,
 } from "@/hooks/use-weather";
 import { useAuth } from "@/lib/auth";
-import { formatDate, todayISO, toISODate, yearMonthOf } from "@/lib/dates";
+import { formatDate, toISODate, yearMonthOf } from "@/lib/dates";
 import { confirm, errorMessage, formatWon } from "@/lib/format";
 import { todoStartOf } from "@/lib/repeat";
 import {
@@ -119,7 +122,7 @@ import { describeWeather, formatTemperature } from "@/lib/weather";
  * 데이터는 각 기능의 훅(use-todos 등)을 그대로 쓰므로, 여기서 체크하면 다른 화면에도 반영된다.
  */
 export default function TodayScreen() {
-  const today = todayISO();
+  const today = useTodayISO();
   const theme = useTheme();
   const queryClient = useQueryClient();
   const { width } = useWindowDimensions();
@@ -140,6 +143,8 @@ export default function TodayScreen() {
   const [draggingId, setDraggingId] = useState<TodaySectionId | null>(null);
   const scrollRef = useRef<ScrollViewInstance>(null);
   const [boardDrag] = useState(() => new BoardDragController());
+
+  useEffect(() => () => boardDrag.dispose(), [boardDrag]);
 
   // 끌기 처리기에게 항상 최신 순서를 알려 주고, 순서가 바뀌어 다시 그려진 직후 새 자리를 재게 한다.
   useLayoutEffect(() => {
@@ -380,7 +385,13 @@ export default function TodayScreen() {
           })()}
         </View>
       ) : (
-        <View style={isWideWeb && editingLayout ? styles.webEditStack : styles.mobileStack}>
+        <View
+          style={
+            isWideWeb && editingLayout
+              ? styles.webEditStack
+              : styles.mobileStack
+          }
+        >
           {shownOrder.map((id, idx) => renderBox(id, idx))}
         </View>
       )}
@@ -450,7 +461,9 @@ function WeatherSection({
           : undefined
       }
       backdrop={
-        now ? <WeatherBackdrop code={now.code} isDay={now.isDay} /> : null
+        !collapsed && now ? (
+          <WeatherBackdrop code={now.code} isDay={now.isDay} />
+        ) : null
       }
       title={city.data ? `날씨 · ${city.data.name}` : "날씨"}
       icon={CloudSun}
@@ -553,15 +566,18 @@ function TodoSection({
   onToggleCollapse: () => void;
 }) {
   const theme = useTheme();
-  const todos = useTodos();
+  const todos = useTodos(!collapsed);
   const toggle = useToggleTodo();
 
-  const all = todos.data ?? [];
-  const items = all.filter((todo) => isForToday(todo, today));
-  // 마감일이 없거나 나중인 할 일의 수. 오늘 할 것이 없을 때 알려준다.
-  const laterCount =
-    all.filter((todo) => !todo.done).length -
-    items.filter((t) => !t.done).length;
+  const { items, laterCount } = useMemo(() => {
+    const all = todos.data ?? [];
+    const todayItems = all.filter((todo) => isForToday(todo, today));
+    let totalOpen = 0;
+    for (const todo of all) if (!todo.done) totalOpen += 1;
+    let todayOpen = 0;
+    for (const todo of todayItems) if (!todo.done) todayOpen += 1;
+    return { items: todayItems, laterCount: totalOpen - todayOpen };
+  }, [todos.data, today]);
 
   return (
     <Section
@@ -647,9 +663,11 @@ function EventSection({
   onToggleCollapse: () => void;
 }) {
   const theme = useTheme();
-  const events = useEvents(yearMonthOf(today));
-  const items = (events.data ?? []).filter(
-    (event) => event.event_date === today,
+  const month = useMemo(() => yearMonthOf(today), [today]);
+  const events = useEvents(month);
+  const items = useMemo(
+    () => (events.data ?? []).filter((event) => event.event_date === today),
+    [events.data, today],
   );
 
   return (
@@ -726,11 +744,25 @@ function HabitSection({
 
   const items = habits.data ?? [];
   const ready = habits.data !== undefined && logs.data !== undefined;
-  const doneCount = items.filter((habit) =>
-    logs.data?.get(habit.id)?.has(today),
-  ).length;
+  const doneCount = useMemo(
+    () =>
+      (habits.data ?? []).filter((habit) =>
+        logs.data?.get(habit.id)?.has(today),
+      ).length,
+    [habits.data, logs.data, today],
+  );
+  const streakMap = useMemo(() => {
+    if (collapsed || !habits.data || !logs.data)
+      return new Map<string, number>();
+    const map = new Map<string, number>();
+    for (const habit of habits.data) {
+      map.set(habit.id, streakOf(logs.data.get(habit.id), today));
+    }
+    return map;
+  }, [collapsed, habits.data, logs.data, today]);
 
   async function deleteHabit(id: string, name: string) {
+    if (removeHabit.isPending) return;
     const ok = await confirm({
       title: "습관을 삭제할까요?",
       message: `'${name}' 습관과 지금까지의 실천 기록이 모두 삭제됩니다.`,
@@ -781,7 +813,7 @@ function HabitSection({
         ? items.map((habit, idx) => {
             const dates = logs.data?.get(habit.id);
             const done = dates?.has(today) ?? false;
-            const streak = streakOf(dates);
+            const streak = streakMap.get(habit.id) ?? 0;
             return (
               <View
                 key={habit.id}
@@ -853,16 +885,34 @@ function HabitSection({
 }
 
 /** 지금이 하루의 몇 분째인지. 30초마다 새로 계산해서 "지금/다음 루틴"이 저절로 바뀌게 한다. */
-function useNowMinutes(): number {
+function useNowMinutes(enabled: boolean): number {
   const read = () => {
     const now = new Date();
     return now.getHours() * 60 + now.getMinutes();
   };
   const [minutes, setMinutes] = useState(read);
   useEffect(() => {
-    const timer = setInterval(() => setMinutes(read()), 30_000);
-    return () => clearInterval(timer);
-  }, []);
+    if (!enabled) return;
+    const sync = () => setMinutes(read());
+    sync();
+    let timer: ReturnType<typeof setInterval> | null = setInterval(
+      sync,
+      30_000,
+    );
+    const sub = AppState.addEventListener("change", (state) => {
+      if (state === "active") {
+        sync();
+        if (!timer) timer = setInterval(sync, 30_000);
+      } else if (timer) {
+        clearInterval(timer);
+        timer = null;
+      }
+    });
+    return () => {
+      if (timer) clearInterval(timer);
+      sub.remove();
+    };
+  }, [enabled]);
   return minutes;
 }
 
@@ -885,7 +935,7 @@ function RoutineSection({
   const routines = useRoutines();
   const logs = useRoutineLogs();
   const toggle = useToggleRoutineLog();
-  const nowMinutes = useNowMinutes();
+  const nowMinutes = useNowMinutes(!collapsed);
 
   const ready = routines.data !== undefined && logs.data !== undefined;
   const all = routines.data ?? [];
@@ -924,7 +974,9 @@ function RoutineSection({
 
       {ready && all.length === 0 ? (
         <ThemedText type="small" themeColor="textSecondary">
-          {'아직 루틴이 없습니다. "관리"를 눌러 06:00 아침 브리핑, 06:10 샤워처럼 시간별로 정해 보세요.'}
+          {
+            '아직 루틴이 없습니다. "관리"를 눌러 06:00 아침 브리핑, 06:10 샤워처럼 시간별로 정해 보세요.'
+          }
         </ThemedText>
       ) : null}
       {ready && all.length > 0 && items.length === 0 ? (
@@ -939,7 +991,9 @@ function RoutineSection({
       ) : null}
 
       {ready && (now || next) ? (
-        <View style={[styles.routineNowBox, { backgroundColor: theme.tintSoft }]}>
+        <View
+          style={[styles.routineNowBox, { backgroundColor: theme.tintSoft }]}
+        >
           {now ? (
             <ThemedText type="smallBold" themeColor="tint">
               지금 · {routineTimeLabel(now)} {now.title}
@@ -1005,7 +1059,11 @@ function RoutineSection({
                   ]}
                 >
                   {routine.kind === "briefing" ? (
-                    <Sun size={14} color={theme.textSecondary} strokeWidth={1.8} />
+                    <Sun
+                      size={14}
+                      color={theme.textSecondary}
+                      strokeWidth={1.8}
+                    />
                   ) : null}
                   <ThemedText
                     type="default"
@@ -1073,7 +1131,10 @@ function StudySection({
   const runningToday = running
     ? splitByDay(running.startedAt, now)
         .filter((part) => part.date === today)
-        .reduce((total, part) => total + Math.floor((part.end - part.start) / 1000), 0)
+        .reduce(
+          (total, part) => total + Math.floor((part.end - part.start) / 1000),
+          0,
+        )
     : 0;
   const todayTotal = sumSeconds(sessions.data ?? []) + runningToday;
   const goalSeconds = (profile.data?.daily_goal_minutes ?? 180) * 60;
@@ -1082,7 +1143,9 @@ function StudySection({
   const activeSubjectId = running
     ? running.subjectId
     : (selectedId ?? subjectList[0]?.id ?? null);
-  const activeSubject = activeSubjectId ? (subjectById.get(activeSubjectId) ?? null) : null;
+  const activeSubject = activeSubjectId
+    ? (subjectById.get(activeSubjectId) ?? null)
+    : null;
   const subjectColor = activeSubject
     ? tagColorValue(activeSubject.color, scheme)
     : theme.tint;
@@ -1098,7 +1161,9 @@ function StudySection({
       } else {
         await startStudy(
           userId,
-          activeSubject ? { id: activeSubject.id, name: activeSubject.name } : null,
+          activeSubject
+            ? { id: activeSubject.id, name: activeSubject.name }
+            : null,
         );
       }
     } catch (e) {
@@ -1112,8 +1177,11 @@ function StudySection({
     setSelectedId(subject.id);
     if (running && userId && running.subjectId !== subject.id) {
       setBusy(true);
+      setError(null);
       try {
         await startStudy(userId, { id: subject.id, name: subject.name });
+      } catch (e) {
+        setError(errorMessage(e));
       } finally {
         setBusy(false);
       }
@@ -1139,7 +1207,11 @@ function StudySection({
             >
               {formatClock(todayTotal)}
             </ThemedText>
-            <ThemedText type="small" themeColor="textSecondary" numberOfLines={1}>
+            <ThemedText
+              type="small"
+              themeColor="textSecondary"
+              numberOfLines={1}
+            >
               {running
                 ? `${running.subjectName ?? "공부"} 중 · 이번 ${formatClock(runningSeconds(running, now))}`
                 : `목표 ${formatDuration(goalSeconds)} · ${Math.floor(goalRatio * 100)}%`}
@@ -1181,22 +1253,36 @@ function StudySection({
             </Pressable>
             <Pressable
               accessibilityRole="button"
-              accessibilityLabel={running ? "공부 타이머 멈추기" : "공부 타이머 시작하기"}
+              accessibilityLabel={
+                running ? "공부 타이머 멈추기" : "공부 타이머 시작하기"
+              }
               disabled={busy || !timer.loaded}
               onPress={toggleTimer}
               style={({ pressed }) => [
                 styles.studyToggleBtn,
                 {
-                  backgroundColor: running ? theme.backgroundSelected : subjectColor,
+                  backgroundColor: running
+                    ? theme.backgroundSelected
+                    : subjectColor,
                   borderColor: subjectColor,
                   opacity: busy || !timer.loaded ? 0.55 : pressed ? 0.8 : 1,
                 },
               ]}
             >
               {running ? (
-                <Pause size={15} color={subjectColor} fill={subjectColor} strokeWidth={2} />
+                <Pause
+                  size={15}
+                  color={subjectColor}
+                  fill={subjectColor}
+                  strokeWidth={2}
+                />
               ) : (
-                <Play size={15} color={theme.background} fill={theme.background} strokeWidth={2} />
+                <Play
+                  size={15}
+                  color={theme.background}
+                  fill={theme.background}
+                  strokeWidth={2}
+                />
               )}
               <ThemedText
                 type="smallBold"
@@ -1225,13 +1311,18 @@ function StudySection({
                     styles.studyChip,
                     {
                       borderColor: selected ? color : theme.border,
-                      backgroundColor: selected ? `${color}22` : theme.background,
+                      backgroundColor: selected
+                        ? `${color}22`
+                        : theme.background,
                       opacity: pressed ? 0.75 : 1,
                     },
                   ]}
                 >
                   <SubjectDot color={subject.color} size={8} />
-                  <ThemedText type="small" style={selected && { fontWeight: "700" }}>
+                  <ThemedText
+                    type="small"
+                    style={selected && { fontWeight: "700" }}
+                  >
                     {subject.name}
                   </ThemedText>
                 </Pressable>
@@ -1247,31 +1338,39 @@ function StudySection({
         ) : null}
       </Section>
 
-      <FlightTimerModal
-        visible={flightOpen}
-        running={running !== null}
-        startedAt={running?.startedAt ?? null}
-        elapsedSeconds={running ? runningSeconds(running, now) : 0}
-        subjectName={running ? running.subjectName : (activeSubject?.name ?? null)}
-        subjectColor={subjectColor}
-        busy={busy}
-        onStart={toggleTimer}
-        onStop={toggleTimer}
-        onClose={() => setFlightOpen(false)}
-      />
+      {flightOpen ? (
+        <FlightTimerModal
+          visible
+          running={running !== null}
+          startedAt={running?.startedAt ?? null}
+          elapsedSeconds={running ? runningSeconds(running, now) : 0}
+          subjectName={
+            running ? running.subjectName : (activeSubject?.name ?? null)
+          }
+          subjectColor={subjectColor}
+          busy={busy}
+          onStart={toggleTimer}
+          onStop={toggleTimer}
+          onClose={() => setFlightOpen(false)}
+        />
+      ) : null}
 
-      <SubwayTimerModal
-        visible={subwayOpen}
-        running={running !== null}
-        startedAt={running?.startedAt ?? null}
-        elapsedSeconds={running ? runningSeconds(running, now) : 0}
-        subjectName={running ? running.subjectName : (activeSubject?.name ?? null)}
-        subjectColor={subjectColor}
-        busy={busy}
-        onStart={toggleTimer}
-        onStop={toggleTimer}
-        onClose={() => setSubwayOpen(false)}
-      />
+      {subwayOpen ? (
+        <SubwayTimerModal
+          visible
+          running={running !== null}
+          startedAt={running?.startedAt ?? null}
+          elapsedSeconds={running ? runningSeconds(running, now) : 0}
+          subjectName={
+            running ? running.subjectName : (activeSubject?.name ?? null)
+          }
+          subjectColor={subjectColor}
+          busy={busy}
+          onStart={toggleTimer}
+          onStop={toggleTimer}
+          onClose={() => setSubwayOpen(false)}
+        />
+      ) : null}
     </>
   );
 }
@@ -1289,17 +1388,24 @@ function MoneySection({
 }) {
   const theme = useTheme();
   const { budget } = useMonthlyBudget();
-  const transactions = useTransactions(yearMonthOf(today));
+  const month = useMemo(() => yearMonthOf(today), [today]);
+  const transactions = useTransactions(month);
   const items = transactions.data ?? [];
 
-  const sum = (list: typeof items) =>
-    list.reduce((total, item) => total + item.amount, 0);
-  const expenses = items.filter((item) => item.kind === "expense");
-  const income = sum(items.filter((item) => item.kind === "income"));
-  const expense = sum(expenses);
-  const todayExpense = sum(
-    expenses.filter((item) => item.occurred_on === today),
-  );
+  const { income, expense, todayExpense } = useMemo(() => {
+    let inc = 0;
+    let exp = 0;
+    let todayExp = 0;
+    for (const item of transactions.data ?? []) {
+      if (item.kind === "income") {
+        inc += item.amount;
+      } else if (item.kind === "expense") {
+        exp += item.amount;
+        if (item.occurred_on === today) todayExp += item.amount;
+      }
+    }
+    return { income: inc, expense: exp, todayExpense: todayExp };
+  }, [transactions.data, today]);
   const budgetRatio = budget && budget > 0 ? expense / budget : 0;
   const budgetColor =
     budgetRatio >= 1

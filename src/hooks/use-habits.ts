@@ -31,9 +31,11 @@ export function useHabits(enabled = true) {
     enabled: enabled && userId !== null,
     queryFn: async () => {
       if (isDevMode()) return localListHabits();
+      const uid = requireUserId();
       const { data, error } = await supabase
         .from("habits")
         .select("*")
+        .eq("user_id", uid)
         .eq("archived", false)
         .order("created_at");
       check(error);
@@ -57,9 +59,11 @@ export function useHabitLogs(enabled = true) {
       const rows = isDevMode()
         ? await localListHabitLogs(sinceDate)
         : await (async () => {
+            const uid = requireUserId();
             const { data, error } = await supabase
               .from("habit_logs")
               .select("habit_id, log_date")
+              .eq("user_id", uid)
               .gte("log_date", sinceDate);
             check(error);
             return data ?? [];
@@ -77,10 +81,12 @@ export function useHabitLogs(enabled = true) {
 }
 
 /** 오늘(오늘을 아직 안 했다면 어제)부터 거꾸로 며칠 연속으로 실천했는지 센다. */
-export function streakOf(dates: ReadonlySet<string> | undefined): number {
-  if (!dates) return 0;
+export function streakOf(
+  dates: ReadonlySet<string> | undefined,
+  today = todayISO(),
+): number {
+  if (!dates || dates.size === 0) return 0;
 
-  const today = todayISO();
   let day = dates.has(today) ? today : addDays(today, -1);
   let streak = 0;
   while (dates.has(day)) {
@@ -94,13 +100,17 @@ export function useSaveHabit() {
   return useInvalidatingMutation(
     KEY,
     async ({ id, name }: { id?: string; name: string }) => {
-      requireUserId();
+      const uid = requireUserId();
       if (isDevMode()) {
         await localSaveHabit(id, name);
         return;
       }
       const { error } = id
-        ? await supabase.from("habits").update({ name }).eq("id", id)
+        ? await supabase
+            .from("habits")
+            .update({ name })
+            .eq("id", id)
+            .eq("user_id", uid)
         : await supabase.from("habits").insert({ name });
       check(error);
     },
@@ -113,12 +123,17 @@ export function useDeleteHabit() {
   return useMutation({
     mutationKey: KEY,
     mutationFn: async (id: string) => {
-      requireUserId();
+      cancelPendingHabitToggles([id]);
+      const uid = requireUserId();
       if (isDevMode()) {
         await localDeleteHabit(id);
         return;
       }
-      const { error } = await supabase.from("habits").delete().eq("id", id);
+      const { error } = await supabase
+        .from("habits")
+        .delete()
+        .eq("id", id)
+        .eq("user_id", uid);
       check(error);
     },
     onSuccess: () => {
@@ -135,12 +150,17 @@ export function useDeleteHabits() {
     mutationKey: KEY,
     mutationFn: async (ids: string[]) => {
       if (ids.length === 0) return;
-      requireUserId();
+      cancelPendingHabitToggles(ids);
+      const uid = requireUserId();
       if (isDevMode()) {
         await localDeleteHabits(ids);
         return;
       }
-      const { error } = await supabase.from("habits").delete().in("id", ids);
+      const { error } = await supabase
+        .from("habits")
+        .delete()
+        .in("id", ids)
+        .eq("user_id", uid);
       check(error);
     },
     onSuccess: () => {
@@ -195,7 +215,7 @@ async function commitHabitLogDone(
   date: string,
   targetDone: boolean,
 ): Promise<void> {
-  requireUserId();
+  const uid = requireUserId();
   if (isDevMode()) {
     await localSetHabitLogDone(habitId, date, targetDone);
     return;
@@ -213,7 +233,8 @@ async function commitHabitLogDone(
       .from("habit_logs")
       .delete()
       .eq("habit_id", habitId)
-      .eq("log_date", date);
+      .eq("log_date", date)
+      .eq("user_id", uid);
     check(error);
   }
 }
@@ -346,6 +367,35 @@ export function getKnownHabitLogDone(
     scope,
   ]);
   return cached ? (cached.get(habitId)?.has(date) ?? false) : undefined;
+}
+
+/** 삭제·초기화 직전에 대기 중인 습관 실천 토글을 취소해 외래 키 오류와 유령 기록을 막는다. */
+export function cancelPendingHabitToggles(habitIds?: readonly string[]): void {
+  const idSet = habitIds ? new Set(habitIds) : null;
+  for (const [key, entry] of pendingHabitToggles) {
+    if (idSet && !idSet.has(entry.habitId)) continue;
+    if (entry.timer) clearTimeout(entry.timer);
+    pendingHabitToggles.delete(key);
+    for (const waiter of entry.waiters) waiter.resolve();
+  }
+  if (!idSet) {
+    confirmedHabitDoneMap.clear();
+    optimisticHabitDoneMap.clear();
+    return;
+  }
+  for (const map of [confirmedHabitDoneMap, optimisticHabitDoneMap]) {
+    for (const key of map.keys()) {
+      const firstColon = key.indexOf(":");
+      const lastColon = key.lastIndexOf(":");
+      if (
+        firstColon > 0 &&
+        lastColon > firstColon &&
+        idSet.has(key.slice(firstColon + 1, lastColon))
+      ) {
+        map.delete(key);
+      }
+    }
+  }
 }
 
 /** 대기 중인 모든 습관 실천 토글을 즉시 DB에 반영한다. */

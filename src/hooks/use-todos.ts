@@ -49,9 +49,10 @@ function sortTodos(items: Todo[]): Todo[] {
     if (a.due_date !== b.due_date) {
       if (a.due_date === null) return 1;
       if (b.due_date === null) return -1;
-      return a.due_date.localeCompare(b.due_date);
+      return a.due_date < b.due_date ? -1 : 1;
     }
-    return b.created_at.localeCompare(a.created_at);
+    if (b.created_at === a.created_at) return 0;
+    return b.created_at < a.created_at ? -1 : 1;
   });
 }
 
@@ -72,9 +73,11 @@ export function useTodos(enabled = true) {
       const rows = isDevMode()
         ? await localListTodos()
         : await (async () => {
+            const uid = requireUserId();
             const { data, error } = await supabase
               .from('todos')
               .select('*')
+              .eq('user_id', uid)
               .order('done')
               .order('due_date', { ascending: true, nullsFirst: false })
               .order('created_at', { ascending: false });
@@ -92,7 +95,7 @@ export function useTodos(enabled = true) {
 
 export function useSaveTodo() {
   return useInvalidatingMutation(KEY, async ({ id, ...values }: TodoInput) => {
-    requireUserId();
+    const uid = requireUserId();
     if (values.repeat && !values.due_date) throw new Error('반복하려면 마감일을 정해 주세요.');
     if (values.start_date && values.due_date && values.start_date > values.due_date) {
       throw new Error('시작일은 마감일보다 늦을 수 없어요.');
@@ -107,7 +110,7 @@ export function useSaveTodo() {
       return;
     }
     const { error } = id
-      ? await supabase.from('todos').update(row).eq('id', id)
+      ? await supabase.from('todos').update(row).eq('id', id).eq('user_id', uid)
       : await supabase.from('todos').insert(row);
     check(error);
   });
@@ -140,7 +143,7 @@ async function commitTodoDone(
   done: boolean,
   scope: string,
 ): Promise<TodoToggleResult> {
-  requireUserId();
+  const uid = requireUserId();
   const doneAt = done ? new Date().toISOString() : null;
   if (isDevMode()) {
     await localUpdateTodoDone(todo.id, done, doneAt);
@@ -148,7 +151,8 @@ async function commitTodoDone(
     const { error } = await supabase
       .from('todos')
       .update({ done, done_at: doneAt })
-      .eq('id', todo.id);
+      .eq('id', todo.id)
+      .eq('user_id', uid);
     check(error);
   }
 
@@ -164,6 +168,7 @@ async function commitTodoDone(
           const existing = await supabase
             .from('todos')
             .select('id')
+            .eq('user_id', uid)
             .eq('previous_id', todo.id)
             .eq('done', false)
             .limit(1);
@@ -212,6 +217,7 @@ async function commitTodoDone(
       const { data: deleted, error: deleteError } = await supabase
         .from('todos')
         .delete()
+        .eq('user_id', uid)
         .eq('previous_id', todo.id)
         .eq('done', false)
         .select('id');
@@ -257,7 +263,6 @@ function flushTodoEntry(key: string): Promise<void> {
           updateTodosCache(entry.scope, (items) =>
             items.map((item) => (item.id === result.todo.id ? result.todo : item)),
           );
-          queryClient.invalidateQueries({ queryKey: KEY });
         }
         entry.onCommitted?.(result);
         for (const waiter of entry.waiters) waiter.resolve();
@@ -372,6 +377,30 @@ export function getKnownTodo(todoId: string): Todo | undefined {
   );
 }
 
+/** 삭제·초기화 직전에 대기 중인 할 일 토글을 취소해 지운 반복 할 일이 되살아나는 문제를 막는다. */
+export function cancelPendingTodoToggles(todoIds?: readonly string[]): void {
+  const idSet = todoIds ? new Set(todoIds) : null;
+  for (const [key, entry] of pendingTodoToggles) {
+    if (idSet && !idSet.has(entry.todoId)) continue;
+    if (entry.timer) clearTimeout(entry.timer);
+    pendingTodoToggles.delete(key);
+    for (const waiter of entry.waiters) waiter.resolve();
+  }
+  if (!idSet) {
+    confirmedTodoMap.clear();
+    optimisticTodoMap.clear();
+    return;
+  }
+  for (const map of [confirmedTodoMap, optimisticTodoMap]) {
+    for (const key of map.keys()) {
+      const colon = key.indexOf(':');
+      if (colon > 0 && idSet.has(key.slice(colon + 1))) {
+        map.delete(key);
+      }
+    }
+  }
+}
+
 /** 대기 중인 모든 할 일 토글을 즉시 DB에 반영한다(앱 백그라운드 전환 시 유실 방지). */
 export async function flushPendingTodoToggles(): Promise<void> {
   const keys = [...pendingTodoToggles.keys()];
@@ -399,12 +428,13 @@ export function useToggleTodo() {
 
 export function useDeleteTodo() {
   return useInvalidatingMutation(KEY, async (id: string) => {
-    requireUserId();
+    cancelPendingTodoToggles([id]);
+    const uid = requireUserId();
     if (isDevMode()) {
       await localDeleteTodo(id);
       return;
     }
-    const { error } = await supabase.from('todos').delete().eq('id', id);
+    const { error } = await supabase.from('todos').delete().eq('id', id).eq('user_id', uid);
     check(error);
   });
 }
@@ -412,12 +442,13 @@ export function useDeleteTodo() {
 export function useDeleteTodos() {
   return useInvalidatingMutation(KEY, async (ids: string[]) => {
     if (ids.length === 0) return;
-    requireUserId();
+    cancelPendingTodoToggles(ids);
+    const uid = requireUserId();
     if (isDevMode()) {
       await localDeleteTodos(ids);
       return;
     }
-    const { error } = await supabase.from('todos').delete().in('id', ids);
+    const { error } = await supabase.from('todos').delete().in('id', ids).eq('user_id', uid);
     check(error);
   });
 }

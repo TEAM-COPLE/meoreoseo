@@ -52,12 +52,14 @@ function decodeUtf8(bytes: Uint8Array): string | null {
   return out;
 }
 
+const MAX_STATEMENT_BYTES = 5 * 1024 * 1024;
+
 /** 파일 내용(바이트)을 글자로 바꾼다. UTF-8 이 아니면 한국어 옛 방식(EUC-KR)으로 읽어 본다. */
 export function decodeText(bytes: Uint8Array): string {
   const utf8 = decodeUtf8(bytes);
-  if (utf8 !== null) return utf8.replace(/^﻿/, '');
+  if (utf8 !== null) return utf8.replace(/^\uFEFF/, '').replace(/\u0000/g, '');
   try {
-    return new TextDecoder('euc-kr').decode(bytes);
+    return new TextDecoder('euc-kr').decode(bytes).replace(/\u0000/g, '');
   } catch {
     throw new Error(
       '파일의 글자 방식(EUC-KR)을 이 기기에서 읽을 수 없어요. 엑셀에서 "CSV UTF-8"로 저장하거나 웹에서 올려 주세요.',
@@ -112,13 +114,25 @@ export function parseCsv(text: string): string[][] {
 
 const ENTITIES: Record<string, string> = { nbsp: ' ', amp: '&', lt: '<', gt: '>', quot: '"', apos: "'" };
 
+function decodeEntity(code: string): string {
+  if (code.startsWith('#')) {
+    const cp =
+      code[1]?.toLowerCase() === 'x'
+        ? Number.parseInt(code.slice(2), 16)
+        : Number.parseInt(code.slice(1), 10);
+    if (Number.isInteger(cp) && cp > 0 && cp <= 0x10ffff && (cp < 0xd800 || cp > 0xdfff)) {
+      return String.fromCodePoint(cp);
+    }
+    return ' ';
+  }
+  return ENTITIES[code.toLowerCase()] ?? ' ';
+}
+
 function htmlToText(html: string): string {
   return html
     .replace(/<br\s*\/?>/gi, ' ')
     .replace(/<[^>]*>/g, '')
-    .replace(/&(#\d+|[a-z]+);/gi, (_, code: string) =>
-      code.startsWith('#') ? String.fromCharCode(Number(code.slice(1))) : (ENTITIES[code.toLowerCase()] ?? ' '),
-    )
+    .replace(/&(#x[0-9a-f]+|#\d+|[a-z]+);/gi, (_, code: string) => decodeEntity(code))
     .replace(/\s+/g, ' ')
     .trim();
 }
@@ -137,6 +151,9 @@ export function parseHtmlTable(html: string): string[][] {
 
 /** 파일 내용을 표로 바꾼다. 읽을 수 없는 파일이면 오류를 낸다. */
 export function readStatementFile(bytes: Uint8Array): string[][] {
+  if (bytes.byteLength > MAX_STATEMENT_BYTES) {
+    throw new Error('파일이 너무 커요(5MB 넘음). 기간을 나눠서 내려받아 주세요.');
+  }
   // 진짜 엑셀 파일은 맨 앞 글자로 알 수 있다: .xlsx 는 'PK', 옛 .xls 는 D0 CF 11 E0.
   if (bytes[0] === 0x50 && bytes[1] === 0x4b) {
     throw new Error('엑셀(.xlsx) 파일은 아직 바로 읽을 수 없어요. 엑셀에서 "CSV"로 저장해서 올려 주세요.');

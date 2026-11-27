@@ -44,9 +44,11 @@ export function useTransactions(month: YearMonth) {
       if (isDevMode()) {
         return localListTransactions(start, end);
       }
+      const uid = requireUserId();
       const { data, error } = await supabase
         .from('transactions')
         .select('*')
+        .eq('user_id', uid)
         .gte('occurred_on', start)
         .lte('occurred_on', end)
         .order('occurred_on', { ascending: false })
@@ -59,13 +61,13 @@ export function useTransactions(month: YearMonth) {
 
 export function useSaveTransaction() {
   return useInvalidatingMutation(KEY, async ({ id, ...values }: TransactionInput) => {
-    requireUserId();
+    const uid = requireUserId();
     if (isDevMode()) {
       await localSaveTransaction(id, values);
       return;
     }
     const { error } = id
-      ? await supabase.from('transactions').update(values).eq('id', id)
+      ? await supabase.from('transactions').update(values).eq('id', id).eq('user_id', uid)
       : await supabase.from('transactions').insert(values);
     check(error);
   });
@@ -73,12 +75,12 @@ export function useSaveTransaction() {
 
 export function useDeleteTransaction() {
   return useInvalidatingMutation(KEY, async (id: string) => {
-    requireUserId();
+    const uid = requireUserId();
     if (isDevMode()) {
       await localDeleteTransaction(id);
       return;
     }
-    const { error } = await supabase.from('transactions').delete().eq('id', id);
+    const { error } = await supabase.from('transactions').delete().eq('id', id).eq('user_id', uid);
     check(error);
   });
 }
@@ -86,12 +88,12 @@ export function useDeleteTransaction() {
 export function useDeleteTransactions() {
   return useInvalidatingMutation(KEY, async (ids: string[]) => {
     if (ids.length === 0) return;
-    requireUserId();
+    const uid = requireUserId();
     if (isDevMode()) {
       await localDeleteTransactions(ids);
       return;
     }
-    const { error } = await supabase.from('transactions').delete().in('id', ids);
+    const { error } = await supabase.from('transactions').delete().in('id', ids).eq('user_id', uid);
     check(error);
   });
 }

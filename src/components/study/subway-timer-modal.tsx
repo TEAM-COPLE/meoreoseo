@@ -33,9 +33,9 @@ import { ArrivalOverlay } from './arrival-overlay';
 import { FadeSlideIn } from './common';
 import { formatAtcTimestamp } from './flight-atc';
 import {
-  ALL_STATIONS,
   findSubwayPath,
   formatStationName,
+  getAllStations,
   getSubwayLine,
   SUBWAY_LINES,
   withEuro,
@@ -81,6 +81,7 @@ export function SubwayTimerModal({
   const [pickingSlot, setPickingSlot] = useState<'start' | 'end' | null>(null);
   const [selectedLineId, setSelectedLineId] = useState<string>('line2');
   const [query, setQuery] = useState('');
+  const [showAllStations, setShowAllStations] = useState(false);
   const [showAnnouncement, setShowAnnouncement] = useState(true);
   const [landscapeOverride, setLandscapeOverride] = useState<boolean | null>(null);
   const [dismissedArrivalKey, setDismissedArrivalKey] = useState<string | null>(null);
@@ -172,9 +173,11 @@ export function SubwayTimerModal({
       : announceBaseMs,
   );
 
+  const allStations = useMemo(() => getAllStations(), []);
+
   const stationLineLookup = useMemo(
-    () => new Map(ALL_STATIONS.map((s) => [s.name, s.lineIds])),
-    [],
+    () => new Map(allStations.map((s) => [s.name, s.lineIds])),
+    [allStations],
   );
 
   // 노선 필터 + 역명 검색 결과
@@ -199,10 +202,10 @@ export function SubwayTimerModal({
           lineIds: stationLineLookup.get(name) ?? [selectedLineId],
         }));
     }
-    return ALL_STATIONS.filter((s) =>
+    return allStations.filter((s) =>
       !q ? true : s.name.toLowerCase().includes(q),
     );
-  }, [selectedLineId, query, stationLineLookup]);
+  }, [selectedLineId, query, stationLineLookup, allStations]);
 
   const activePickerLine =
     selectedLineId !== 'all' && query.trim() === ''
@@ -524,18 +527,27 @@ export function SubwayTimerModal({
     </>
   );
 
-  const controlsSection = (
-    <>
-      {/* 출발역 ↔ 종착역 선택 */}
-      <View style={styles.pickerSection}>
-        <View style={styles.pickerHeader}>
-          <ThemedText type="smallBold" themeColor="textSecondary">
-            출발역 · 종착역 선택
-          </ThemedText>
-          <ThemedText type="small" themeColor="textSecondary">
-            {SUBWAY_LINES.length}개 노선 · {ALL_STATIONS.length}개 역
-          </ThemedText>
-        </View>
+  const controlsSection = useMemo(() => {
+    const INITIAL_ALL_LIMIT = 120;
+    const isUnfilteredAll = selectedLineId === 'all' && query.trim() === '';
+    const displayedStations =
+      isUnfilteredAll && !showAllStations
+        ? filteredStations.slice(0, INITIAL_ALL_LIMIT)
+        : filteredStations;
+    const hiddenStationCount = filteredStations.length - displayedStations.length;
+
+    return (
+      <>
+        {/* 출발역 ↔ 종착역 선택 */}
+        <View style={styles.pickerSection}>
+          <View style={styles.pickerHeader}>
+            <ThemedText type="smallBold" themeColor="textSecondary">
+              출발역 · 종착역 선택
+            </ThemedText>
+            <ThemedText type="small" themeColor="textSecondary">
+              {SUBWAY_LINES.length}개 노선 · {allStations.length}개 역
+            </ThemedText>
+          </View>
 
         <View style={styles.slotRow}>
           <Pressable
@@ -635,7 +647,10 @@ export function SubwayTimerModal({
               showsHorizontalScrollIndicator={false}
               contentContainerStyle={styles.lineFilterRow}>
               <Pressable
-                onPress={() => setSelectedLineId('all')}
+                onPress={() => {
+                  setSelectedLineId('all');
+                  setShowAllStations(false);
+                }}
                 style={[
                   styles.lineFilterChip,
                   {
@@ -651,7 +666,7 @@ export function SubwayTimerModal({
                     color: selectedLineId === 'all' ? theme.onTint : theme.textSecondary,
                     fontSize: 12,
                   }}>
-                  전체 ({ALL_STATIONS.length})
+                  전체 ({allStations.length})
                 </ThemedText>
               </Pressable>
 
@@ -855,42 +870,61 @@ export function SubwayTimerModal({
                   검색 결과가 없습니다.
                 </ThemedText>
               ) : (
-                filteredStations.map((st) => {
-                  const isPicked =
-                    (pickingSlot === 'start' && st.name === startStation) ||
-                    (pickingSlot === 'end' && st.name === endStation);
-                  return (
+                <>
+                  {displayedStations.map((st) => {
+                    const isPicked =
+                      (pickingSlot === 'start' && st.name === startStation) ||
+                      (pickingSlot === 'end' && st.name === endStation);
+                    return (
+                      <Pressable
+                        key={st.name}
+                        onPress={() => pickStation(st.name)}
+                        style={({ pressed }) => [
+                          styles.stationChip,
+                          {
+                            backgroundColor: isPicked ? theme.tint : theme.background,
+                            borderColor: isPicked ? theme.tint : theme.border,
+                            opacity: pressed ? 0.75 : 1,
+                          },
+                        ]}>
+                        <ThemedText
+                          type="smallBold"
+                          numberOfLines={1}
+                          style={{ color: isPicked ? theme.onTint : theme.text }}>
+                          {st.name}
+                        </ThemedText>
+                        <View style={styles.stationDotsRow}>
+                          {st.lineIds.slice(0, 4).map((lid) => (
+                            <View
+                              key={lid}
+                              style={[
+                                styles.miniLineDot,
+                                { backgroundColor: getSubwayLine(lid).color },
+                              ]}
+                            />
+                          ))}
+                        </View>
+                      </Pressable>
+                    );
+                  })}
+                  {hiddenStationCount > 0 ? (
                     <Pressable
-                      key={st.name}
-                      onPress={() => pickStation(st.name)}
+                      accessibilityRole="button"
+                      onPress={() => setShowAllStations(true)}
                       style={({ pressed }) => [
                         styles.stationChip,
                         {
-                          backgroundColor: isPicked ? theme.tint : theme.background,
-                          borderColor: isPicked ? theme.tint : theme.border,
+                          backgroundColor: theme.backgroundSelected,
+                          borderColor: theme.tint,
                           opacity: pressed ? 0.75 : 1,
                         },
                       ]}>
-                      <ThemedText
-                        type="smallBold"
-                        numberOfLines={1}
-                        style={{ color: isPicked ? theme.onTint : theme.text }}>
-                        {st.name}
+                      <ThemedText type="smallBold" themeColor="tint">
+                        나머지 {hiddenStationCount}개 역 더 보기
                       </ThemedText>
-                      <View style={styles.stationDotsRow}>
-                        {st.lineIds.slice(0, 4).map((lid) => (
-                          <View
-                            key={lid}
-                            style={[
-                              styles.miniLineDot,
-                              { backgroundColor: getSubwayLine(lid).color },
-                            ]}
-                          />
-                        ))}
-                      </View>
                     </Pressable>
-                  );
-                })
+                  ) : null}
+                </>
               )}
             </ScrollView>
           </View>
@@ -928,7 +962,29 @@ export function SubwayTimerModal({
         </ThemedText>
       </Pressable>
     </>
-  );
+    );
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    allStations.length,
+    selectedLineId,
+    query,
+    showAllStations,
+    filteredStations,
+    pickingSlot,
+    startStation,
+    endStation,
+    activePickerLine,
+    stationLineLookup,
+    theme,
+    busy,
+    path,
+    running,
+    arrived,
+    activeLineColor,
+    totalSeconds,
+    onStop,
+    onStart,
+  ]);
 
   return (
     <Modal

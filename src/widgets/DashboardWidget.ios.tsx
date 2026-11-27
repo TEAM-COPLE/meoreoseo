@@ -46,10 +46,12 @@ function DashboardWidgetLayout(props: DashboardWidgetProps, environment: WidgetE
   const target = (environment as { target?: string }).target;
   if (target && target.startsWith('toggle-todo:')) {
     const id = target.slice('toggle-todo:'.length);
+    const current = props.todos.find((t) => t.id === id);
+    if (!current) return props as unknown as React.JSX.Element;
     const nextTodos = props.todos.map((item) =>
       item.id === id ? { ...item, done: !item.done } : item,
     );
-    const delta = nextTodos.find((t) => t.id === id)?.done ? -1 : 1;
+    const delta = !current.done ? -1 : 1;
     return {
       ...props,
       todoPendingCount: Math.max(0, props.todoPendingCount + delta),
@@ -58,19 +60,21 @@ function DashboardWidgetLayout(props: DashboardWidgetProps, environment: WidgetE
   }
   if (target && target.startsWith('toggle-habit:')) {
     const id = target.slice('toggle-habit:'.length);
-    const nextHabits = props.habits.map((item) => {
-      if (item.id !== id) return item;
-      const nextDone = !item.done;
-      return {
-        ...item,
-        done: nextDone,
-        streak: nextDone ? item.streak + 1 : Math.max(0, item.streak - 1),
-      };
-    });
-    const delta = nextHabits.find((h) => h.id === id)?.done ? 1 : -1;
+    const current = props.habits.find((h) => h.id === id);
+    if (!current) return props as unknown as React.JSX.Element;
+    const nextDone = !current.done;
+    const nextHabits = props.habits.map((item) =>
+      item.id === id
+        ? {
+            ...item,
+            done: nextDone,
+            streak: nextDone ? item.streak + 1 : Math.max(0, item.streak - 1),
+          }
+        : item,
+    );
     return {
       ...props,
-      habitDoneCount: Math.max(0, props.habitDoneCount + delta),
+      habitDoneCount: Math.max(0, props.habitDoneCount + (nextDone ? 1 : -1)),
       habits: nextHabits,
     } as unknown as React.JSX.Element;
   }

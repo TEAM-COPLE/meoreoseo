@@ -93,6 +93,9 @@ function key(): Promise<CryptoKey> {
   return signingKey;
 }
 
+const PRIVATE_EXP_CALLBACK_RE =
+  /^exp:\/\/(localhost|127\.0\.0\.1|10\.\d{1,3}\.\d{1,3}\.\d{1,3}|192\.168\.\d{1,3}\.\d{1,3}|172\.(1[6-9]|2\d|3[01])\.\d{1,3}\.\d{1,3})(:\d+)?\/--\/auth-callback$/;
+
 /**
  * 로그인을 마치고 돌아갈 주소로 허락된 곳인지.
  * 여기로 구글 신분증이 가므로, 남이 만든 사이트(미리보기 주소 포함)는 절대 허락하지 않는다.
@@ -105,17 +108,22 @@ function isAllowedReturn(url: unknown): url is string {
   } catch {
     return false;
   }
-  if (parsed.search || parsed.hash) return false;
+  if (parsed.username || parsed.password || parsed.search || parsed.hash) return false;
   if (parsed.protocol === 'https:') {
     return parsed.host === 'meoreoseo.vercel.app' && parsed.pathname === '/auth-callback';
   }
   if (parsed.protocol === 'http:') {
     // 내 컴퓨터에서 개발할 때 (npx expo start)
-    return parsed.hostname === 'localhost' && parsed.pathname === '/auth-callback';
+    return (
+      (parsed.hostname === 'localhost' || parsed.hostname === '127.0.0.1') &&
+      parsed.pathname === '/auth-callback'
+    );
   }
-  // 설치된 앱(meoreoseo://auth-callback), Expo Go(exp://…/--/auth-callback)
-  if (parsed.protocol === 'meoreoseo:') return url === 'meoreoseo://auth-callback';
-  if (parsed.protocol === 'exp:') return url.endsWith('/--/auth-callback');
+  // 설치된 앱(meoreoseo://auth-callback), 로컬 Expo Go(exp://<사설IP>/--/auth-callback)
+  if (parsed.protocol === 'meoreoseo:') {
+    return url === 'meoreoseo://auth-callback' || url === 'meoreoseo:///auth-callback';
+  }
+  if (parsed.protocol === 'exp:') return PRIVATE_EXP_CALLBACK_RE.test(url);
   return false;
 }
 

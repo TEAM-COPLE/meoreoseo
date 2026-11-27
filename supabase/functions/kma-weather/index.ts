@@ -52,7 +52,13 @@ type KmaItem = {
   obsrValue?: string;
 };
 
+const MAX_CACHE_ENTRIES = 500;
 const cache = new Map<string, { expires: number; weather: Weather }>();
+const inFlight = new Map<string, Promise<Weather>>();
+
+function isInKoreaBounds(latitude: number, longitude: number): boolean {
+  return latitude >= 32.9 && latitude <= 38.7 && longitude >= 124.0 && longitude <= 132.0;
+}
 
 function json(body: unknown, status = 200) {
   return new Response(JSON.stringify(body), {
@@ -165,15 +171,15 @@ async function callKma(
   try {
     const response = await fetch(`${API_BASE}/${operation}?${query}`, { signal: controller.signal });
     text = await response.text();
-    if (!response.ok) throw new Error(`기상청 서버 오류 (${response.status}) ${text.slice(0, 120)}`);
+    if (!response.ok) throw new Error(`기상청 서버 오류 (${response.status})`);
   } finally {
     clearTimeout(timer);
   }
 
   // 키가 틀리면 JSON 대신 XML 로 답한다.
   if (!text.trim().startsWith('{')) {
-    const reason = text.match(/<returnAuthMsg>([^<]+)</)?.[1] ?? text.slice(0, 120);
-    throw new Error(`기상청 API 키 문제: ${reason}`);
+    const reason = text.match(/<returnAuthMsg>([^<]+)</)?.[1] ?? '응답 형식이 올바르지 않습니다';
+    throw new Error(`기상청 API 키 문제: ${reason.slice(0, 120)}`);
   }
   const data = JSON.parse(text);
   const header = data?.response?.header;
@@ -333,90 +339,114 @@ function dayCode(items: KmaItem[]): number {
 async function loadWeather(latitude: number, longitude: number, serviceKey: string): Promise<Weather> {
   const grid = toGrid(latitude, longitude);
   const cacheKey = `${grid.nx},${grid.ny}`;
+  const nowMs = Date.now();
   const cached = cache.get(cacheKey);
-  if (cached && cached.expires > Date.now()) return cached.weather;
+  if (cached && cached.expires > nowMs) return cached.weather;
 
-  const now = koreaNow();
-  const gridParams = { nx: String(grid.nx), ny: String(grid.ny) };
-  const latestBase = latestForecastBase(now);
-  const morningBase = morningForecastBase(now);
-  const sameBase =
-    latestBase.base_date === morningBase.base_date && latestBase.base_time === morningBase.base_time;
+  const existing = inFlight.get(cacheKey);
+  if (existing) return existing;
 
-  const [observed, latest, morning] = await Promise.all([
-    currentObservation(now, grid, serviceKey),
-    // 오늘 남은 시간 + 내일 + 모레 예보가 다 들어가도록 넉넉히 받는다.
-    callKma('getVilageFcst', { ...gridParams, ...latestBase, numOfRows: '1000' }, serviceKey),
-    sameBase
-      ? Promise.resolve(null)
-      : callKma('getVilageFcst', { ...gridParams, ...morningBase, numOfRows: '400' }, serviceKey),
-  ]);
+  const task = (async (): Promise<Weather> => {
+    const now = koreaNow();
+    const gridParams = { nx: String(grid.nx), ny: String(grid.ny) };
+    const latestBase = latestForecastBase(now);
+    const morningBase = morningForecastBase(now);
+    const sameBase =
+      latestBase.base_date === morningBase.base_date && latestBase.base_time === morningBase.base_time;
 
-  const observedValue = (category: string) =>
-    toNumber(observed.find((item) => item.category === category)?.obsrValue);
+    const [observed, latest, morning] = await Promise.all([
+      currentObservation(now, grid, serviceKey),
+      // 오늘 남은 시간 + 내일 + 모레 예보가 다 들어가도록 넉넉히 받는다.
+      callKma('getVilageFcst', { ...gridParams, ...latestBase, numOfRows: '1000' }, serviceKey),
+      sameBase
+        ? Promise.resolve(null)
+        : callKma('getVilageFcst', { ...gridParams, ...morningBase, numOfRows: '400' }, serviceKey),
+    ]);
 
-  const temperature = observedValue('T1H');
-  if (temperature === null) throw new Error('기상청 자료에 지금 기온이 없습니다');
+    const observedValue = (category: string) =>
+      toNumber(observed.find((item) => item.category === category)?.obsrValue);
 
-  // 오늘 자료만 남긴다.
-  const todayLatest = latest.filter((item) => item.fcstDate === now.ymd);
-  const todayMorning = (morning ?? latest).filter((item) => item.fcstDate === now.ymd);
-  const values = (items: KmaItem[], category: string) =>
-    items
-      .filter((item) => item.category === category)
-      .map((item) => toNumber(item.fcstValue))
-      .filter((value): value is number => value !== null);
+    const temperature = observedValue('T1H');
+    if (temperature === null) throw new Error('기상청 자료에 지금 기온이 없습니다');
 
-  // 최고·최저: 기상청이 발표한 오늘 최고(TMX)·최저(TMN). 없으면 시간별 기온 중 가장 높고 낮은 값.
-  const hourly = [...values(todayMorning, 'TMP'), ...values(todayLatest, 'TMP'), temperature];
-  const high = Math.max(values(todayMorning, 'TMX')[0] ?? Math.max(...hourly), temperature);
-  const low = Math.min(values(todayMorning, 'TMN')[0] ?? Math.min(...hourly), temperature);
+    // 오늘 자료만 남긴다.
+    const todayLatest = latest.filter((item) => item.fcstDate === now.ymd);
+    const todayMorning = (morning ?? latest).filter((item) => item.fcstDate === now.ymd);
+    const values = (items: KmaItem[], category: string) =>
+      items
+        .filter((item) => item.category === category)
+        .map((item) => toNumber(item.fcstValue))
+        .filter((value): value is number => value !== null);
 
-  // 비 올 확률: 오늘 남은 시간 중 가장 높은 값. 남은 예보가 없으면(밤늦게) 표시하지 않는다.
-  const chances = values(todayLatest, 'POP');
-  const rainChance = chances.length > 0 ? Math.max(...chances) : null;
+    // 최고·최저: 기상청이 발표한 오늘 최고(TMX)·최저(TMN). 없으면 시간별 기온 중 가장 높고 낮은 값.
+    const hourly = [...values(todayMorning, 'TMP'), ...values(todayLatest, 'TMP'), temperature];
+    const high = Math.max(values(todayMorning, 'TMX')[0] ?? Math.max(...hourly), temperature);
+    const low = Math.min(values(todayMorning, 'TMN')[0] ?? Math.min(...hourly), temperature);
 
-  // 하늘 상태는 관측에 없어서 가장 가까운 시각의 예보를 쓴다.
-  const nextSky = toNumber(latest.find((item) => item.category === 'SKY')?.fcstValue);
-  const month = now.kst.getUTCMonth() + 1;
+    // 비 올 확률: 오늘 남은 시간 중 가장 높은 값. 남은 예보가 없으면(밤늦게) 표시하지 않는다.
+    const chances = values(todayLatest, 'POP');
+    const rainChance = chances.length > 0 ? Math.max(...chances) : null;
 
-  // 오늘·내일·모레 예보. 오늘은 위에서 계산한 값과 같게 맞춘다.
-  const days: DayForecast[] = [
-    {
-      date: isoOf(now.ymd),
+    // 하늘 상태는 관측에 없어서 가장 가까운 시각의 예보를 쓴다.
+    const nextSky = toNumber(latest.find((item) => item.category === 'SKY')?.fcstValue);
+    const month = now.kst.getUTCMonth() + 1;
+
+    // 오늘·내일·모레 예보. 오늘은 위에서 계산한 값과 같게 맞춘다.
+    const days: DayForecast[] = [
+      {
+        date: isoOf(now.ymd),
+        high,
+        low,
+        rainChance,
+        code: dayCode([...todayMorning, ...todayLatest]),
+      },
+    ];
+    for (let offset = 1; offset <= 2; offset++) {
+      const ymd = koreaNow(new Date(Date.now() + offset * 86_400_000)).ymd;
+      const items = latest.filter((item) => item.fcstDate === ymd);
+      const temps = values(items, 'TMP');
+      if (temps.length === 0) continue; // 아직 그날 예보가 없다.
+      const pops = values(items, 'POP');
+      days.push({
+        date: isoOf(ymd),
+        high: values(items, 'TMX')[0] ?? Math.max(...temps),
+        low: values(items, 'TMN')[0] ?? Math.min(...temps),
+        rainChance: pops.length > 0 ? Math.max(...pops) : null,
+        code: dayCode(items),
+      });
+    }
+
+    const weather: Weather = {
+      temperature,
+      feelsLike: feelsLike(temperature, observedValue('REH'), observedValue('WSD'), month),
       high,
       low,
       rainChance,
-      code: dayCode([...todayMorning, ...todayLatest]),
-    },
-  ];
-  for (let offset = 1; offset <= 2; offset++) {
-    const ymd = koreaNow(new Date(Date.now() + offset * 86_400_000)).ymd;
-    const items = latest.filter((item) => item.fcstDate === ymd);
-    const temps = values(items, 'TMP');
-    if (temps.length === 0) continue; // 아직 그날 예보가 없다.
-    const pops = values(items, 'POP');
-    days.push({
-      date: isoOf(ymd),
-      high: values(items, 'TMX')[0] ?? Math.max(...temps),
-      low: values(items, 'TMN')[0] ?? Math.min(...temps),
-      rainChance: pops.length > 0 ? Math.max(...pops) : null,
-      code: dayCode(items),
-    });
-  }
+      code: toWeatherCode(observedValue('PTY'), nextSky),
+      isDay: isDaytime(latitude, longitude),
+      days,
+    };
 
-  const weather: Weather = {
-    temperature,
-    feelsLike: feelsLike(temperature, observedValue('REH'), observedValue('WSD'), month),
-    high,
-    low,
-    rainChance,
-    code: toWeatherCode(observedValue('PTY'), nextSky),
-    isDay: isDaytime(latitude, longitude),
-    days,
-  };
-  cache.set(cacheKey, { expires: Date.now() + CACHE_MS, weather });
-  return weather;
+    const finishMs = Date.now();
+    if (cache.size >= MAX_CACHE_ENTRIES) {
+      for (const [key, entry] of cache) {
+        if (entry.expires <= finishMs) cache.delete(key);
+      }
+      if (cache.size >= MAX_CACHE_ENTRIES) {
+        const oldestKey = cache.keys().next().value;
+        if (oldestKey !== undefined) cache.delete(oldestKey);
+      }
+    }
+    cache.set(cacheKey, { expires: finishMs + CACHE_MS, weather });
+    return weather;
+  })();
+
+  inFlight.set(cacheKey, task);
+  try {
+    return await task;
+  } finally {
+    inFlight.delete(cacheKey);
+  }
 }
 
 Deno.serve(async (request) => {
@@ -433,8 +463,8 @@ Deno.serve(async (request) => {
   } catch {
     return json({ error: '위도·경도를 보내 주세요' }, 400);
   }
-  if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) {
-    return json({ error: '위도·경도가 올바르지 않습니다' }, 400);
+  if (!Number.isFinite(latitude) || !Number.isFinite(longitude) || !isInKoreaBounds(latitude, longitude)) {
+    return json({ error: '기상청 예보 범위(대한민국) 밖의 좌표이거나 올바르지 않습니다' }, 400);
   }
 
   let serviceKey = Deno.env.get('KMA_SERVICE_KEY')?.trim();
@@ -442,7 +472,13 @@ Deno.serve(async (request) => {
     return json({ error: '기상청 API 키가 설정되지 않았습니다 (KMA_SERVICE_KEY)' }, 500);
   }
   // 공공데이터포털의 "Encoding" 키를 넣었으면 원래 글자로 되돌린다(아래에서 다시 인코딩한다).
-  if (serviceKey.includes('%')) serviceKey = decodeURIComponent(serviceKey);
+  if (serviceKey.includes('%')) {
+    try {
+      serviceKey = decodeURIComponent(serviceKey);
+    } catch {
+      // 잘못 인코딩된 % 가 섞여 있으면 원문 그대로 사용한다.
+    }
+  }
 
   try {
     return json(await loadWeather(latitude, longitude, serviceKey));

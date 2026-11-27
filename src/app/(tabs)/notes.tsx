@@ -30,18 +30,26 @@ export default function NotesScreen() {
   useWebSearchShortcut(() => searchRef.current?.focus());
 
   const all = notes.data ?? [];
+  const indexedNotes = useMemo(
+    () =>
+      (notes.data ?? []).map((note) => ({
+        note,
+        titleLower: note.title.toLowerCase(),
+        bodyLower: note.body.toLowerCase(),
+        dateLabel: formatDate(toISODate(new Date(note.updated_at))),
+      })),
+    [notes.data],
+  );
   // 검색어가 있으면 제목이나 내용에 그 말이 들어 있는 메모만 보여준다(대소문자 구분 없음).
   const keyword = deferredQuery.trim().toLowerCase();
   const visible = useMemo(() => {
-    const list = notes.data ?? [];
-    if (!keyword) return list;
-    return list.filter(
-      (note) =>
-        note.title.toLowerCase().includes(keyword) || note.body.toLowerCase().includes(keyword),
+    if (!keyword) return indexedNotes;
+    return indexedNotes.filter(
+      (item) => item.titleLower.includes(keyword) || item.bodyLower.includes(keyword),
     );
-  }, [notes.data, keyword]);
+  }, [indexedNotes, keyword]);
 
-  const visibleIds = visible.map((note) => note.id);
+  const visibleIds = useMemo(() => visible.map((item) => item.note.id), [visible]);
   const selectedVisibleIds = visibleIds.filter((id) => multi.isSelected(id));
   const isSelecting = visibleIds.length > 0 && (multi.active || selectedVisibleIds.length > 0);
 
@@ -133,7 +141,7 @@ export default function NotesScreen() {
         onRetry={notes.refetch}
       />
 
-      {visible.map((note) => {
+      {visible.map(({ note, dateLabel }) => {
         const selected = multi.isSelected(note.id);
         return (
           <Card
@@ -174,7 +182,7 @@ export default function NotesScreen() {
               </ThemedText>
             ) : null}
             <ThemedText type="small" themeColor="textSecondary">
-              {formatDate(toISODate(new Date(note.updated_at)))} · {note.body.length}자
+              {dateLabel} · {note.body.length}자
             </ThemedText>
           </Card>
         );

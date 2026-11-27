@@ -107,23 +107,41 @@ export default function AppTabs() {
   const initialRouteIndex = Math.max(0, indexOfSwipeRoute(pathname));
   const [prevPathname, setPrevPathname] = useState(pathname);
   const [activeIndex, setActiveIndex] = useState(initialRouteIndex);
-  const [allTabsMounted, setAllTabsMounted] = useState(false);
+  const [mountedIndices, setMountedIndices] = useState<ReadonlySet<number>>(
+    () =>
+      new Set([
+        initialRouteIndex,
+        (initialRouteIndex - 1 + TAB_COUNT) % TAB_COUNT,
+        (initialRouteIndex + 1) % TAB_COUNT,
+      ]),
+  );
   const [dockWidth, setDockWidth] = useState(0);
   const activeIdxSV = useSharedValue(initialRouteIndex);
   const dragX = useSharedValue(0);
   const isAnimating = useSharedValue(false);
 
-  // 초기 구동 시 현재 탭과 양옆 탭(3개)을 먼저 그린 뒤, 나머지 2개 탭은 직후에 마운트해 첫 실행 속도를 높인다.
-  useEffect(() => {
-    const timer = setTimeout(() => setAllTabsMounted(true), 250);
-    return () => clearTimeout(timer);
-  }, []);
+  // 현재 탭과 양옆 인접 탭만 미리 마운트해 첫 구동 시 불필요한 탭 렌더링·쿼리를 줄이고, 한 번 연 탭은 유지한다.
+  function activateTab(nextIdx: number) {
+    setActiveIndex(nextIdx);
+    const prevIdx = (nextIdx - 1 + TAB_COUNT) % TAB_COUNT;
+    const adjIdx = (nextIdx + 1) % TAB_COUNT;
+    setMountedIndices((prev) => {
+      if (prev.has(nextIdx) && prev.has(prevIdx) && prev.has(adjIdx)) {
+        return prev;
+      }
+      const next = new Set(prev);
+      next.add(nextIdx);
+      next.add(prevIdx);
+      next.add(adjIdx);
+      return next;
+    });
+  }
 
   if (pathname !== prevPathname) {
     setPrevPathname(pathname);
     const routeIdx = indexOfSwipeRoute(pathname);
     if (routeIdx !== -1) {
-      setActiveIndex(routeIdx);
+      activateTab(routeIdx);
     }
   }
 
@@ -143,7 +161,7 @@ export default function AppTabs() {
     if (step < -2) step += TAB_COUNT;
 
     // 탭을 누르는 즉시 하단바 활성 상태를 먼저 바꿔 딜레이를 없앤다.
-    setActiveIndex(targetIndex);
+    activateTab(targetIndex);
     isAnimating.set(true);
     dragX.set(
       withTiming(
@@ -179,7 +197,7 @@ export default function AppTabs() {
         const step = projected < 0 ? 1 : -1;
         const nextIdx = (activeIdxSV.get() + step + TAB_COUNT) % TAB_COUNT;
         // 손을 떼는 즉시 하단바 아이콘/라벨을 전환해 딜레이 없이 반응하게 한다.
-        runOnJS(setActiveIndex)(nextIdx);
+        runOnJS(activateTab)(nextIdx);
         isAnimating.set(true);
         dragX.set(
           withTiming(
@@ -331,7 +349,7 @@ export default function AppTabs() {
             const prevIdx = (activeIndex - 1 + TAB_COUNT) % TAB_COUNT;
             const nextIdx = (activeIndex + 1) % TAB_COUNT;
             const shouldMount =
-              allTabsMounted ||
+              mountedIndices.has(index) ||
               index === activeIndex ||
               index === prevIdx ||
               index === nextIdx;
@@ -363,7 +381,8 @@ export default function AppTabs() {
           style={[
             styles.dock,
             {
-              backgroundColor: scheme === "dark" ? "#0F0F12" : colors.backgroundElement,
+              backgroundColor:
+                scheme === "dark" ? "#0F0F12" : colors.backgroundElement,
               borderColor: colors.border,
               shadowColor: scheme === "dark" ? "#000000" : "#111114",
             },
@@ -374,7 +393,8 @@ export default function AppTabs() {
               style={[
                 styles.activePill,
                 {
-                  backgroundColor: scheme === "dark" ? "#1E1E24" : colors.tintSoft,
+                  backgroundColor:
+                    scheme === "dark" ? "#1E1E24" : colors.tintSoft,
                   borderColor: scheme === "dark" ? "#2C2C34" : "transparent",
                   borderWidth: scheme === "dark" ? 1 : 0,
                 },
@@ -415,7 +435,9 @@ export default function AppTabs() {
                   {tab.label}
                 </ThemedText>
                 {selected ? (
-                  <View style={[styles.activeDot, { backgroundColor: colors.tint }]} />
+                  <View
+                    style={[styles.activeDot, { backgroundColor: colors.tint }]}
+                  />
                 ) : null}
               </Pressable>
             );

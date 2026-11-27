@@ -9,6 +9,7 @@ import { supabase } from '@/lib/supabase';
 export type Note = Tables<'notes'>;
 
 const KEY = ['notes'];
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 /** 내 메모 전체. 고정한 메모가 먼저, 그다음은 최근에 고친 순서다. */
 export function useNotes() {
@@ -19,9 +20,11 @@ export function useNotes() {
     enabled: userId !== null,
     queryFn: async () => {
       if (isDevMode()) return localListNotes();
+      const uid = requireUserId();
       const { data, error } = await supabase
         .from('notes')
         .select('*')
+        .eq('user_id', uid)
         .order('pinned', { ascending: false })
         .order('updated_at', { ascending: false });
       check(error);
@@ -46,7 +49,14 @@ export function useNote(id: string | null) {
     queryFn: async () => {
       if (id === null) return null;
       if (isDevMode()) return localGetNote(id);
-      const { data, error } = await supabase.from('notes').select('*').eq('id', id).maybeSingle();
+      if (!UUID_RE.test(id)) return null;
+      const uid = requireUserId();
+      const { data, error } = await supabase
+        .from('notes')
+        .select('*')
+        .eq('id', id)
+        .eq('user_id', uid)
+        .maybeSingle();
       check(error);
       return data;
     },
@@ -57,12 +67,12 @@ export function useNote(id: string | null) {
 export function useDeleteNotes() {
   return useInvalidatingMutation(KEY, async (ids: string[]) => {
     if (ids.length === 0) return;
-    requireUserId();
+    const uid = requireUserId();
     if (isDevMode()) {
       await localDeleteNotes(ids);
       return;
     }
-    const { error } = await supabase.from('notes').delete().in('id', ids);
+    const { error } = await supabase.from('notes').delete().in('id', ids).eq('user_id', uid);
     check(error);
   });
 }

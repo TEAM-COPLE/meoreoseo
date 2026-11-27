@@ -17,6 +17,7 @@ import { Radius, Spacing } from '@/constants/theme';
 import { useMonthlyBudget } from '@/hooks/use-budget';
 import { hasSelectionModifier, useMultiSelect } from '@/hooks/use-multi-select';
 import { useTheme } from '@/hooks/use-theme';
+import { useTodayISO } from '@/hooks/use-today';
 import { useWebSearchShortcut } from '@/hooks/use-web-shortcut';
 import {
   CATEGORIES,
@@ -42,6 +43,8 @@ const KIND_FILTERS = [
 ] as const;
 
 type KindFilter = (typeof KIND_FILTERS)[number]['value'];
+const EMPTY_TRANSACTIONS: Transaction[] = [];
+const MAX_BUDGET_WON = 100_000_000_000;
 
 /** 내역을 날짜별로 묶는다. 입력 순서(최근 날짜 먼저)를 그대로 유지한다. */
 function groupByDate(items: Transaction[]): { date: string; items: Transaction[] }[] {
@@ -172,8 +175,8 @@ export default function MoneyScreen() {
     budgetRatio >= 1 ? theme.danger : budgetRatio >= 0.75 ? theme.accentWarm : theme.tint;
 
   // 새 내역의 기본 날짜: 보고 있는 달이 이번 달이면 오늘, 아니면 그 달의 1일.
-  const today = todayISO();
-  const range = monthRange(month);
+  const today = useTodayISO();
+  const range = useMemo(() => monthRange(month), [month]);
   const defaultDate = today >= range.start && today <= range.end ? today : range.start;
 
   return (
@@ -267,7 +270,7 @@ export default function MoneyScreen() {
       </Card>
 
       <MoneyAutoCard />
-      <DuplicateReviewCard transactions={transactions.data ?? []} />
+      <DuplicateReviewCard transactions={transactions.data ?? EMPTY_TRANSACTIONS} />
 
       <Segmented
         options={KIND_FILTERS}
@@ -435,14 +438,14 @@ function BudgetForm({
   const [error, setError] = useState<string | null>(null);
 
   function submit() {
-    const cleaned = text.replace(/,/g, '').trim();
+    const cleaned = text.replace(/\D/g, '').trim();
     if (!cleaned) {
       onSave(null);
       return;
     }
     const parsed = Number(cleaned);
-    if (!Number.isFinite(parsed) || parsed <= 0) {
-      setError('0보다 큰 금액을 입력해 주세요.');
+    if (!Number.isSafeInteger(parsed) || parsed <= 0 || parsed > MAX_BUDGET_WON) {
+      setError('1원 이상 1,000억 원 이하의 숫자로 입력해 주세요.');
       return;
     }
     onSave(parsed);
@@ -458,9 +461,10 @@ function BudgetForm({
       <TextField
         label="예산 금액 (원)"
         placeholder="예: 1000000"
-        keyboardType="numeric"
+        keyboardType="number-pad"
+        maxLength={12}
         value={text}
-        onChangeText={setText}
+        onChangeText={(next) => setText(next.replace(/\D/g, ''))}
         autoFocus
       />
       {initialBudget ? (

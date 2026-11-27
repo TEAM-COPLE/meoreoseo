@@ -8,10 +8,10 @@ import { hasSupabaseConfig, isProviderEnabled, supabase } from './supabase';
  * 소셜 로그인 (구글, 카카오).
  *
  * 카카오
- * 1. Supabase 에게 "카카오 로그인 주소"를 받는다.
+ * 1. Supabase 에게 "카카오 로그인 주소"(PKCE)를 받는다.
  * 2. 그 주소를 브라우저로 연다. 사용자가 카카오 계정을 고른다.
  * 3. 카카오 → Supabase → 우리 앱의 /auth-callback 주소로 돌아온다.
- * 4. 주소에 담긴 인증 코드(PKCE) 또는 토큰으로 로그인 상태(세션)를 만든다.
+ * 4. 주소에 담긴 인증 코드(PKCE)로 로그인 상태(세션)를 만든다.
  *
  * 구글 (구글 화면에 supabase.co 주소 대신 meoreoseo.vercel.app 이 보이게)
  * 1. 서버 함수 google-login 에게 구글 로그인 주소와 일회용 글자(nonce)를 받는다.
@@ -30,6 +30,8 @@ const PROVIDER_NAMES: Record<SocialProvider, string> = {
 
 /** 로그인 후 돌아올 화면 이름. src/app/auth-callback.tsx 와 맞춰야 한다. */
 const CALLBACK_PATH = 'auth-callback';
+const OAUTH_WINDOW_MS = 10 * 60_000;
+const OAUTH_PENDING_KEY = 'meoreoseo.oauth-pending-until';
 
 /** 웹에서 로그인 창이 팝업으로 열렸을 때 마무리해 준다. 다른 경우에는 아무 일도 하지 않는다. */
 WebBrowser.maybeCompleteAuthSession();
@@ -44,18 +46,71 @@ function callbackUrl(): string {
 }
 
 /**
- * 허용된 로그인 콜백 주소인지 검증한다.
- * 외부에서 조작된 딥링크가 임의의 경로로 세션을 주입하는 것을 막는다.
+ * 허용된 로그인 콜백 주소인지 엄격히 검증한다.
+ * 외부에서 조작된 주소나 부분 문자열 우회(https://evil.com/?x=auth-callback 등)를 차단한다.
  */
 function isAllowedCallbackUrl(url: string): boolean {
   if (!url || url.length > 4096) return false;
-  if (Platform.OS === 'web' && typeof window !== 'undefined') {
-    return url.startsWith(`${window.location.origin}/${CALLBACK_PATH}`);
+  let parsed: URL;
+  try {
+    parsed = new URL(url);
+  } catch {
+    return false;
   }
-  const allowedSchemes = ['meoreoseo://', 'exp://', 'http://localhost:', 'https://'];
-  return (
-    allowedSchemes.some((prefix) => url.startsWith(prefix)) && url.includes(CALLBACK_PATH)
-  );
+  if (parsed.username || parsed.password) return false;
+
+  if (Platform.OS === 'web' && typeof window !== 'undefined') {
+    return parsed.origin === window.location.origin && parsed.pathname === `/${CALLBACK_PATH}`;
+  }
+
+  if (parsed.protocol === 'meoreoseo:') {
+    return (
+      (parsed.host === CALLBACK_PATH && (parsed.pathname === '' || parsed.pathname === '/')) ||
+      (parsed.host === '' && parsed.pathname === `/${CALLBACK_PATH}`)
+    );
+  }
+  if (parsed.protocol === 'exp:') {
+    return parsed.pathname === `/--/${CALLBACK_PATH}`;
+  }
+  if (parsed.protocol === 'http:') {
+    return (
+      (parsed.hostname === 'localhost' || parsed.hostname === '127.0.0.1') &&
+      parsed.pathname === `/${CALLBACK_PATH}`
+    );
+  }
+  if (parsed.protocol === 'https:') {
+    return parsed.host === 'meoreoseo.vercel.app' && parsed.pathname === `/${CALLBACK_PATH}`;
+  }
+  return false;
+}
+
+/** 사용자가 직접 로그인을 시작했음을 기록해 외부 링크를 통한 세션 주입(Login CSRF)을 막는다. */
+let oauthPendingUntil = 0;
+
+function markOAuthStarted(): void {
+  oauthPendingUntil = Date.now() + OAUTH_WINDOW_MS;
+  if (Platform.OS === 'web' && typeof window !== 'undefined') {
+    try {
+      window.sessionStorage.setItem(OAUTH_PENDING_KEY, String(oauthPendingUntil));
+    } catch {
+      // 무시
+    }
+  }
+}
+
+function consumeOAuthStarted(): boolean {
+  let until = oauthPendingUntil;
+  oauthPendingUntil = 0;
+  if (Platform.OS === 'web' && typeof window !== 'undefined') {
+    try {
+      const saved = Number(window.sessionStorage.getItem(OAUTH_PENDING_KEY) ?? '0');
+      window.sessionStorage.removeItem(OAUTH_PENDING_KEY);
+      if (Number.isFinite(saved) && saved > until) until = saved;
+    } catch {
+      // 무시
+    }
+  }
+  return until > Date.now();
 }
 
 /**
@@ -112,12 +167,8 @@ function describeError(message: string): string {
 }
 
 // ───────────── 구글 로그인 (우리 주소로 돌아오는 방식) ─────────────
-// Supabase 기본 구글 로그인은 구글 화면에 "bwbnhpiphwrpesipuipu.supabase.co" 가 보여서,
-// 구글이 우리 웹사이트(meoreoseo.vercel.app)로 돌아오게 하는 서버 함수(google-login)를 쓴다.
 
-/** 웹에서는 구글에 다녀오는 동안 페이지가 새로 열리므로 sessionStorage 에 둔다. */
 const GOOGLE_NONCE_KEY = 'meoreoseo.google-login-nonce';
-/** 휴대폰에서는 앱이 그대로 살아 있으므로 메모리에 둔다. */
 let googleNonce: string | null = null;
 
 function saveGoogleNonce(nonce: string): void {
@@ -151,15 +202,19 @@ async function startGoogleLogin(returnTo: string): Promise<{ url: string } | { e
   const { data, error } = await supabase.functions.invoke('google-login', {
     body: { action: 'start', returnTo },
   });
-  if (error || typeof data?.url !== 'string' || typeof data?.nonce !== 'string') {
+  if (
+    error ||
+    typeof data?.url !== 'string' ||
+    typeof data?.nonce !== 'string' ||
+    !data.url.startsWith('https://accounts.google.com/')
+  ) {
     return { error: '구글 로그인 주소를 받지 못했습니다. 잠시 후 다시 시도해 주세요.' };
   }
   saveGoogleNonce(data.nonce);
   return { url: data.url };
 }
 
-// 같은 주소를 두 번 처리하지 않도록 진행 중인 요청을 공유한다.
-// (휴대폰에서는 로그인 버튼 쪽과 /auth-callback 화면 쪽이 같은 주소를 동시에 받을 수 있다.)
+// 같은 주소를 동시에 두 번 처리하지 않도록 진행 중인 요청만 공유하고 완료 후 비운다.
 let pendingUrl: string | null = null;
 let pendingPromise: Promise<string | null> | null = null;
 
@@ -172,7 +227,7 @@ export async function completeSignInFromUrl(url: string): Promise<string | null>
   if (url === pendingUrl && pendingPromise) return pendingPromise;
 
   pendingUrl = url;
-  pendingPromise = (async () => {
+  const currentPromise = (async () => {
     try {
       const params = readParams(url);
       scrubBrowserUrl();
@@ -180,9 +235,10 @@ export async function completeSignInFromUrl(url: string): Promise<string | null>
       const failure = params.get('error_description') || params.get('error');
       if (failure) return describeError(failure);
 
-      // 구글: 우리 서버 함수(google-login)가 돌려준 구글 신분증으로 로그인한다.
+      // 구글: 우리 서버 함수(google-login)가 돌려준 구글 신분증 + 로컬 일회용 nonce 검증
       const googleIdToken = params.get('google_id_token');
       if (googleIdToken) {
+        consumeOAuthStarted();
         const nonce = takeGoogleNonce();
         if (!nonce) return '로그인을 시작한 창에서 다시 시도해 주세요.';
         const { error } = await supabase.auth.signInWithIdToken({
@@ -193,15 +249,21 @@ export async function completeSignInFromUrl(url: string): Promise<string | null>
         return error ? describeError(error.message) : null;
       }
 
+      // PKCE 코드 교환 (로컬 저장소의 code_verifier 와 일치해야만 성공)
       const code = params.get('code');
       if (code) {
+        consumeOAuthStarted();
         const { error } = await supabase.auth.exchangeCodeForSession(code);
         return error ? describeError(error.message) : null;
       }
 
+      // 암시적 토큰 폴백: 반드시 이 기기/탭에서 직접 로그인을 시작한 직후에만 허용해 Login CSRF 를 차단한다.
       const accessToken = params.get('access_token');
       const refreshToken = params.get('refresh_token');
       if (!accessToken || !refreshToken) return null;
+      if (!consumeOAuthStarted()) {
+        return '로그인을 시작한 창에서 다시 시도해 주세요.';
+      }
 
       const { error } = await supabase.auth.setSession({
         access_token: accessToken,
@@ -211,15 +273,19 @@ export async function completeSignInFromUrl(url: string): Promise<string | null>
     } catch {
       return '로그인 처리 중 문제가 발생했습니다. 잠시 후 다시 시도해 주세요.';
     }
-  })();
+  })().finally(() => {
+    if (pendingPromise === currentPromise) {
+      pendingUrl = null;
+      pendingPromise = null;
+    }
+  });
 
-  return pendingPromise;
+  pendingPromise = currentPromise;
+  return currentPromise;
 }
 
 /**
  * 구글 또는 카카오 로그인을 시작한다.
- * @returns 실패했으면 보여줄 오류 문장, 아니면 null.
- *          웹에서는 성공하면 페이지가 로그인 사이트로 이동하므로 돌아오지 않는다.
  */
 export async function signInWith(provider: SocialProvider): Promise<string | null> {
   const name = PROVIDER_NAMES[provider];
@@ -233,6 +299,7 @@ export async function signInWith(provider: SocialProvider): Promise<string | nul
   }
 
   const redirectTo = callbackUrl();
+  markOAuthStarted();
 
   if (provider === 'google') {
     const started = await startGoogleLogin(redirectTo);
@@ -267,7 +334,6 @@ async function openLoginWindow(loginUrl: string, redirectTo: string, name: strin
   try {
     const result = await WebBrowser.openAuthSessionAsync(loginUrl, redirectTo);
     if (result.type !== 'success' || !result.url) {
-      // 사용자가 창을 닫은 경우. 오류로 보지 않는다.
       return null;
     }
     return completeSignInFromUrl(result.url);

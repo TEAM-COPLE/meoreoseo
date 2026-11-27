@@ -494,9 +494,10 @@ export function FlightTimerModal({
     </View>
   ) : null;
 
-  const controlsSection = (
-    <>
-      <View style={styles.routeSection}>
+  const controlsSection = useMemo(
+    () => (
+      <>
+        <View style={styles.routeSection}>
         <View style={styles.routeHeaderRow}>
           <ThemedText type="smallBold" themeColor="textSecondary">
             목적지 노선 선택
@@ -725,6 +726,22 @@ export function FlightTimerModal({
         </View>
       )}
     </>
+    ),
+    [
+      filteredRoutes,
+      route,
+      routeQuery,
+      regionFilter,
+      running,
+      arrived,
+      busy,
+      tearingMode,
+      seatPickerOpen,
+      selectedSeat,
+      totalWithTaxiSeconds,
+      theme,
+      onStop,
+    ],
   );
 
   return (
