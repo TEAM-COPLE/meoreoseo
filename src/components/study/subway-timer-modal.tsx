@@ -30,6 +30,7 @@ import { useTheme, useThemeMode } from '@/hooks/use-theme';
 import { formatClock, formatDuration } from '@/lib/study';
 
 import { ArrivalOverlay } from './arrival-overlay';
+import { FadeSlideIn } from './common';
 import { formatAtcTimestamp } from './flight-atc';
 import {
   ALL_STATIONS,
@@ -78,7 +79,7 @@ export function SubwayTimerModal({
   const [startStation, setStartStation] = useState('서울역');
   const [endStation, setEndStation] = useState('강남');
   const [pickingSlot, setPickingSlot] = useState<'start' | 'end' | null>(null);
-  const [selectedLineId, setSelectedLineId] = useState<string>('all');
+  const [selectedLineId, setSelectedLineId] = useState<string>('line2');
   const [query, setQuery] = useState('');
   const [showAnnouncement, setShowAnnouncement] = useState(true);
   const [landscapeOverride, setLandscapeOverride] = useState<boolean | null>(null);
@@ -171,6 +172,11 @@ export function SubwayTimerModal({
       : announceBaseMs,
   );
 
+  const stationLineLookup = useMemo(
+    () => new Map(ALL_STATIONS.map((s) => [s.name, s.lineIds])),
+    [],
+  );
+
   // 노선 필터 + 역명 검색 결과
   const filteredStations = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -190,14 +196,18 @@ export function SubwayTimerModal({
         .filter((name) => (!q ? true : name.toLowerCase().includes(q)))
         .map((name) => ({
           name,
-          lineIds:
-            ALL_STATIONS.find((s) => s.name === name)?.lineIds ?? [selectedLineId],
+          lineIds: stationLineLookup.get(name) ?? [selectedLineId],
         }));
     }
     return ALL_STATIONS.filter((s) =>
       !q ? true : s.name.toLowerCase().includes(q),
     );
-  }, [selectedLineId, query]);
+  }, [selectedLineId, query, stationLineLookup]);
+
+  const activePickerLine =
+    selectedLineId !== 'all' && query.trim() === ''
+      ? getSubwayLine(selectedLineId)
+      : null;
 
   function swapStations() {
     setStartStation(endStation);
@@ -498,12 +508,17 @@ export function SubwayTimerModal({
               열차 안내방송
             </ThemedText>
           </View>
-          <ThemedText type="small" style={[styles.announceTimestamp, { color: accentMuted }]}>
-            {announceTimestamp}
-          </ThemedText>
-          <ThemedText type="small" style={{ color: '#E2E8F0', lineHeight: 20 }}>
-            &ldquo;{announcementText}&rdquo;
-          </ThemedText>
+          <FadeSlideIn
+            key={`${running}:${arrived}:${currentIndex}:${startStation}:${endStation}`}>
+            <View style={styles.announceContent}>
+              <ThemedText type="small" style={[styles.announceTimestamp, { color: accentMuted }]}>
+                {announceTimestamp}
+              </ThemedText>
+              <ThemedText type="small" style={{ color: '#E2E8F0', lineHeight: 20 }}>
+                &ldquo;{announcementText}&rdquo;
+              </ThemedText>
+            </View>
+          </FadeSlideIn>
         </View>
       ) : null}
     </>
@@ -669,13 +684,173 @@ export function SubwayTimerModal({
               })}
             </ScrollView>
 
-            {/* 역 목록 */}
+            {/* 역 목록 (노선 선택 시 세로 노선도 라인으로 연결 표시) */}
             <ScrollView
               nestedScrollEnabled
               style={styles.stationListScroll}
-              contentContainerStyle={styles.stationGrid}
-              showsVerticalScrollIndicator>
-              {filteredStations.length === 0 ? (
+              contentContainerStyle={
+                activePickerLine ? styles.verticalLineList : styles.stationGrid
+              }
+              showsVerticalScrollIndicator={false}>
+              {activePickerLine ? (
+                activePickerLine.branches.map((branch, branchIdx) => (
+                  <View key={`${activePickerLine.id}-b-${branchIdx}`} style={styles.branchGroup}>
+                    {activePickerLine.branches.length > 1 ? (
+                      <ThemedText
+                        type="smallBold"
+                        themeColor="textSecondary"
+                        style={styles.branchTitle}>
+                        {branchIdx === 0 ? '본선' : `지선 ${branchIdx}`}
+                      </ThemedText>
+                    ) : null}
+
+                    {branch.map((stationName, stIdx) => {
+                      const isFirst = stIdx === 0;
+                      const isLast = stIdx === branch.length - 1;
+                      const isStart = stationName === startStation;
+                      const isEnd = stationName === endStation;
+                      const isPicked =
+                        (pickingSlot === 'start' && isStart) ||
+                        (pickingSlot === 'end' && isEnd);
+                      const transferIds = (stationLineLookup.get(stationName) ?? []).filter(
+                        (lid) => lid !== activePickerLine.id,
+                      );
+
+                      return (
+                        <Pressable
+                          key={`${branchIdx}-${stationName}-${stIdx}`}
+                          onPress={() => pickStation(stationName)}
+                          style={({ pressed }) => [
+                            styles.vLineRow,
+                            { opacity: pressed ? 0.72 : 1 },
+                          ]}>
+                          {/* 왼쪽 세로 노선 연결선 + 역 원형 노드 */}
+                          <View style={styles.vTrackCol}>
+                            <View
+                              style={[
+                                styles.vTrackSeg,
+                                {
+                                  backgroundColor: isFirst
+                                    ? 'transparent'
+                                    : activePickerLine.color,
+                                },
+                              ]}
+                            />
+                            <View
+                              style={[
+                                styles.vStationNode,
+                                {
+                                  borderColor: activePickerLine.color,
+                                  backgroundColor: isPicked
+                                    ? activePickerLine.color
+                                    : theme.backgroundElement,
+                                  width: isPicked ? 16 : 12,
+                                  height: isPicked ? 16 : 12,
+                                  borderWidth: isPicked ? 3 : 2.5,
+                                },
+                              ]}
+                            />
+                            <View
+                              style={[
+                                styles.vTrackSeg,
+                                {
+                                  backgroundColor: isLast
+                                    ? 'transparent'
+                                    : activePickerLine.color,
+                                },
+                              ]}
+                            />
+                          </View>
+
+                          {/* 역 이름 (선택된 역은 노선 색 알약 강조) */}
+                          <View style={styles.vStationBody}>
+                            <View
+                              style={[
+                                styles.vStationNameWrap,
+                                isPicked && {
+                                  backgroundColor: activePickerLine.color,
+                                  paddingHorizontal: 10,
+                                  paddingVertical: 3,
+                                  borderRadius: Radius.full,
+                                },
+                              ]}>
+                              <ThemedText
+                                type={isPicked || isStart || isEnd ? 'smallBold' : 'small'}
+                                numberOfLines={1}
+                                style={{
+                                  color: isPicked ? '#FFFFFF' : theme.text,
+                                  fontSize: 13,
+                                }}>
+                                {stationName}
+                              </ThemedText>
+                            </View>
+
+                            {isStart ? (
+                              <View
+                                style={[
+                                  styles.roleTag,
+                                  {
+                                    backgroundColor: `${activePickerLine.color}22`,
+                                    borderColor: activePickerLine.color,
+                                  },
+                                ]}>
+                                <ThemedText
+                                  style={{
+                                    color: activePickerLine.color,
+                                    fontSize: 10,
+                                    fontWeight: '700',
+                                  }}>
+                                  출발
+                                </ThemedText>
+                              </View>
+                            ) : null}
+                            {isEnd ? (
+                              <View
+                                style={[
+                                  styles.roleTag,
+                                  {
+                                    backgroundColor: `${activePickerLine.color}22`,
+                                    borderColor: activePickerLine.color,
+                                  },
+                                ]}>
+                                <ThemedText
+                                  style={{
+                                    color: activePickerLine.color,
+                                    fontSize: 10,
+                                    fontWeight: '700',
+                                  }}>
+                                  종착
+                                </ThemedText>
+                              </View>
+                            ) : null}
+                          </View>
+
+                          {/* 오른쪽 환승 노선 배지 */}
+                          {transferIds.length > 0 ? (
+                            <View style={styles.transferRow}>
+                              {transferIds.slice(0, 4).map((lid) => {
+                                const tLine = getSubwayLine(lid);
+                                return (
+                                  <View
+                                    key={lid}
+                                    style={[
+                                      styles.transferCircle,
+                                      { backgroundColor: tLine.color },
+                                    ]}>
+                                    <ThemedText style={styles.transferCircleText} numberOfLines={1}>
+                                      {tLine.shortName}
+                                    </ThemedText>
+                                  </View>
+                                );
+                              })}
+                            </View>
+                          ) : null}
+                        </Pressable>
+                      );
+                    })}
+                  </View>
+                ))
+              ) : filteredStations.length === 0 ? (
                 <ThemedText type="small" themeColor="textSecondary">
                   검색 결과가 없습니다.
                 </ThemedText>
@@ -1126,6 +1301,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 6,
   },
+  announceContent: {
+    gap: 4,
+  },
   announceTimestamp: {
     fontSize: 11,
     lineHeight: 15,
@@ -1202,7 +1380,74 @@ const styles = StyleSheet.create({
     borderRadius: Radius.full,
   },
   stationListScroll: {
-    maxHeight: 230,
+    maxHeight: 280,
+  },
+  verticalLineList: {
+    paddingVertical: 4,
+    gap: Spacing.two,
+  },
+  branchGroup: {
+    gap: 0,
+  },
+  branchTitle: {
+    fontSize: 11,
+    marginBottom: 4,
+    paddingLeft: 28,
+  },
+  vLineRow: {
+    minHeight: 38,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.two,
+    paddingRight: Spacing.one,
+  },
+  vTrackCol: {
+    width: 22,
+    alignSelf: 'stretch',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  vTrackSeg: {
+    width: 4,
+    flex: 1,
+  },
+  vStationNode: {
+    borderRadius: Radius.full,
+  },
+  vStationBody: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingVertical: 5,
+  },
+  vStationNameWrap: {
+    flexShrink: 1,
+  },
+  roleTag: {
+    paddingHorizontal: 6,
+    paddingVertical: 1,
+    borderRadius: Radius.full,
+    borderWidth: 1,
+  },
+  transferRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  transferCircle: {
+    minWidth: 20,
+    height: 20,
+    paddingHorizontal: 5,
+    borderRadius: Radius.full,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  transferCircleText: {
+    color: '#FFFFFF',
+    fontSize: 10,
+    lineHeight: 13,
+    fontWeight: '700',
   },
   stationGrid: {
     flexDirection: 'row',
