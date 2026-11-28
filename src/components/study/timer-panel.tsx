@@ -105,7 +105,16 @@ export function StudyTimerPanel({ profile }: { profile: StudyProfile | null | un
         const seconds = await stopStudy();
         if (seconds === 0) setError('5초보다 짧은 기록은 남기지 않아요.');
       } else {
-        await startStudy(userId, activeSubject ? { id: activeSubject.id, name: activeSubject.name } : null);
+        await startStudy(
+          userId,
+          activeSubject
+            ? {
+                id: activeSubject.id,
+                name: activeSubject.name,
+                color: tagColorValue(activeSubject.color, scheme),
+              }
+            : null,
+        );
       }
     } catch (e) {
       setError(errorMessage(e));
@@ -121,7 +130,11 @@ export function StudyTimerPanel({ profile }: { profile: StudyProfile | null | un
       setBusy(true);
       setError(null);
       try {
-        await startStudy(userId, { id: subject.id, name: subject.name });
+        await startStudy(userId, {
+          id: subject.id,
+          name: subject.name,
+          color: tagColorValue(subject.color, scheme),
+        });
       } catch (e) {
         setError(errorMessage(e));
       } finally {
