@@ -3,4 +3,5 @@
   <color name="study_timer_noti_secondary">#5F6368</color>
   <color name="study_timer_noti_divider">#26000000</color>
   <color name="study_timer_noti_action">#111827</color>
+  <color name="study_timer_noti_pill_bg">#14000000</color>
 </resources>

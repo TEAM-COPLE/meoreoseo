@@ -4,7 +4,8 @@
   android:layout_height="wrap_content"
   android:gravity="center_vertical"
   android:orientation="horizontal"
-  android:paddingVertical="2dp">
+  android:paddingHorizontal="16dp"
+  android:paddingVertical="10dp">
 
   <FrameLayout
     android:layout_width="42dp"
@@ -29,6 +30,7 @@
     android:layout_width="0dp"
     android:layout_height="wrap_content"
     android:layout_marginStart="14dp"
+    android:layout_marginEnd="10dp"
     android:layout_weight="1"
     android:orientation="vertical">
 
@@ -36,11 +38,12 @@
       android:id="@+id/timer_chronometer"
       android:layout_width="wrap_content"
       android:layout_height="wrap_content"
-      android:fontFamily="sans-serif-medium"
+      android:fontFamily="sans-serif"
       android:fontFeatureSettings="tnum"
       android:includeFontPadding="false"
+      android:letterSpacing="-0.02"
       android:textColor="@color/study_timer_noti_primary"
-      android:textSize="24sp" />
+      android:textSize="26sp" />
 
     <TextView
       android:id="@+id/timer_subtitle"
@@ -52,4 +55,16 @@
       android:textColor="@color/study_timer_noti_secondary"
       android:textSize="13sp" />
   </LinearLayout>
+
+  <TextView
+    android:id="@+id/timer_action_stop"
+    android:layout_width="wrap_content"
+    android:layout_height="32dp"
+    android:background="@drawable/bg_timer_stop_pill"
+    android:fontFamily="sans-serif-medium"
+    android:gravity="center"
+    android:paddingHorizontal="14dp"
+    android:text="멈춤"
+    android:textColor="@color/study_timer_noti_action"
+    android:textSize="13sp" />
 </LinearLayout>
