@@ -3,8 +3,9 @@
   android:layout_width="match_parent"
   android:layout_height="wrap_content"
   android:orientation="vertical"
-  android:paddingTop="4dp"
-  android:paddingBottom="2dp">
+  android:paddingHorizontal="18dp"
+  android:paddingTop="14dp"
+  android:paddingBottom="8dp">
 
   <LinearLayout
     android:layout_width="match_parent"
@@ -13,8 +14,8 @@
     android:orientation="horizontal">
 
     <FrameLayout
-      android:layout_width="48dp"
-      android:layout_height="48dp">
+      android:layout_width="50dp"
+      android:layout_height="50dp">
 
       <ImageView
         android:id="@+id/timer_icon_bg"
@@ -42,17 +43,18 @@
         android:id="@+id/timer_chronometer"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:fontFamily="sans-serif-medium"
+        android:fontFamily="sans-serif"
         android:fontFeatureSettings="tnum"
         android:includeFontPadding="false"
+        android:letterSpacing="-0.02"
         android:textColor="@color/study_timer_noti_primary"
-        android:textSize="32sp" />
+        android:textSize="34sp" />
 
       <TextView
         android:id="@+id/timer_subtitle"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:layout_marginTop="2dp"
+        android:layout_marginTop="3dp"
         android:ellipsize="end"
         android:maxLines="1"
         android:textColor="@color/study_timer_noti_secondary"
@@ -62,7 +64,7 @@
 
   <LinearLayout
     android:layout_width="match_parent"
-    android:layout_height="40dp"
+    android:layout_height="42dp"
     android:layout_marginTop="12dp"
     android:gravity="center_vertical"
     android:orientation="horizontal">
@@ -76,12 +78,12 @@
       android:fontFamily="sans-serif-medium"
       android:gravity="center"
       android:text="취소"
-      android:textColor="@color/study_timer_noti_action"
+      android:textColor="@color/study_timer_noti_secondary"
       android:textSize="15sp" />
 
     <ImageView
       android:layout_width="1dp"
-      android:layout_height="18dp"
+      android:layout_height="16dp"
       android:background="@color/study_timer_noti_divider"
       android:contentDescription="@null" />
 

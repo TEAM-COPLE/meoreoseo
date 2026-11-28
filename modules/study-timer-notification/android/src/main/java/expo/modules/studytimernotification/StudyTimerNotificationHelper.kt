@@ -152,73 +152,47 @@ internal object StudyTimerNotificationHelper {
     val cancelIntent = actionIntent(context, ACTION_CANCEL, 101)
     val stopIntent = actionIntent(context, ACTION_STOP, 102)
 
-    val notification: Notification =
-      if (Build.VERSION.SDK_INT >= 36 && manager.canPostPromotedNotifications()) {
-        // Android 16+ Live Updates (Now Bar / 잠금화면 실시간 카드 / 상태바 칩)
-        val shortLabel = (cleanSubject ?: "공부 중").take(8)
-        Notification.Builder(context, CHANNEL_ID)
-          .setSmallIcon(R.drawable.ic_timer_hourglass)
-          .setContentTitle(title)
-          .setContentText("$startTimeText 시작")
-          .setOngoing(true)
-          .setOnlyAlertOnce(true)
-          .setUsesChronometer(true)
-          .setWhen(startedAtMs)
-          .setShowWhen(true)
-          .setCategory(Notification.CATEGORY_STOPWATCH)
-          .setVisibility(Notification.VISIBILITY_PUBLIC)
-          .setContentIntent(openIntent)
-          .addAction(Notification.Action.Builder(null, "취소", cancelIntent).build())
-          .addAction(Notification.Action.Builder(null, "멈춤", stopIntent).build())
-          .setRequestPromotedOngoing(true)
-          .setShortCriticalText(shortLabel)
-          .build()
-      } else {
-        // Android 15 (One UI 7) 이하 또는 실시간 알림 꺼짐:
-        // 대형 실시간 Chronometer + 과목/시작시각 + 취소|멈춤 버튼 카드
-        val elapsedMs = (System.currentTimeMillis() - startedAtMs).coerceAtLeast(0L)
-        val chronometerBase = SystemClock.elapsedRealtime() - elapsedMs
-        val badgeColor = parseColor(accentColor)
+    val elapsedMs = (System.currentTimeMillis() - startedAtMs).coerceAtLeast(0L)
+    val chronometerBase = SystemClock.elapsedRealtime() - elapsedMs
+    val badgeColor = parseColor(accentColor)
 
-        val collapsed = RemoteViews(
-          context.packageName,
-          R.layout.notification_study_timer_collapsed,
-        ).apply {
-          setInt(R.id.timer_icon_bg, "setColorFilter", badgeColor)
-          setChronometer(R.id.timer_chronometer, chronometerBase, null, true)
-          setTextViewText(R.id.timer_subtitle, subtitle)
-        }
+    val collapsed = RemoteViews(
+      context.packageName,
+      R.layout.notification_study_timer_collapsed,
+    ).apply {
+      setInt(R.id.timer_icon_bg, "setColorFilter", badgeColor)
+      setChronometer(R.id.timer_chronometer, chronometerBase, null, true)
+      setTextViewText(R.id.timer_subtitle, subtitle)
+      setOnClickPendingIntent(R.id.timer_action_stop, stopIntent)
+    }
 
-        val expanded = RemoteViews(
-          context.packageName,
-          R.layout.notification_study_timer_expanded,
-        ).apply {
-          setInt(R.id.timer_icon_bg, "setColorFilter", badgeColor)
-          setChronometer(R.id.timer_chronometer, chronometerBase, null, true)
-          setTextViewText(R.id.timer_subtitle, subtitle)
-          setOnClickPendingIntent(R.id.timer_action_cancel, cancelIntent)
-          setOnClickPendingIntent(R.id.timer_action_stop, stopIntent)
-        }
+    val expanded = RemoteViews(
+      context.packageName,
+      R.layout.notification_study_timer_expanded,
+    ).apply {
+      setInt(R.id.timer_icon_bg, "setColorFilter", badgeColor)
+      setChronometer(R.id.timer_chronometer, chronometerBase, null, true)
+      setTextViewText(R.id.timer_subtitle, subtitle)
+      setOnClickPendingIntent(R.id.timer_action_cancel, cancelIntent)
+      setOnClickPendingIntent(R.id.timer_action_stop, stopIntent)
+    }
 
-        NotificationCompat.Builder(context, CHANNEL_ID)
-          .setSmallIcon(R.drawable.ic_timer_hourglass)
-          .setContentTitle(title)
-          .setContentText(subtitle)
-          .setOngoing(true)
-          .setOnlyAlertOnce(true)
-          .setUsesChronometer(true)
-          .setWhen(startedAtMs)
-          .setShowWhen(true)
-          .setSilent(true)
-          .setCategory(NotificationCompat.CATEGORY_STOPWATCH)
-          .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
-          .setPriority(NotificationCompat.PRIORITY_DEFAULT)
-          .setContentIntent(openIntent)
-          .setStyle(NotificationCompat.DecoratedCustomViewStyle())
-          .setCustomContentView(collapsed)
-          .setCustomBigContentView(expanded)
-          .build()
-      }
+    // 모든 안드로이드 버전(One UI 7/8 포함)에서 대형 Chronometer + 깔끔한 카드 레이아웃으로 통일한다.
+    val notification: Notification = NotificationCompat.Builder(context, CHANNEL_ID)
+      .setSmallIcon(R.drawable.ic_timer_hourglass)
+      .setContentTitle(title)
+      .setContentText(subtitle)
+      .setOngoing(true)
+      .setOnlyAlertOnce(true)
+      .setShowWhen(false)
+      .setSilent(true)
+      .setCategory(NotificationCompat.CATEGORY_STOPWATCH)
+      .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
+      .setPriority(NotificationCompat.PRIORITY_DEFAULT)
+      .setContentIntent(openIntent)
+      .setCustomContentView(collapsed)
+      .setCustomBigContentView(expanded)
+      .build()
 
     manager.notify(NOTIFICATION_ID, notification)
   }
