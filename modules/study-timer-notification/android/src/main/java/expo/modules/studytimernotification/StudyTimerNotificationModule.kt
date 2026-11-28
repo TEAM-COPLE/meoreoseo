@@ -8,9 +8,9 @@ import java.lang.ref.WeakReference
 
 /**
  * 자바스크립트에서 호출하는 공부 타이머 실시간 알림 모듈.
- * - show(startedAtMs, subjectName, accentColor): 실시간 경과 시간 알림 표시/갱신
+ * - show(startedAtMs, pausedAtMs, subjectName, accentColor): 실시간 경과 시간 알림 표시/갱신
  * - dismiss(): 알림 내리기
- * - consumePendingAction(): 백그라운드에서 눌린 취소/멈춤 동작 꺼내기
+ * - consumePendingActions(): 백그라운드에서 눌린 저장/일시정지/재개/취소 동작 목록 꺼내기
  */
 class StudyTimerNotificationModule : Module() {
   private val context: Context
@@ -31,10 +31,11 @@ class StudyTimerNotificationModule : Module() {
       }
     }
 
-    Function("show") { startedAtMs: Double, subjectName: String?, accentColor: String? ->
+    Function("show") { startedAtMs: Double, pausedAtMs: Double?, subjectName: String?, accentColor: String? ->
       StudyTimerNotificationHelper.show(
         context = context,
         startedAtMs = startedAtMs.toLong(),
+        pausedAtMs = pausedAtMs?.toLong(),
         subjectName = subjectName,
         accentColor = accentColor,
       )
@@ -44,13 +45,13 @@ class StudyTimerNotificationModule : Module() {
       StudyTimerNotificationHelper.dismiss(context)
     }
 
-    Function("consumePendingAction") {
-      val pending = StudyTimerNotificationHelper.consumePendingAction(context)
-        ?: return@Function null
-      mapOf(
-        "action" to pending.first,
-        "atMs" to pending.second.toDouble(),
-      )
+    Function("consumePendingActions") {
+      StudyTimerNotificationHelper.consumePendingActions(context).map { (action, atMs) ->
+        mapOf(
+          "action" to action,
+          "atMs" to atMs.toDouble(),
+        )
+      }
     }
   }
 

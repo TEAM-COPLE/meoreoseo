@@ -28,7 +28,9 @@ import {
   type StudySubject,
 } from '@/lib/study';
 import {
+  cancelStudy,
   clearStudyNotice,
+  resumeStudy,
   runningSeconds,
   setPauseOnLeave,
   startStudy,
@@ -74,7 +76,8 @@ export function StudyTimerPanel({ profile }: { profile: StudyProfile | null | un
   const [error, setError] = useState<string | null>(null);
 
   const running = timer.running && !timer.running.leftAt ? timer.running : null;
-  const now = useNow(running !== null);
+  const isPaused = Boolean(running?.pausedAt);
+  const now = useNow(running !== null && !isPaused);
   const subjectList = subjects.data ?? [];
   const subjectById = useMemo(
     () => new Map((subjects.data ?? []).map((subject) => [subject.id, subject])),
@@ -82,8 +85,9 @@ export function StudyTimerPanel({ profile }: { profile: StudyProfile | null | un
   );
 
   // 지금 도는 타이머 중 "오늘"에 해당하는 부분만 오늘 합계에 더한다(자정을 넘긴 경우).
+  const runningEndMs = running?.pausedAt ?? now;
   const runningToday = running
-    ? splitByDay(running.startedAt, now)
+    ? splitByDay(running.startedAt, runningEndMs)
         .filter((part) => part.date === today)
         .reduce((total, part) => total + Math.floor((part.end - part.start) / 1000), 0)
     : 0;
@@ -101,7 +105,9 @@ export function StudyTimerPanel({ profile }: { profile: StudyProfile | null | un
     setBusy(true);
     setError(null);
     try {
-      if (running) {
+      if (running && isPaused) {
+        await resumeStudy();
+      } else if (running) {
         const seconds = await stopStudy();
         if (seconds === 0) setError('5초보다 짧은 기록은 남기지 않아요.');
       } else {
@@ -116,6 +122,33 @@ export function StudyTimerPanel({ profile }: { profile: StudyProfile | null | un
             : null,
         );
       }
+    } catch (e) {
+      setError(errorMessage(e));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function savePausedTimer() {
+    if (!running || busy) return;
+    setBusy(true);
+    setError(null);
+    try {
+      const seconds = await stopStudy();
+      if (seconds === 0) setError('5초보다 짧은 기록은 남기지 않아요.');
+    } catch (e) {
+      setError(errorMessage(e));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function discardPausedTimer() {
+    if (!running || busy) return;
+    setBusy(true);
+    setError(null);
+    try {
+      await cancelStudy();
     } catch (e) {
       setError(errorMessage(e));
     } finally {
@@ -190,7 +223,9 @@ export function StudyTimerPanel({ profile }: { profile: StudyProfile | null | un
             <View style={styles.inlineRow}>
               <BookOpen size={14} color={subjectColor} strokeWidth={2} />
               <ThemedText type="small" style={{ color: subjectColor }}>
-                {running.subjectName ?? '공부'} 중 · 이번 {formatClock(runningSeconds(running, now))}
+                {isPaused
+                  ? `${running.subjectName ?? '공부'} 일시정지 · 이번 ${formatClock(runningSeconds(running, now))}`
+                  : `${running.subjectName ?? '공부'} 중 · 이번 ${formatClock(runningSeconds(running, now))}`}
               </ThemedText>
             </View>
           ) : (
@@ -201,19 +236,21 @@ export function StudyTimerPanel({ profile }: { profile: StudyProfile | null | un
 
           <Pressable
             accessibilityRole="button"
-            accessibilityLabel={running ? '타이머 멈추기' : '타이머 시작하기'}
+            accessibilityLabel={
+              running ? (isPaused ? '타이머 재개하기' : '타이머 멈추기') : '타이머 시작하기'
+            }
             disabled={busy || !timer.loaded}
             onPress={toggleTimer}
             style={({ pressed }) => [
               styles.bigButton,
               {
-                backgroundColor: running ? theme.backgroundSelected : subjectColor,
+                backgroundColor: running && !isPaused ? theme.backgroundSelected : subjectColor,
                 borderColor: subjectColor,
                 opacity: busy || !timer.loaded ? 0.6 : pressed ? 0.85 : 1,
               },
             ]}>
             <View style={styles.bigButtonInner}>
-              {running ? (
+              {running && !isPaused ? (
                 <Pause
                   size={22}
                   color={subjectColor}
@@ -229,11 +266,27 @@ export function StudyTimerPanel({ profile }: { profile: StudyProfile | null | un
                 />
               )}
               <ThemedText
-                style={[styles.bigButtonText, { color: running ? subjectColor : theme.background }]}>
-                {running ? '멈춤' : '시작'}
+                style={[
+                  styles.bigButtonText,
+                  { color: running && !isPaused ? subjectColor : theme.background },
+                ]}>
+                {running ? (isPaused ? '재개' : '멈춤') : '시작'}
               </ThemedText>
             </View>
           </Pressable>
+
+          {running && isPaused ? (
+            <View style={styles.modeRow}>
+              <Button label="기록" size="small" disabled={busy} onPress={savePausedTimer} />
+              <Button
+                label="취소"
+                size="small"
+                variant="secondary"
+                disabled={busy}
+                onPress={discardPausedTimer}
+              />
+            </View>
+          ) : null}
 
           <View style={styles.modeRow}>
             <Pressable

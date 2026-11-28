@@ -17,6 +17,8 @@ import android.widget.RemoteViews
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.ContextCompat
+import org.json.JSONArray
+import org.json.JSONObject
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -25,35 +27,105 @@ internal object StudyTimerNotificationHelper {
   const val CHANNEL_ID = "study-timer-live"
   const val NOTIFICATION_ID = 41021
 
-  const val ACTION_STOP = "expo.modules.studytimernotification.ACTION_STOP"
+  const val ACTION_SAVE = "expo.modules.studytimernotification.ACTION_SAVE"
+  const val ACTION_PAUSE = "expo.modules.studytimernotification.ACTION_PAUSE"
+  const val ACTION_RESUME = "expo.modules.studytimernotification.ACTION_RESUME"
   const val ACTION_CANCEL = "expo.modules.studytimernotification.ACTION_CANCEL"
 
   private const val DEFAULT_BADGE_COLOR = "#5B5CE6"
   private const val PREFS_NAME = "study_timer_notification_prefs"
-  private const val KEY_PENDING_ACTION = "pending_action"
-  private const val KEY_PENDING_AT_MS = "pending_at_ms"
+  private const val KEY_PENDING_ACTIONS = "pending_actions"
+  private const val KEY_STATE_STARTED_AT = "state_started_at"
+  private const val KEY_STATE_PAUSED_AT = "state_paused_at"
+  private const val KEY_STATE_SUBJECT = "state_subject"
+  private const val KEY_STATE_COLOR = "state_color"
 
   private val lock = Any()
 
-  fun savePendingAction(context: Context, action: String, atMs: Long) {
+  fun appendPendingAction(context: Context, action: String, atMs: Long) {
+    synchronized(lock) {
+      val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+      val arr = runCatching {
+        JSONArray(prefs.getString(KEY_PENDING_ACTIONS, "[]") ?: "[]")
+      }.getOrElse { JSONArray() }
+      arr.put(JSONObject().put("action", action).put("atMs", atMs))
+      prefs.edit().putString(KEY_PENDING_ACTIONS, arr.toString()).apply()
+    }
+  }
+
+  fun consumePendingActions(context: Context): List<Pair<String, Long>> {
+    synchronized(lock) {
+      val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+      val raw = prefs.getString(KEY_PENDING_ACTIONS, null) ?: return emptyList()
+      prefs.edit().remove(KEY_PENDING_ACTIONS).apply()
+      val arr = runCatching { JSONArray(raw) }.getOrNull() ?: return emptyList()
+      val list = mutableListOf<Pair<String, Long>>()
+      for (i in 0 until arr.length()) {
+        val obj = arr.optJSONObject(i) ?: continue
+        val action = obj.optString("action", "")
+        val atMs = obj.optLong("atMs", 0L)
+        if (action.isNotEmpty()) list.add(action to atMs)
+      }
+      return list
+    }
+  }
+
+  private fun saveState(
+    context: Context,
+    startedAtMs: Long,
+    pausedAtMs: Long?,
+    subjectName: String?,
+    accentColor: String?,
+  ) {
     synchronized(lock) {
       context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
         .edit()
-        .putString(KEY_PENDING_ACTION, action)
-        .putLong(KEY_PENDING_AT_MS, atMs)
+        .putLong(KEY_STATE_STARTED_AT, startedAtMs)
+        .putLong(KEY_STATE_PAUSED_AT, pausedAtMs ?: -1L)
+        .putString(KEY_STATE_SUBJECT, subjectName)
+        .putString(KEY_STATE_COLOR, accentColor)
         .apply()
     }
   }
 
-  fun consumePendingAction(context: Context): Pair<String, Long>? {
+  private fun clearState(context: Context) {
     synchronized(lock) {
-      val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-      val action = prefs.getString(KEY_PENDING_ACTION, null) ?: return null
-      val atMs = prefs.getLong(KEY_PENDING_AT_MS, 0L)
-      prefs.edit().remove(KEY_PENDING_ACTION).remove(KEY_PENDING_AT_MS).apply()
-      return action to atMs
+      context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        .edit()
+        .remove(KEY_STATE_STARTED_AT)
+        .remove(KEY_STATE_PAUSED_AT)
+        .remove(KEY_STATE_SUBJECT)
+        .remove(KEY_STATE_COLOR)
+        .apply()
     }
   }
+
+  /** 백그라운드에서 일시정지 버튼을 눌렀을 때 즉시 알림을 일시정지 상태로 갱신한다. */
+  fun handleNativePause(context: Context, nowMs: Long) {
+    val (startedAt, pausedAt, subject, color) = synchronized(lock) {
+      val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+      val s = prefs.getLong(KEY_STATE_STARTED_AT, -1L)
+      val p = prefs.getLong(KEY_STATE_PAUSED_AT, -1L)
+      Quad(s, p, prefs.getString(KEY_STATE_SUBJECT, null), prefs.getString(KEY_STATE_COLOR, null))
+    }
+    if (startedAt <= 0L || pausedAt > 0L) return
+    show(context, startedAt, nowMs, subject, color)
+  }
+
+  /** 백그라운드에서 재개 버튼을 눌렀을 때 즉시 알림을 실행 상태로 갱신한다. */
+  fun handleNativeResume(context: Context, nowMs: Long) {
+    val (startedAt, pausedAt, subject, color) = synchronized(lock) {
+      val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+      val s = prefs.getLong(KEY_STATE_STARTED_AT, -1L)
+      val p = prefs.getLong(KEY_STATE_PAUSED_AT, -1L)
+      Quad(s, p, prefs.getString(KEY_STATE_SUBJECT, null), prefs.getString(KEY_STATE_COLOR, null))
+    }
+    if (startedAt <= 0L || pausedAt <= 0L) return
+    val pausedDuration = (nowMs - pausedAt).coerceAtLeast(0L)
+    show(context, startedAt + pausedDuration, null, subject, color)
+  }
+
+  private data class Quad(val a: Long, val b: Long, val c: String?, val d: String?)
 
   private fun ensureChannel(context: Context) {
     if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return
@@ -132,27 +204,38 @@ internal object StudyTimerNotificationHelper {
   fun show(
     context: Context,
     startedAtMs: Long,
+    pausedAtMs: Long?,
     subjectName: String?,
     accentColor: String?,
   ) {
     ensureChannel(context)
+    saveState(context, startedAtMs, pausedAtMs, subjectName, accentColor)
     if (!hasPostPermission(context)) return
 
     val manager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+    val isPaused = pausedAtMs != null && pausedAtMs > 0L
     val cleanSubject = subjectName?.trim()?.takeIf { it.isNotEmpty() }
     val startTimeText = formatStartTime(startedAtMs)
     val title = if (cleanSubject != null) "$cleanSubject 공부 중" else "공부 타이머"
-    val subtitle = if (cleanSubject != null) {
-      "$cleanSubject · $startTimeText 시작"
-    } else {
-      "공부 중 · $startTimeText 시작"
+    val subtitle = when {
+      isPaused && cleanSubject != null -> "$cleanSubject · 일시정지됨"
+      isPaused -> "일시정지됨"
+      cleanSubject != null -> "$cleanSubject · $startTimeText 시작"
+      else -> "공부 중 · $startTimeText 시작"
     }
 
     val openIntent = openStudyIntent(context)
+    val saveIntent = actionIntent(context, ACTION_SAVE, 102)
+    val pauseOrResumeIntent = if (isPaused) {
+      actionIntent(context, ACTION_RESUME, 103)
+    } else {
+      actionIntent(context, ACTION_PAUSE, 104)
+    }
     val cancelIntent = actionIntent(context, ACTION_CANCEL, 101)
-    val stopIntent = actionIntent(context, ACTION_STOP, 102)
+    val pauseOrResumeLabel = if (isPaused) "재개" else "일시정지"
 
-    val elapsedMs = (System.currentTimeMillis() - startedAtMs).coerceAtLeast(0L)
+    val referenceMs = if (isPaused) pausedAtMs!! else System.currentTimeMillis()
+    val elapsedMs = (referenceMs - startedAtMs).coerceAtLeast(0L)
     val chronometerBase = SystemClock.elapsedRealtime() - elapsedMs
     val badgeColor = parseColor(accentColor)
 
@@ -161,9 +244,10 @@ internal object StudyTimerNotificationHelper {
       R.layout.notification_study_timer_collapsed,
     ).apply {
       setInt(R.id.timer_subject_dot, "setColorFilter", badgeColor)
-      setChronometer(R.id.timer_chronometer, chronometerBase, null, true)
+      setChronometer(R.id.timer_chronometer, chronometerBase, null, !isPaused)
       setTextViewText(R.id.timer_subtitle, subtitle)
-      setOnClickPendingIntent(R.id.timer_action_stop, stopIntent)
+      setTextViewText(R.id.timer_action_pause_resume, pauseOrResumeLabel)
+      setOnClickPendingIntent(R.id.timer_action_pause_resume, pauseOrResumeIntent)
     }
 
     val expanded = RemoteViews(
@@ -171,13 +255,14 @@ internal object StudyTimerNotificationHelper {
       R.layout.notification_study_timer_expanded,
     ).apply {
       setInt(R.id.timer_subject_dot, "setColorFilter", badgeColor)
-      setChronometer(R.id.timer_chronometer, chronometerBase, null, true)
+      setChronometer(R.id.timer_chronometer, chronometerBase, null, !isPaused)
       setTextViewText(R.id.timer_subtitle, subtitle)
+      setTextViewText(R.id.timer_action_pause_resume, pauseOrResumeLabel)
+      setOnClickPendingIntent(R.id.timer_action_save, saveIntent)
+      setOnClickPendingIntent(R.id.timer_action_pause_resume, pauseOrResumeIntent)
       setOnClickPendingIntent(R.id.timer_action_cancel, cancelIntent)
-      setOnClickPendingIntent(R.id.timer_action_stop, stopIntent)
     }
 
-    // 모든 안드로이드 버전(One UI 7/8 포함)에서 대형 Chronometer + 깔끔한 카드 레이아웃으로 통일한다.
     val notification: Notification = NotificationCompat.Builder(context, CHANNEL_ID)
       .setSmallIcon(R.drawable.ic_timer_hourglass)
       .setContentTitle(title)
@@ -198,6 +283,7 @@ internal object StudyTimerNotificationHelper {
   }
 
   fun dismiss(context: Context) {
+    clearState(context)
     NotificationManagerCompat.from(context).cancel(NOTIFICATION_ID)
   }
 }
