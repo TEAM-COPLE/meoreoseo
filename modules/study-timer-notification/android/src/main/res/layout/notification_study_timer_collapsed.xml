@@ -55,14 +55,14 @@
   </LinearLayout>
 
   <TextView
-    android:id="@+id/timer_action_stop"
+    android:id="@+id/timer_action_pause_resume"
     android:layout_width="wrap_content"
     android:layout_height="32dp"
     android:background="@drawable/bg_timer_stop_pill"
     android:fontFamily="sans-serif-medium"
     android:gravity="center"
-    android:paddingHorizontal="14dp"
-    android:text="멈춤"
+    android:paddingHorizontal="12dp"
+    android:text="일시정지"
     android:textColor="@color/study_timer_noti_action"
-    android:textSize="13sp" />
+    android:textSize="12sp" />
 </LinearLayout>

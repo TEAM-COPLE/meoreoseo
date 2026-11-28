@@ -24,8 +24,10 @@ type RunningTimer = {
   subjectName: string | null;
   /** 알림 배지에 표시할 과목 강조 색(HEX). 없으면 기본 색을 쓴다. */
   subjectColor?: string | null;
-  /** 시작한 시각(밀리초) */
+  /** 시작한 시각(밀리초) — 일시정지 후 재개 시 정지 시간만큼 뒤로 밀어 경과 시간을 유지한다. */
   startedAt: number;
+  /** 일시정지된 시각(밀리초). 값이 있으면 일시정지 상태다. */
+  pausedAt?: number;
   /** "앱을 벗어나면 멈춤" 설정일 때, 앱을 벗어난 시각. 여기서 멈춘 것으로 친다. */
   leftAt?: number;
 };
@@ -144,7 +146,7 @@ export function clearStudyNotice() {
 /** 지금 도는 타이머가 몇 초째인지 */
 export function runningSeconds(running: RunningTimer | null, nowMs = Date.now()): number {
   if (!running) return 0;
-  const end = running.leftAt ?? nowMs;
+  const end = running.leftAt ?? running.pausedAt ?? nowMs;
   return Math.min(MAX_SEGMENT_SECONDS, Math.max(0, Math.floor((end - running.startedAt) / 1000)));
 }
 
@@ -193,6 +195,36 @@ export async function startStudy(
 }
 
 /**
+ * 돌고 있는 타이머를 일시정지한다(저장하지 않고 경과 시간을 고정).
+ */
+export async function pauseStudy(atMs?: number): Promise<void> {
+  await loadStudyTimer();
+  const running = state.running;
+  if (!running || running.pausedAt || running.leftAt) return;
+  const pausedAt = atMs ?? Date.now();
+  const next: RunningTimer = { ...running, pausedAt };
+  setState({ running: next });
+  await writeJson(RUNNING_KEY, next);
+  void clearLive(running.userId);
+}
+
+/**
+ * 일시정지된 타이머를 이어서 다시 돌린다.
+ */
+export async function resumeStudy(atMs?: number): Promise<void> {
+  await loadStudyTimer();
+  const running = state.running;
+  if (!running || !running.pausedAt || running.leftAt) return;
+  const now = atMs ?? Date.now();
+  const pausedDuration = Math.max(0, now - running.pausedAt);
+  const { pausedAt: _removed, ...rest } = running;
+  const next: RunningTimer = { ...rest, startedAt: running.startedAt + pausedDuration };
+  setState({ running: next });
+  await writeJson(RUNNING_KEY, next);
+  void announceLive(next);
+}
+
+/**
  * 돌고 있는 타이머를 기록하지 않고 취소한다(알림의 "취소" 버튼 등).
  */
 export async function cancelStudy(notice?: string): Promise<void> {
@@ -215,7 +247,7 @@ export async function stopStudy(endMs?: number): Promise<number> {
   if (!running) return 0;
 
   const end = Math.min(
-    endMs ?? running.leftAt ?? Date.now(),
+    running.pausedAt ?? endMs ?? running.leftAt ?? Date.now(),
     running.startedAt + MAX_SEGMENT_SECONDS * 1000,
   );
   setState({ running: null });

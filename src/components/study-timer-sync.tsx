@@ -12,6 +12,8 @@ import {
   forgetStudyTimerFor,
   loadStudyTimer,
   markStudyLeft,
+  pauseStudy,
+  resumeStudy,
   stopStudy,
   useStudyTimer,
 } from '@/lib/study-timer';
@@ -23,14 +25,20 @@ const KEEP_AWAKE_TAG = 'study-timer';
 /** 이번 앱 실행 중 타이머 알림 권한을 이미 물어봤는지 (거절 시 반복 요청 방지) */
 let askedTimerNotificationPermission = false;
 
-async function drainNotificationAction(): Promise<void> {
+async function drainNotificationActions(): Promise<void> {
   if (!StudyTimerNotification) return;
-  const pending = StudyTimerNotification.consumePendingAction();
-  if (!pending) return;
-  if (pending.action === 'cancel') {
-    await cancelStudy('알림에서 타이머를 취소했어요.');
-  } else if (pending.action === 'stop') {
-    await stopStudy(pending.atMs > 0 ? pending.atMs : undefined);
+  const actions = StudyTimerNotification.consumePendingActions();
+  for (const item of actions) {
+    const atMs = item.atMs > 0 ? item.atMs : undefined;
+    if (item.action === 'pause') {
+      await pauseStudy(atMs);
+    } else if (item.action === 'resume') {
+      await resumeStudy(atMs);
+    } else if (item.action === 'save') {
+      await stopStudy(atMs);
+    } else if (item.action === 'cancel') {
+      await cancelStudy('알림에서 타이머를 취소했어요.');
+    }
   }
 }
 
@@ -54,7 +62,7 @@ export function StudyTimerSync() {
     (async () => {
       await loadStudyTimer();
       await forgetStudyTimerFor(userId);
-      await drainNotificationAction();
+      await drainNotificationActions();
       if (!active) return;
       await flushPendingStudy(userId);
     })().catch(() => undefined);
@@ -63,11 +71,11 @@ export function StudyTimerSync() {
     };
   }, [signedIn, userId]);
 
-  // 안드로이드 실시간 타이머 알림의 "취소" / "멈춤" 버튼 이벤트 구독
+  // 안드로이드 실시간 타이머 알림의 "저장" / "일시정지·재개" / "취소" 버튼 이벤트 구독
   useEffect(() => {
     if (!signedIn || !StudyTimerNotification) return;
     const subscription = StudyTimerNotification.addListener('onTimerAction', () => {
-      void drainNotificationAction();
+      void drainNotificationActions();
     });
     return () => subscription.remove();
   }, [signedIn]);
@@ -84,11 +92,11 @@ export function StudyTimerSync() {
     }
     function onLeave() {
       flushPendingEdits();
-      if (pauseOnLeave && running) void markStudyLeft();
+      if (pauseOnLeave && running && !running.pausedAt) void markStudyLeft();
     }
     function onReturn() {
       void (async () => {
-        await drainNotificationAction();
+        await drainNotificationActions();
         // 앱이 꺼져 있던 사이 "나간 시각"만 적어 두고 멈추지 못했으면, 지금 마저 멈춘다.
         if (running?.leftAt) await stopStudy(running.leftAt);
         await flushPendingStudy(userId!);
@@ -115,10 +123,11 @@ export function StudyTimerSync() {
     return () => subscription.remove();
   }, [signedIn, userId, running, pauseOnLeave]);
 
-  // 타이머가 도는 동안 화면 꺼짐 막기
-  const isRunning = running !== null && !running.leftAt;
+  // 타이머가 도는 동안(일시정지 제외) 화면 꺼짐 막기
+  const hasTimer = running !== null && !running.leftAt;
+  const isActivelyRunning = hasTimer && !running.pausedAt;
   useEffect(() => {
-    if (!isRunning) return;
+    if (!isActivelyRunning) return;
     // 켜기가 실제로 성공했을 때만 끈다. (웹에서는 켜기가 실패하거나 늦을 수 있고,
     // 켜지지 않은 것을 끄려고 하면 오류가 난다.)
     const activation = activateKeepAwakeAsync(KEEP_AWAKE_TAG).then(
@@ -135,15 +144,16 @@ export function StudyTimerSync() {
         }
       });
     };
-  }, [isRunning]);
+  }, [isActivelyRunning]);
 
-  // 타이머가 도는 동안 안드로이드 알림에 현재 타이머(경과 시간 + 취소/멈춤)를 표시한다.
+  // 타이머가 돌거나 일시정지 중일 때 안드로이드 알림에 현재 타이머(저장/일시정지·재개/취소)를 표시한다.
   const startedAt = running?.startedAt ?? null;
+  const pausedAt = running?.pausedAt ?? null;
   const subjectName = running?.subjectName ?? null;
   const subjectColor = running?.subjectColor ?? null;
   useEffect(() => {
     if (!StudyTimerNotification) return;
-    if (!signedIn || !isRunning || startedAt === null) {
+    if (!signedIn || !hasTimer || startedAt === null) {
       try {
         StudyTimerNotification.dismiss();
       } catch {
@@ -160,13 +170,13 @@ export function StudyTimerSync() {
         granted = await requestNotificationPermission();
       }
       if (!granted || cancelled) return;
-      StudyTimerNotification.show(startedAt, subjectName, subjectColor);
+      StudyTimerNotification.show(startedAt, pausedAt, subjectName, subjectColor);
     })().catch(() => undefined);
 
     return () => {
       cancelled = true;
     };
-  }, [signedIn, isRunning, startedAt, subjectName, subjectColor]);
+  }, [signedIn, hasTimer, startedAt, pausedAt, subjectName, subjectColor]);
 
   // 로그아웃 등으로 부품이 사라질 때 진행 중 알림을 정리한다.
   useEffect(() => {
