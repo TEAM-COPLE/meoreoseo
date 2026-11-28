@@ -3,68 +3,51 @@
   android:layout_width="match_parent"
   android:layout_height="wrap_content"
   android:orientation="vertical"
-  android:paddingHorizontal="18dp"
-  android:paddingTop="14dp"
-  android:paddingBottom="8dp">
+  android:paddingStart="4dp"
+  android:paddingEnd="4dp"
+  android:paddingTop="4dp"
+  android:paddingBottom="2dp">
+
+  <Chronometer
+    android:id="@+id/timer_chronometer"
+    android:layout_width="wrap_content"
+    android:layout_height="wrap_content"
+    android:fontFamily="sans-serif"
+    android:fontFeatureSettings="tnum"
+    android:includeFontPadding="false"
+    android:letterSpacing="-0.02"
+    android:textColor="@color/study_timer_noti_primary"
+    android:textSize="34sp" />
 
   <LinearLayout
-    android:layout_width="match_parent"
+    android:layout_width="wrap_content"
     android:layout_height="wrap_content"
+    android:layout_marginTop="4dp"
     android:gravity="center_vertical"
     android:orientation="horizontal">
 
-    <FrameLayout
-      android:layout_width="50dp"
-      android:layout_height="50dp">
+    <ImageView
+      android:id="@+id/timer_subject_dot"
+      android:layout_width="8dp"
+      android:layout_height="8dp"
+      android:layout_marginEnd="6dp"
+      android:contentDescription="@null"
+      android:src="@drawable/bg_subject_dot" />
 
-      <ImageView
-        android:id="@+id/timer_icon_bg"
-        android:layout_width="match_parent"
-        android:layout_height="match_parent"
-        android:contentDescription="@null"
-        android:src="@drawable/bg_timer_icon_badge" />
-
-      <ImageView
-        android:layout_width="25dp"
-        android:layout_height="25dp"
-        android:layout_gravity="center"
-        android:contentDescription="@null"
-        android:src="@drawable/ic_timer_hourglass" />
-    </FrameLayout>
-
-    <LinearLayout
-      android:layout_width="0dp"
+    <TextView
+      android:id="@+id/timer_subtitle"
+      android:layout_width="wrap_content"
       android:layout_height="wrap_content"
-      android:layout_marginStart="16dp"
-      android:layout_weight="1"
-      android:orientation="vertical">
-
-      <Chronometer
-        android:id="@+id/timer_chronometer"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:fontFamily="sans-serif"
-        android:fontFeatureSettings="tnum"
-        android:includeFontPadding="false"
-        android:letterSpacing="-0.02"
-        android:textColor="@color/study_timer_noti_primary"
-        android:textSize="34sp" />
-
-      <TextView
-        android:id="@+id/timer_subtitle"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:layout_marginTop="3dp"
-        android:ellipsize="end"
-        android:maxLines="1"
-        android:textColor="@color/study_timer_noti_secondary"
-        android:textSize="14sp" />
-    </LinearLayout>
+      android:ellipsize="end"
+      android:includeFontPadding="false"
+      android:maxLines="1"
+      android:textColor="@color/study_timer_noti_secondary"
+      android:textSize="14sp" />
   </LinearLayout>
 
   <LinearLayout
     android:layout_width="match_parent"
-    android:layout_height="42dp"
+    android:layout_height="40dp"
     android:layout_marginTop="12dp"
     android:gravity="center_vertical"
     android:orientation="horizontal">

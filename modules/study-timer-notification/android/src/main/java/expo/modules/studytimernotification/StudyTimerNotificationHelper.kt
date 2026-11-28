@@ -143,9 +143,9 @@ internal object StudyTimerNotificationHelper {
     val startTimeText = formatStartTime(startedAtMs)
     val title = if (cleanSubject != null) "$cleanSubject 공부 중" else "공부 타이머"
     val subtitle = if (cleanSubject != null) {
-      "$cleanSubject / $startTimeText 시작"
+      "$cleanSubject · $startTimeText 시작"
     } else {
-      "공부 중 / $startTimeText 시작"
+      "공부 중 · $startTimeText 시작"
     }
 
     val openIntent = openStudyIntent(context)
@@ -160,7 +160,7 @@ internal object StudyTimerNotificationHelper {
       context.packageName,
       R.layout.notification_study_timer_collapsed,
     ).apply {
-      setInt(R.id.timer_icon_bg, "setColorFilter", badgeColor)
+      setInt(R.id.timer_subject_dot, "setColorFilter", badgeColor)
       setChronometer(R.id.timer_chronometer, chronometerBase, null, true)
       setTextViewText(R.id.timer_subtitle, subtitle)
       setOnClickPendingIntent(R.id.timer_action_stop, stopIntent)
@@ -170,7 +170,7 @@ internal object StudyTimerNotificationHelper {
       context.packageName,
       R.layout.notification_study_timer_expanded,
     ).apply {
-      setInt(R.id.timer_icon_bg, "setColorFilter", badgeColor)
+      setInt(R.id.timer_subject_dot, "setColorFilter", badgeColor)
       setChronometer(R.id.timer_chronometer, chronometerBase, null, true)
       setTextViewText(R.id.timer_subtitle, subtitle)
       setOnClickPendingIntent(R.id.timer_action_cancel, cancelIntent)
