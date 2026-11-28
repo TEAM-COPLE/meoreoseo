@@ -38,7 +38,11 @@ export type FlightRoute = {
   toLng: number;
   flightNo: string;
   minutes: number;
+  /** 초 단위 비행 시간 (30초 테스트 노선 등 분 미만 노선용) */
+  seconds?: number;
   distanceKm: number;
+  /** 공항 코드 검색으로만 노출되는 숨김 노선 여부 */
+  secret?: boolean;
 };
 
 type RawAirport = readonly [
@@ -258,10 +262,34 @@ export const FLIGHT_ROUTES: readonly FlightRoute[] = RAW_AIRPORTS.map(
   },
 );
 
-/** 분을 "1시간 5분" 또는 "60분" 형식으로 짧게 바꾼다. */
+/** 공항 검색창에 "Test"를 입력했을 때만 나타나는 30초 테스트용 비밀 노선 */
+export const SECRET_TEST_FLIGHT_ROUTE: FlightRoute = {
+  id: 'test',
+  region: '국내',
+  country: '테스트',
+  codeFrom: 'ICN',
+  cityFrom: '인천',
+  fromLat: ICN_LAT,
+  fromLng: ICN_LNG,
+  codeTo: 'TST',
+  cityTo: '테스트 비행',
+  cityToEn: 'Test Flight',
+  toLat: 37.5583,
+  toLng: 126.7906,
+  flightNo: 'KE 000',
+  minutes: 0.5,
+  seconds: 30,
+  distanceKm: 33,
+  secret: true,
+};
+
+/** 분을 "1시간 5분", "60분", 또는 1분 미만이면 "30초" 형식으로 짧게 바꾼다. */
 export function formatFlightMinutes(minutes: number): string {
+  if (minutes > 0 && minutes < 1) {
+    return `${Math.round(minutes * 60)}초`;
+  }
   const h = Math.floor(minutes / 60);
-  const m = minutes % 60;
+  const m = Math.round(minutes % 60);
   if (h === 0) return `${m}분`;
   return m === 0 ? `${h}시간` : `${h}시간 ${m}분`;
 }

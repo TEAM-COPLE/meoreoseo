@@ -22,6 +22,8 @@ type RunningTimer = {
   userId: string;
   subjectId: string | null;
   subjectName: string | null;
+  /** 알림 배지에 표시할 과목 강조 색(HEX). 없으면 기본 색을 쓴다. */
+  subjectColor?: string | null;
   /** 시작한 시각(밀리초) */
   startedAt: number;
   /** "앱을 벗어나면 멈춤" 설정일 때, 앱을 벗어난 시각. 여기서 멈춘 것으로 친다. */
@@ -174,7 +176,7 @@ async function clearLive(userId: string) {
  */
 export async function startStudy(
   userId: string,
-  subject: { id: string; name: string } | null,
+  subject: { id: string; name: string; color?: string | null } | null,
 ): Promise<void> {
   await loadStudyTimer();
   if (state.running) await stopStudy();
@@ -182,11 +184,24 @@ export async function startStudy(
     userId,
     subjectId: subject?.id ?? null,
     subjectName: subject?.name ?? null,
+    subjectColor: subject?.color ?? null,
     startedAt: Date.now(),
   };
   setState({ running, notice: null });
   await writeJson(RUNNING_KEY, running);
   void announceLive(running);
+}
+
+/**
+ * 돌고 있는 타이머를 기록하지 않고 취소한다(알림의 "취소" 버튼 등).
+ */
+export async function cancelStudy(notice?: string): Promise<void> {
+  await loadStudyTimer();
+  const running = state.running;
+  if (!running) return;
+  setState({ running: null, ...(notice ? { notice } : {}) });
+  await writeJson(RUNNING_KEY, null);
+  void clearLive(running.userId);
 }
 
 /**

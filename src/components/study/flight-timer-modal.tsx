@@ -14,10 +14,12 @@ import {
   Radio,
   Rows2,
   Search,
+  Volume2,
+  VolumeX,
   X,
   Zap,
 } from 'lucide-react-native';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Modal,
   Platform,
@@ -56,8 +58,11 @@ import {
   FLIGHT_REGIONS,
   FLIGHT_ROUTES,
   formatFlightMinutes,
+  SECRET_TEST_FLIGHT_ROUTE,
   type FlightRegion,
 } from './flight-routes';
+import { FlightAudioPopup } from './flight-audio-popup';
+import { useFlightAudio, useFlightAudioSettings } from './use-flight-audio';
 
 type Props = {
   visible: boolean;
@@ -101,6 +106,8 @@ export function FlightTimerModal({
   const [routeQuery, setRouteQuery] = useState('');
   const [mapInteracting, setMapInteracting] = useState(false);
   const [showAtc, setShowAtc] = useState(true);
+  const [audioPanelOpen, setAudioPanelOpen] = useState(false);
+  const { settings: audioSettings, updateSettings: updateAudioSettings } = useFlightAudioSettings();
   const [flightMode, setFlightMode] = useState<'with-taxi' | 'immediate'>('with-taxi');
   const [selectedSeat, setSelectedSeat] = useState<string>('7A');
   const [seatPickerOpen, setSeatPickerOpen] = useState(false);
@@ -112,12 +119,17 @@ export function FlightTimerModal({
 
   const filteredRoutes = useMemo(() => {
     const q = routeQuery.trim().toLowerCase();
-    return FLIGHT_ROUTES.filter((item) => {
+    const normal = FLIGHT_ROUTES.filter((item) => {
       if (regionFilter !== '전체' && item.region !== regionFilter) return false;
       if (!q) return true;
       const hay = `${item.codeTo} ${item.cityTo} ${item.cityToEn} ${item.country}`.toLowerCase();
       return hay.includes(q);
     });
+    // 공항 검색창에 "Test"를 입력했을 때만 30초 테스트 노선을 비밀스럽게 노출한다.
+    if (q === 'test') {
+      return [SECRET_TEST_FLIGHT_ROUTE, ...normal];
+    }
+    return normal;
   }, [regionFilter, routeQuery]);
 
   // 비행 타이머가 열려 있는 동안 휴대폰 가로/세로 회전을 허용하고, 닫으면 다시 세로로 되돌린다.
@@ -150,13 +162,19 @@ export function FlightTimerModal({
   }
 
   const route = useMemo(
-    () => FLIGHT_ROUTES.find((r) => r.id === routeId) ?? FLIGHT_ROUTES[0],
+    () =>
+      routeId === SECRET_TEST_FLIGHT_ROUTE.id
+        ? SECRET_TEST_FLIGHT_ROUTE
+        : (FLIGHT_ROUTES.find((r) => r.id === routeId) ?? FLIGHT_ROUTES[0]),
     [routeId],
   );
 
-  const includeTaxiing = flightMode === 'with-taxi';
-  const flightSeconds = route.minutes * 60;
-  const totalWithTaxiSeconds = flightSeconds + TAXI_OUT_SECONDS + TAXI_IN_SECONDS;
+  const isShortTestRoute = route.seconds !== undefined;
+  const includeTaxiing = !isShortTestRoute && flightMode === 'with-taxi';
+  const flightSeconds = route.seconds ?? route.minutes * 60;
+  const totalWithTaxiSeconds = isShortTestRoute
+    ? flightSeconds
+    : flightSeconds + TAXI_OUT_SECONDS + TAXI_IN_SECONDS;
   const targetSeconds = includeTaxiing ? totalWithTaxiSeconds : flightSeconds;
   const taxiOutEnd = includeTaxiing ? TAXI_OUT_SECONDS / targetSeconds : 0;
   const taxiInStart = includeTaxiing
@@ -170,6 +188,31 @@ export function FlightTimerModal({
   const displayedElapsed = arrived ? targetSeconds : activeElapsed;
   const arrivalKey = `${startedAt ?? 0}:${routeId}`;
   const showArrivalOverlay = arrived && dismissedArrivalKey !== arrivalKey;
+
+  const {
+    onFlightStart,
+    onFlightStop,
+    previewSignVolume,
+    previewSignPlay,
+    previewFlyVolume,
+    previewFlyRelease,
+    stopAudioPreview,
+  } = useFlightAudio({
+    visible,
+    running,
+    arrived,
+    remainingSeconds: remaining,
+    arrivalKey,
+    settings: audioSettings,
+  });
+
+  const anyAudioActive =
+    audioSettings.enabled && (audioSettings.signEnabled || audioSettings.flyEnabled);
+
+  const handleStop = useCallback(() => {
+    onFlightStop();
+    onStop();
+  }, [onFlightStop, onStop]);
 
   // 택싱 포함 시: 이륙 전 지상 활주(TAXI_OUT_SECONDS) 동안 비행거리는 0km로 고정되고,
   // 착륙 후 게이트 이동(TAXI_IN_SECONDS) 동안에도 총 비행거리에서 더 늘어나지 않는다.
@@ -666,7 +709,7 @@ export function FlightTimerModal({
         <Pressable
           accessibilityRole="button"
           disabled={busy}
-          onPress={onStop}
+          onPress={handleStop}
           style={({ pressed }) => [
             styles.actionBtn,
             {
@@ -680,6 +723,29 @@ export function FlightTimerModal({
             {arrived ? '착륙하고 기록 저장하기' : '비행 중단하고 기록하기'}
           </ThemedText>
         </Pressable>
+      ) : isShortTestRoute ? (
+        <View style={styles.launchActions}>
+          <Pressable
+            accessibilityRole="button"
+            disabled={busy || tearingMode !== null}
+            onPress={() => {
+              setFlightMode('immediate');
+              setTearingMode('immediate');
+            }}
+            style={({ pressed }) => [
+              styles.actionBtn,
+              {
+                backgroundColor: theme.tint,
+                borderColor: theme.tint,
+                opacity: busy || tearingMode !== null ? 0.55 : pressed ? 0.8 : 1,
+              },
+            ]}>
+            <PlaneTakeoff size={19} color={theme.onTint} strokeWidth={2} />
+            <ThemedText type="default" style={[styles.actionText, { color: theme.onTint }]}>
+              {`${route.codeTo} 테스트 비행 출발 (${formatFlightMinutes(route.minutes)})`}
+            </ThemedText>
+          </Pressable>
+        </View>
       ) : (
         <View style={styles.launchActions}>
           <Pressable
@@ -738,9 +804,10 @@ export function FlightTimerModal({
       tearingMode,
       seatPickerOpen,
       selectedSeat,
+      isShortTestRoute,
       totalWithTaxiSeconds,
       theme,
-      onStop,
+      handleStop,
     ],
   );
 
@@ -772,6 +839,36 @@ export function FlightTimerModal({
           </View>
 
           <View style={styles.topBarActions}>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="비행 오디오 설정 열기"
+              accessibilityState={{ expanded: audioPanelOpen, selected: anyAudioActive }}
+              hitSlop={6}
+              onPress={() => setAudioPanelOpen((prev) => !prev)}
+              style={({ pressed }) => [
+                styles.topPillBtn,
+                {
+                  backgroundColor: anyAudioActive ? theme.tint : theme.backgroundElement,
+                  borderColor: anyAudioActive ? theme.tint : theme.border,
+                  opacity: pressed ? 0.75 : 1,
+                },
+              ]}>
+              {anyAudioActive ? (
+                <Volume2 size={13} color={theme.onTint} strokeWidth={2} />
+              ) : (
+                <VolumeX size={13} color={theme.textSecondary} strokeWidth={2} />
+              )}
+              <ThemedText
+                type="smallBold"
+                numberOfLines={1}
+                style={{
+                  color: anyAudioActive ? theme.onTint : theme.text,
+                  fontSize: 12,
+                }}>
+                {anyAudioActive ? '소리 ON' : '소리 OFF'}
+              </ThemedText>
+            </Pressable>
+
             <Pressable
               accessibilityRole="button"
               accessibilityLabel={showAtc ? '비행기 교신 숨기기' : '비행기 교신 보이기'}
@@ -890,6 +987,20 @@ export function FlightTimerModal({
           </ScrollView>
         )}
 
+        <FlightAudioPopup
+          visible={audioPanelOpen}
+          settings={audioSettings}
+          onUpdate={updateAudioSettings}
+          onPreviewSignVolume={previewSignVolume}
+          onPreviewSignPlay={previewSignPlay}
+          onPreviewFlyVolume={previewFlyVolume}
+          onPreviewFlyRelease={previewFlyRelease}
+          onClose={() => {
+            stopAudioPreview();
+            setAudioPanelOpen(false);
+          }}
+        />
+
         <BoardingPassTearOverlay
           visible={tearingMode !== null}
           route={route}
@@ -903,6 +1014,7 @@ export function FlightTimerModal({
           modeLabel={tearingMode === 'immediate' ? '바로 이륙' : '택싱 포함'}
           onComplete={() => {
             setTearingMode(null);
+            onFlightStart();
             onStart();
           }}
         />
@@ -916,7 +1028,7 @@ export function FlightTimerModal({
           saving={busy}
           onSave={() => {
             setDismissedArrivalKey(arrivalKey);
-            onStop();
+            handleStop();
           }}
           onDismiss={() => setDismissedArrivalKey(arrivalKey)}
         />

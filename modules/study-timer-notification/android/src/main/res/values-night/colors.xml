@@ -1,0 +1,6 @@
+<resources>
+  <color name="study_timer_noti_primary">#FFFFFF</color>
+  <color name="study_timer_noti_secondary">#B8C0CC</color>
+  <color name="study_timer_noti_divider">#38FFFFFF</color>
+  <color name="study_timer_noti_action">#FFFFFF</color>
+</resources>

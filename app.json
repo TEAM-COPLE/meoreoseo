@@ -50,6 +50,14 @@
       ],
       "expo-secure-store",
       [
+        "expo-audio",
+        {
+          "microphonePermission": false,
+          "recordAudioAndroid": false,
+          "enableBackgroundPlayback": false
+        }
+      ],
+      [
         "expo-widgets",
         {
           "enableAndroid": true,
